@@ -1,9 +1,7 @@
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/core/database/app_database.dart' as db;
 import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/threads/data/api_thread_repository.dart';
@@ -19,18 +17,14 @@ void main() {
         userId: 'me',
         username: 'current',
       );
-      final db.AppDatabase database = db.AppDatabase(NativeDatabase.memory());
-      addTearDown(database.close);
       final _ThreadApi api = _ThreadApi();
       final ApiThreadRepository repository = ApiThreadRepository(
         credentialStore: _Credentials(serverUrl),
-        database: database,
         clientFactory: _ApiFactory(api),
       );
 
-      await repository.refresh(session: session, rootPostId: 'root-1');
-      final MessageThread thread = await repository.read(
-        accountId: session.accountId,
+      final MessageThread thread = await repository.load(
+        session: session,
         rootPostId: 'root-1',
       );
 

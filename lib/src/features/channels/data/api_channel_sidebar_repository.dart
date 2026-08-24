@@ -4,89 +4,61 @@ import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
 import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/channels/data/channel_sidebar_mapper.dart';
-import 'package:mattermost_flutter/src/features/channels/data/channel_sidebar_store.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
 
 final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
   ApiChannelSidebarRepository({
     required CredentialStore credentialStore,
-    required ChannelSidebarStore store,
     MattermostApiFactory clientFactory = const MattermostClientFactory(),
   }) : _credentialStore = credentialStore,
-       _store = store,
        _clientFactory = clientFactory;
 
   final CredentialStore _credentialStore;
-  final ChannelSidebarStore _store;
   final MattermostApiFactory _clientFactory;
-  final Map<String, Future<void>> _refreshes = <String, Future<void>>{};
 
   @override
-  Stream<ChannelSidebarSnapshot> watch(String accountId) =>
-      _store.watch(accountId);
-
-  @override
-  Future<void> refresh(AuthSession session) {
-    final String accountId = session.accountId;
-    final Future<void>? existing = _refreshes[accountId];
-    if (existing != null) return existing;
-    final Future<void> refresh = _performRefresh(session);
-    _refreshes[accountId] = refresh;
-    return refresh.whenComplete(() => _refreshes.remove(accountId));
-  }
-
-  Future<void> _performRefresh(AuthSession session) async {
-    final String accountId = session.accountId;
-    _store.setSyncState(accountId, refreshing: true, failed: false);
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async {
+    final ({Uri serverUrl, String token})? credentials = await _credentialStore
+        .read();
+    if (credentials == null || credentials.serverUrl != session.serverUrl) {
+      throw StateError('No credentials for active Mattermost account');
+    }
+    final MattermostApi api = _clientFactory.create(
+      serverUrl: credentials.serverUrl,
+      token: credentials.token,
+    );
+    final List<MattermostTeamDto> teams = await api.getTeamsForCurrentUser();
+    if (teams.isEmpty) return const ChannelSidebarSnapshot();
+    final SidebarTeam team = mapTeam(teams.first);
+    final Future<List<MattermostChannelDto>> channelsFuture = api
+        .getChannelsForUser(userId: session.userId, teamId: team.id);
+    final Future<MattermostChannelCategoriesDto> categoriesFuture = api
+        .getChannelCategories(userId: session.userId, teamId: team.id);
+    final List<MattermostChannelDto> rawChannels = await channelsFuture;
+    final MattermostChannelCategoriesDto categoryResponse =
+        await categoriesFuture;
+    List<SidebarChannel> channels = rawChannels
+        .map(mapChannel)
+        .toList(growable: false);
     try {
-      final ({Uri serverUrl, String token})? credentials =
-          await _credentialStore.read();
-      if (credentials == null || credentials.serverUrl != session.serverUrl) {
-        throw StateError('No credentials for active Mattermost account');
-      }
-      final MattermostApi api = _clientFactory.create(
-        serverUrl: credentials.serverUrl,
-        token: credentials.token,
-      );
-      final List<MattermostTeamDto> teams = await api.getTeamsForCurrentUser();
-      if (teams.isEmpty) {
-        await _store.replace(accountId, null, const <SidebarSection>[]);
-        return;
-      }
-      final SidebarTeam team = mapTeam(teams.first);
-      final Future<List<MattermostChannelDto>> channelsFuture = api
-          .getChannelsForUser(userId: session.userId, teamId: team.id);
-      final Future<MattermostChannelCategoriesDto> categoriesFuture = api
-          .getChannelCategories(userId: session.userId, teamId: team.id);
-      final List<MattermostChannelDto> rawChannels = await channelsFuture;
-      final MattermostChannelCategoriesDto categoryResponse =
-          await categoriesFuture;
-      List<SidebarChannel> channels = rawChannels
-          .map(mapChannel)
-          .toList(growable: false);
-      try {
-        channels = await _resolveDialogNames(
-          api: api,
-          currentUserId: session.userId,
-          channels: channels,
-        );
-      } on Object {
-        // Participant profiles are an enhancement. Channel navigation remains
-        // usable with the server-provided channel name when profile lookup fails.
-      }
-      await _store.replace(
-        accountId,
-        team,
-        mapSections(
-          channels: channels,
-          categories: categoryResponse.categories,
-          categoryOrder: categoryResponse.order,
-        ),
+      channels = await _resolveDialogNames(
+        api: api,
+        currentUserId: session.userId,
+        channels: channels,
       );
     } on Object {
-      _store.setSyncState(accountId, refreshing: false, failed: true);
+      // Participant profiles are an enhancement. Channel navigation remains
+      // usable with the server-provided channel name when profile lookup fails.
     }
+    return ChannelSidebarSnapshot(
+      team: team,
+      sections: mapSections(
+        channels: channels,
+        categories: categoryResponse.categories,
+        categoryOrder: categoryResponse.order,
+      ),
+    );
   }
 
   Future<List<SidebarChannel>> _resolveDialogNames({

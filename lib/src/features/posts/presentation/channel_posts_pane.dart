@@ -20,7 +20,6 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
 }
 
 class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
-  ScrollController? _listController;
   String? _selectedRootPostId;
 
   @override
@@ -43,9 +42,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
       children: <Widget>[
         _ChannelHeader(
           channel: channel,
-          isLoading:
-              viewState?.isRefreshing == true ||
-              viewState?.isLoadingOlder == true,
+          isLoading: viewState?.isLoadingOlder == true,
         ),
         const Divider(height: 1),
         Expanded(
@@ -56,10 +53,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                   ref.read(channelPostsProvider(channel.id).notifier).retry(),
             ),
             data: (ChannelPostsViewState state) {
-              final List<ChannelPost> items = state.visiblePosts;
-              if (items.isEmpty && state.isRefreshing) {
-                return const _PostsLoading();
-              }
+              final List<ChannelPost> items = state.posts;
               if (items.isEmpty && state.loadFailed) {
                 return _PostsError(
                   onRetry: () => ref
@@ -70,56 +64,18 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
               if (items.isEmpty && !state.hasOlder) {
                 return const Center(child: Text(ChannelPostsStrings.empty));
               }
-              return Stack(
-                children: <Widget>[
-                  _PostList(
-                    channelId: channel.id,
-                    posts: items,
-                    isLoadingOlder: state.isLoadingOlder,
-                    hasOlder: state.hasOlder,
-                    autoLoadOlder: !state.loadFailed && !state.isRefreshing,
-                    onLoadOlder: () => ref
-                        .read(channelPostsProvider(channel.id).notifier)
-                        .loadOlder(),
-                    onControllerReady: (ScrollController controller) {
-                      _listController = controller;
-                    },
-                    onOpenThread: (ChannelPost post) {
-                      setState(() => _selectedRootPostId = post.id);
-                    },
-                  ),
-                  if (state.hasRecentMessages)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 20,
-                      child: Center(
-                        child: FloatingActionButton.extended(
-                          heroTag: 'recent-${channel.id}',
-                          onPressed: () {
-                            ref
-                                .read(channelPostsProvider(channel.id).notifier)
-                                .showRecentMessages();
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              final ScrollController? controller =
-                                  _listController;
-                              if (controller?.hasClients == true) {
-                                controller!.animateTo(
-                                  0,
-                                  duration: const Duration(milliseconds: 280),
-                                  curve: Curves.easeOut,
-                                );
-                              }
-                            });
-                          },
-                          icon: const Icon(Icons.arrow_downward),
-                          label: const Text(
-                            ChannelPostsStrings.showRecentMessages,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+              return _PostList(
+                channelId: channel.id,
+                posts: items,
+                isLoadingOlder: state.isLoadingOlder,
+                hasOlder: state.hasOlder,
+                autoLoadOlder: !state.loadFailed,
+                onLoadOlder: () => ref
+                    .read(channelPostsProvider(channel.id).notifier)
+                    .loadOlder(),
+                onOpenThread: (ChannelPost post) {
+                  setState(() => _selectedRootPostId = post.id);
+                },
               );
             },
           ),
@@ -248,7 +204,6 @@ class _PostList extends StatefulWidget {
     required this.hasOlder,
     required this.autoLoadOlder,
     required this.onLoadOlder,
-    required this.onControllerReady,
     required this.onOpenThread,
   });
 
@@ -258,7 +213,6 @@ class _PostList extends StatefulWidget {
   final bool hasOlder;
   final bool autoLoadOlder;
   final Future<void> Function() onLoadOlder;
-  final ValueChanged<ScrollController> onControllerReady;
   final ValueChanged<ChannelPost> onOpenThread;
 
   @override
@@ -280,7 +234,6 @@ class _PostListState extends State<_PostList> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      widget.onControllerReady(_controller);
       _maybeFillViewport();
     });
   }
@@ -293,7 +246,6 @@ class _PostListState extends State<_PostList> {
       _autoLoadPending = false;
     }
     if (oldWidget.channelId != widget.channelId) _automaticLoadCount = 0;
-    widget.onControllerReady(_controller);
     _scheduleViewportCheck();
   }
 

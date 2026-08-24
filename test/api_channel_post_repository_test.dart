@@ -1,19 +1,15 @@
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/core/database/app_database.dart' as db;
 import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/posts/data/api_channel_post_repository.dart';
-import 'package:mattermost_flutter/src/features/posts/data/channel_post_cache_models.dart';
-import 'package:mattermost_flutter/src/features/posts/data/channel_post_store.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 
 void main() {
   test(
-    'refreshes page 0 and pages older posts from the stored cursor',
+    'loads latest roots and pages older posts from the raw cursor',
     () async {
       final Uri serverUrl = Uri.parse('https://chat.example.com');
       final AuthSession session = AuthSession(
@@ -21,100 +17,61 @@ void main() {
         userId: 'me',
         username: 'current',
       );
-      final db.AppDatabase database = db.AppDatabase(NativeDatabase.memory());
-      addTearDown(database.close);
-      final ChannelPostStore store = ChannelPostStore(database);
-      addTearDown(store.close);
-      await store.savePage(
-        accountId: session.accountId,
-        channelId: 'channel-1',
-        page: PostCachePage(
-          posts: <PostCacheItem>[_cachePost('post-1', 1000)],
-          authors: const <PostCacheAuthor>[
-            PostCacheAuthor(id: 'ada', displayName: 'Ada'),
-          ],
-          order: const <String>['post-1'],
-          oldestComplete: false,
-        ),
-        isLatestPage: true,
-      );
       final _FakePostApi api = _FakePostApi();
       final ApiChannelPostRepository repository = ApiChannelPostRepository(
         credentialStore: _CredentialStore(serverUrl),
-        store: store,
         clientFactory: _ApiFactory(api),
       );
 
-      final ChannelPostRefreshResult refresh = await repository.refreshLatest(
+      final ChannelPostPage latest = await repository.loadLatest(
         session: session,
         channelId: 'channel-1',
       );
-      expect(refresh.newPostIds, const <String>{'post-2'});
       expect(api.latestPerPage, ApiChannelPostRepository.pageSize);
-
-      await repository.loadOlder(session: session, channelId: 'channel-1');
-      expect(api.beforeId, 'post-1');
-      final ChannelPostSnapshot snapshot = await repository.read(
-        accountId: session.accountId,
-        channelId: 'channel-1',
-      );
-      expect(snapshot.posts.map((post) => post.id), const <String>[
-        'post-0',
+      expect(latest.posts.map((post) => post.id), const <String>[
         'post-1',
         'post-2',
       ]);
-      expect(snapshot.hasOlder, isFalse);
+      expect(latest.beforePostId, 'post-1');
+      expect(latest.hasOlder, isTrue);
+
+      final ChannelPostPage older = await repository.loadOlder(
+        session: session,
+        channelId: 'channel-1',
+        beforePostId: latest.beforePostId!,
+      );
+      expect(api.beforeId, 'post-1');
+      expect(older.posts.single.id, 'post-0');
+      expect(older.hasOlder, isFalse);
     },
   );
 
-  test('restarts before pagination from latest post id after a gap', () async {
-    final Uri serverUrl = Uri.parse('https://chat.example.com');
-    final AuthSession session = AuthSession(
-      serverUrl: serverUrl,
-      userId: 'me',
-      username: 'current',
-    );
-    final db.AppDatabase database = db.AppDatabase(NativeDatabase.memory());
-    addTearDown(database.close);
-    final ChannelPostStore store = ChannelPostStore(database);
-    addTearDown(store.close);
-    await store.savePage(
-      accountId: session.accountId,
-      channelId: 'channel-1',
-      page: PostCachePage(
-        posts: <PostCacheItem>[_cachePost('post-1', 1000)],
-        authors: const <PostCacheAuthor>[
-          PostCacheAuthor(id: 'ada', displayName: 'Ada'),
-        ],
-        order: const <String>['post-1'],
-        oldestComplete: false,
-      ),
-      isLatestPage: true,
-    );
-    final _FakePostApi api = _FakePostApi(hasGap: true);
-    final ApiChannelPostRepository repository = ApiChannelPostRepository(
-      credentialStore: _CredentialStore(serverUrl),
-      store: store,
-      clientFactory: _ApiFactory(api),
-    );
+  test(
+    'advances pagination when the latest page contains only replies',
+    () async {
+      final Uri serverUrl = Uri.parse('https://chat.example.com');
+      final AuthSession session = AuthSession(
+        serverUrl: serverUrl,
+        userId: 'me',
+        username: 'current',
+      );
+      final _FakePostApi api = _FakePostApi(hasReplyOnlyLatest: true);
+      final ApiChannelPostRepository repository = ApiChannelPostRepository(
+        credentialStore: _CredentialStore(serverUrl),
+        clientFactory: _ApiFactory(api),
+      );
 
-    await repository.refreshLatest(session: session, channelId: 'channel-1');
-    await repository.loadOlder(session: session, channelId: 'channel-1');
+      final ChannelPostPage latest = await repository.loadLatest(
+        session: session,
+        channelId: 'channel-1',
+      );
 
-    expect(api.beforeId, 'reply-2');
-  });
+      expect(latest.posts, isEmpty);
+      expect(latest.beforePostId, 'reply-2');
+      expect(latest.hasOlder, isTrue);
+    },
+  );
 }
-
-PostCacheItem _cachePost(String id, int createAt) => PostCacheItem(
-  id: id,
-  channelId: 'channel-1',
-  userId: 'ada',
-  createAt: createAt,
-  updateAt: createAt,
-  deleteAt: 0,
-  message: id,
-  reactions: const <PostCacheReaction>[],
-);
 
 final class _CredentialStore implements CredentialStore {
   const _CredentialStore(this.serverUrl);
@@ -142,19 +99,11 @@ final class _ApiFactory implements MattermostApiFactory {
 }
 
 final class _FakePostApi implements MattermostApi {
-  _FakePostApi({this.hasGap = false});
+  _FakePostApi({this.hasReplyOnlyLatest = false});
 
-  final bool hasGap;
+  final bool hasReplyOnlyLatest;
   int? latestPerPage;
   String? beforeId;
-
-  @override
-  Future<MattermostPostListDto> getPostThread({
-    required String rootPostId,
-    int perPage = 60,
-    String? fromPost,
-    int? fromCreateAt,
-  }) => throw UnimplementedError();
 
   @override
   Future<MattermostPostListDto> getPostsForChannel({
@@ -164,7 +113,7 @@ final class _FakePostApi implements MattermostApi {
     String? etag,
   }) async {
     latestPerPage = perPage;
-    if (hasGap) {
+    if (hasReplyOnlyLatest) {
       return MattermostPostListDto(
         order: const <String>['reply-3', 'reply-2'],
         posts: <String, MattermostPostDto>{
@@ -222,6 +171,14 @@ final class _FakePostApi implements MattermostApi {
         updateAt: createAt,
         rootId: rootId,
       );
+
+  @override
+  Future<MattermostPostListDto> getPostThread({
+    required String rootPostId,
+    int perPage = 60,
+    String? fromPost,
+    int? fromCreateAt,
+  }) => throw UnimplementedError();
 
   @override
   Future<MattermostChannelCategoriesDto> getChannelCategories({

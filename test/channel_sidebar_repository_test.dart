@@ -1,13 +1,10 @@
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/core/database/app_database.dart' as db;
 import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
-import 'package:mattermost_flutter/src/features/channels/data/channel_sidebar_store.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 
 void main() {
@@ -16,12 +13,9 @@ void main() {
     () async {
       final Uri serverUrl = Uri.parse('https://chat.example.com');
       final _FakeMattermostApi api = _FakeMattermostApi();
-      final db.AppDatabase database = db.AppDatabase(NativeDatabase.memory());
-      addTearDown(database.close);
       final ApiChannelSidebarRepository repository =
           ApiChannelSidebarRepository(
             credentialStore: _FakeCredentialStore(serverUrl),
-            store: ChannelSidebarStore(database),
             clientFactory: _FakeApiFactory(api),
           );
       final AuthSession session = AuthSession(
@@ -30,10 +24,7 @@ void main() {
         username: 'current',
       );
 
-      await repository.refresh(session);
-      final ChannelSidebarSnapshot snapshot = await repository
-          .watch(session.accountId)
-          .first;
+      final ChannelSidebarSnapshot snapshot = await repository.load(session);
 
       expect(api.calls.first, 'teams');
       expect(

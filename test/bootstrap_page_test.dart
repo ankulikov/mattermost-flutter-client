@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -225,7 +223,6 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final _AutoPagingPostRepository posts = _AutoPagingPostRepository();
-    addTearDown(posts.close);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -255,7 +252,6 @@ void main() {
     final _AutoPagingPostRepository posts = _AutoPagingPostRepository(
       startsEmpty: true,
     );
-    addTearDown(posts.close);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -285,7 +281,6 @@ void main() {
     final _AutoPagingPostRepository posts = _AutoPagingPostRepository(
       failLoads: true,
     );
-    addTearDown(posts.close);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -314,7 +309,6 @@ void main() {
     final _AutoPagingPostRepository posts = _AutoPagingPostRepository(
       neverCompletes: true,
     );
-    addTearDown(posts.close);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -334,40 +328,6 @@ void main() {
 
     expect(posts.loadOlderCalls, 20);
     expect(find.text('Load older messages'), findsOneWidget);
-  });
-
-  testWidgets('keeps refreshed posts hidden until Show recent messages', (
-    WidgetTester tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1000, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final _RecentPostRepository posts = _RecentPostRepository();
-    addTearDown(posts.close);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
-          channelPostRepositoryProvider.overrideWithValue(posts),
-        ],
-        child: const MaterialApp(home: BootstrapPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Town Square'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Cached message'), findsOneWidget);
-    expect(find.text('New message'), findsNothing);
-    expect(find.text('Show recent messages'), findsOneWidget);
-
-    await tester.tap(find.text('Show recent messages'));
-    await tester.pumpAndSettle();
-    expect(find.text('New message'), findsOneWidget);
-    expect(find.text('Show recent messages'), findsNothing);
   });
 
   testWidgets('lazily builds channels in a large expandable category', (
@@ -536,29 +496,17 @@ final class _DelayedPostRepository implements ChannelPostRepository {
   }
 
   @override
-  Future<void> loadOlder({
+  Future<ChannelPostPage> loadOlder({
     required AuthSession session,
     required String channelId,
-  }) async {}
+    required String beforePostId,
+  }) async => const ChannelPostPage();
 
   @override
-  Future<ChannelPostSnapshot> read({
-    required String accountId,
-    required String channelId,
-  }) async =>
-      ChannelPostSnapshot(posts: await _posts(channelId), hasOlder: false);
-
-  @override
-  Future<ChannelPostRefreshResult> refreshLatest({
+  Future<ChannelPostPage> loadLatest({
     required AuthSession session,
     required String channelId,
-  }) async => const ChannelPostRefreshResult(newPostIds: <String>{});
-
-  @override
-  Stream<ChannelPostSnapshot> watch({
-    required String accountId,
-    required String channelId,
-  }) => const Stream<ChannelPostSnapshot>.empty();
+  }) async => ChannelPostPage(posts: await _posts(channelId), hasOlder: false);
 }
 
 final class _ThreadRepository implements ThreadRepository {
@@ -596,24 +544,10 @@ final class _ThreadRepository implements ThreadRepository {
   );
 
   @override
-  Future<MessageThread> read({
-    required String accountId,
-    required String rootPostId,
-  }) async => _thread(rootPostId);
-
-  @override
-  Future<void> refresh({
+  Future<MessageThread> load({
     required AuthSession session,
     required String rootPostId,
-  }) async {}
-
-  @override
-  Stream<MessageThread> watch({
-    required String accountId,
-    required String rootPostId,
-  }) async* {
-    yield _thread(rootPostId);
-  }
+  }) async => _thread(rootPostId);
 }
 
 final class _AutoPagingPostRepository implements ChannelPostRepository {
@@ -626,8 +560,6 @@ final class _AutoPagingPostRepository implements ChannelPostRepository {
   final bool startsEmpty;
   final bool failLoads;
   final bool neverCompletes;
-  final StreamController<ChannelPostSnapshot> _changes =
-      StreamController<ChannelPostSnapshot>.broadcast();
   int loadOlderCalls = 0;
 
   ChannelPost get _recent => ChannelPost(
@@ -639,123 +571,48 @@ final class _AutoPagingPostRepository implements ChannelPostRepository {
     replyCount: 60,
   );
 
-  ChannelPostSnapshot get _initial => ChannelPostSnapshot(
+  ChannelPostPage get _initial => ChannelPostPage(
     posts: startsEmpty ? const <ChannelPost>[] : <ChannelPost>[_recent],
+    beforePostId: 'cursor-0',
     hasOlder: true,
   );
 
-  Future<void> close() => _changes.close();
-
   @override
-  Future<void> loadOlder({
+  Future<ChannelPostPage> loadOlder({
     required AuthSession session,
     required String channelId,
+    required String beforePostId,
   }) async {
     loadOlderCalls += 1;
     if (failLoads) throw StateError('paging failed');
     if (neverCompletes) {
-      _changes.add(_initial);
-      return;
+      return ChannelPostPage(
+        beforePostId: 'cursor-$loadOlderCalls',
+        hasOlder: true,
+      );
     }
     if (loadOlderCalls == 1) {
-      _changes.add(_initial);
-      return;
+      return const ChannelPostPage(beforePostId: 'cursor-1', hasOlder: true);
     }
-    _changes.add(
-      ChannelPostSnapshot(
-        posts: <ChannelPost>[
-          ChannelPost(
-            id: 'older-root',
-            channelId: channelId,
-            author: const PostAuthor(id: 'grace', displayName: 'Grace'),
-            sentAt: DateTime(2026, 8, 24, 11),
-            message: 'Older root',
-          ),
-          if (!startsEmpty) _recent,
-        ],
-        hasOlder: false,
-      ),
+    return ChannelPostPage(
+      posts: <ChannelPost>[
+        ChannelPost(
+          id: 'older-root',
+          channelId: channelId,
+          author: const PostAuthor(id: 'grace', displayName: 'Grace'),
+          sentAt: DateTime(2026, 8, 24, 11),
+          message: 'Older root',
+        ),
+      ],
+      hasOlder: false,
     );
   }
 
   @override
-  Future<ChannelPostSnapshot> read({
-    required String accountId,
+  Future<ChannelPostPage> loadLatest({
+    required AuthSession session,
     required String channelId,
   }) async => _initial;
-
-  @override
-  Future<ChannelPostRefreshResult> refreshLatest({
-    required AuthSession session,
-    required String channelId,
-  }) async => const ChannelPostRefreshResult(newPostIds: <String>{});
-
-  @override
-  Stream<ChannelPostSnapshot> watch({
-    required String accountId,
-    required String channelId,
-  }) => _changes.stream;
-}
-
-final class _RecentPostRepository implements ChannelPostRepository {
-  final StreamController<ChannelPostSnapshot> _changes =
-      StreamController<ChannelPostSnapshot>.broadcast();
-
-  ChannelPostSnapshot get _cached => ChannelPostSnapshot(
-    posts: <ChannelPost>[
-      ChannelPost(
-        id: 'cached',
-        channelId: 'town-square',
-        author: const PostAuthor(id: 'ada', displayName: 'Ada'),
-        sentAt: DateTime(2026, 8, 24, 10),
-        message: 'Cached message',
-      ),
-    ],
-    hasOlder: false,
-  );
-
-  ChannelPostSnapshot get _refreshed => ChannelPostSnapshot(
-    posts: <ChannelPost>[
-      ..._cached.posts,
-      ChannelPost(
-        id: 'new',
-        channelId: 'town-square',
-        author: const PostAuthor(id: 'ada', displayName: 'Ada'),
-        sentAt: DateTime(2026, 8, 24, 11),
-        message: 'New message',
-      ),
-    ],
-    hasOlder: false,
-  );
-
-  Future<void> close() => _changes.close();
-
-  @override
-  Future<void> loadOlder({
-    required AuthSession session,
-    required String channelId,
-  }) async {}
-
-  @override
-  Future<ChannelPostSnapshot> read({
-    required String accountId,
-    required String channelId,
-  }) async => _cached;
-
-  @override
-  Future<ChannelPostRefreshResult> refreshLatest({
-    required AuthSession session,
-    required String channelId,
-  }) async {
-    _changes.add(_refreshed);
-    return const ChannelPostRefreshResult(newPostIds: <String>{'new'});
-  }
-
-  @override
-  Stream<ChannelPostSnapshot> watch({
-    required String accountId,
-    required String channelId,
-  }) => _changes.stream;
 }
 
 final class _SignedInRepository implements AuthRepository {
@@ -778,96 +635,81 @@ final class _SignedInRepository implements AuthRepository {
 
 final class _SidebarRepository implements ChannelSidebarRepository {
   @override
-  Future<void> refresh(AuthSession session) async {}
-
-  @override
-  Stream<ChannelSidebarSnapshot> watch(String accountId) =>
-      Stream<ChannelSidebarSnapshot>.value(
-        const ChannelSidebarSnapshot(
-          team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
-          sections: <SidebarSection>[
-            SidebarSection(
-              id: 'favorites',
-              displayName: 'Favorites',
-              channels: <SidebarChannel>[
-                SidebarChannel(
-                  id: 'town-square',
-                  teamId: 'team-1',
-                  name: 'town-square',
-                  displayName: 'Town Square',
-                  kind: ChannelKind.publicChannel,
-                ),
-                SidebarChannel(
-                  id: 'direct-1',
-                  teamId: '',
-                  name: 'me__ada',
-                  displayName: 'Ada Lovelace',
-                  kind: ChannelKind.directMessage,
-                ),
-              ],
-            ),
-          ],
-        ),
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      const ChannelSidebarSnapshot(
+        team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'favorites',
+            displayName: 'Favorites',
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'town-square',
+                teamId: 'team-1',
+                name: 'town-square',
+                displayName: 'Town Square',
+                kind: ChannelKind.publicChannel,
+              ),
+              SidebarChannel(
+                id: 'direct-1',
+                teamId: '',
+                name: 'me__ada',
+                displayName: 'Ada Lovelace',
+                kind: ChannelKind.directMessage,
+              ),
+            ],
+          ),
+        ],
       );
 }
 
 final class _LargeSidebarRepository implements ChannelSidebarRepository {
   @override
-  Future<void> refresh(AuthSession session) async {}
-
-  @override
-  Stream<ChannelSidebarSnapshot> watch(String accountId) =>
-      Stream<ChannelSidebarSnapshot>.value(
-        ChannelSidebarSnapshot(
-          team: const SidebarTeam(id: 'team-1', displayName: 'Example team'),
-          sections: <SidebarSection>[
-            SidebarSection(
-              id: 'large',
-              displayName: 'Large category',
-              channels: List<SidebarChannel>.generate(
-                200,
-                (int index) => SidebarChannel(
-                  id: 'channel-$index',
-                  teamId: 'team-1',
-                  name: 'channel-$index',
-                  displayName: 'Channel $index',
-                  kind: ChannelKind.publicChannel,
-                ),
-                growable: false,
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      ChannelSidebarSnapshot(
+        team: const SidebarTeam(id: 'team-1', displayName: 'Example team'),
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'large',
+            displayName: 'Large category',
+            channels: List<SidebarChannel>.generate(
+              200,
+              (int index) => SidebarChannel(
+                id: 'channel-$index',
+                teamId: 'team-1',
+                name: 'channel-$index',
+                displayName: 'Channel $index',
+                kind: ChannelKind.publicChannel,
               ),
+              growable: false,
             ),
-          ],
-        ),
+          ),
+        ],
       );
 }
 
 final class _CollapsedMutedSidebarRepository
     implements ChannelSidebarRepository {
   @override
-  Future<void> refresh(AuthSession session) async {}
-
-  @override
-  Stream<ChannelSidebarSnapshot> watch(String accountId) =>
-      Stream<ChannelSidebarSnapshot>.value(
-        const ChannelSidebarSnapshot(
-          team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
-          sections: <SidebarSection>[
-            SidebarSection(
-              id: 'muted',
-              displayName: 'Muted category',
-              collapsed: true,
-              muted: true,
-              channels: <SidebarChannel>[
-                SidebarChannel(
-                  id: 'quiet',
-                  teamId: 'team-1',
-                  name: 'quiet',
-                  displayName: 'Quiet channel',
-                  kind: ChannelKind.publicChannel,
-                ),
-              ],
-            ),
-          ],
-        ),
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      const ChannelSidebarSnapshot(
+        team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'muted',
+            displayName: 'Muted category',
+            collapsed: true,
+            muted: true,
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'quiet',
+                teamId: 'team-1',
+                name: 'quiet',
+                displayName: 'Quiet channel',
+                kind: ChannelKind.publicChannel,
+              ),
+            ],
+          ),
+        ],
       );
 }

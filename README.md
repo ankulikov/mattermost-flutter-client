@@ -1,7 +1,8 @@
 # Mattermost Flutter
 
-Cross-platform, offline-first Mattermost client for Android, iOS, Web, macOS,
-and Windows.
+Cross-platform, network-first Mattermost client for Android, iOS, Web, macOS,
+and Windows. Channel navigation, posts, threads, and paging state are kept in
+memory so opening a channel always starts with current server data.
 
 The repository contains the application skeleton and architecture baseline. The
 host environment used to create it did not contain Flutter SDK, so generated
@@ -21,7 +22,7 @@ flutter create \
   --platforms android,ios,web,macos,windows \
   .
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs
+flutter pub run build_runner build
 flutter analyze
 flutter test
 ```
@@ -30,9 +31,9 @@ Replace `com.example.mattermost` with the final reverse-DNS application id befor
 shipping. Windows builds require Windows, iOS/macOS builds require macOS and
 Xcode.
 
-When Drift persistence is implemented, copy the matching `sqlite3.wasm` and
-`drift_worker.js` artifacts to `web/`. Their versions must match the resolved
-`sqlite3` and `drift` packages; do not commit arbitrary binaries from the web.
+Drift remains available for future durable feature data such as user profiles.
+Its current schema intentionally has no feature tables. Web database artifacts,
+when needed, must match the resolved `sqlite3` and `drift` package versions.
 
 ## Documentation
 
@@ -47,6 +48,5 @@ flutter run -d macos
 flutter test
 flutter analyze
 dart format --output=none --set-exit-if-changed lib test
-dart run build_runner watch --delete-conflicting-outputs
+flutter pub run build_runner watch
 ```
-

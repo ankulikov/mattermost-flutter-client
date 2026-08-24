@@ -54,31 +54,18 @@ final class InMemoryChannelPostRepository implements ChannelPostRepository {
   }
 
   @override
-  Future<void> loadOlder({
+  Future<ChannelPostPage> loadOlder({
     required AuthSession session,
     required String channelId,
-  }) async {}
+    required String beforePostId,
+  }) async => const ChannelPostPage();
 
   @override
-  Future<ChannelPostSnapshot> read({
-    required String accountId,
+  Future<ChannelPostPage> loadLatest({
+    required AuthSession session,
     required String channelId,
   }) async =>
-      ChannelPostSnapshot(posts: await loadHistory(channelId), hasOlder: false);
-
-  @override
-  Future<ChannelPostRefreshResult> refreshLatest({
-    required AuthSession session,
-    required String channelId,
-  }) async => const ChannelPostRefreshResult(newPostIds: <String>{});
-
-  @override
-  Stream<ChannelPostSnapshot> watch({
-    required String accountId,
-    required String channelId,
-  }) async* {
-    yield await read(accountId: accountId, channelId: channelId);
-  }
+      ChannelPostPage(posts: await loadHistory(channelId), hasOlder: false);
 
   static int _stableHash(String value) {
     var result = 17;

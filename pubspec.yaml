@@ -1,5 +1,5 @@
 name: mattermost_flutter
-description: Offline-first, cross-platform Mattermost client written in Flutter.
+description: Network-first, cross-platform Mattermost client written in Flutter.
 publish_to: none
 version: 0.1.0+1
 
