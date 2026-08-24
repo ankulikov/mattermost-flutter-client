@@ -1,0 +1,217 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
+import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
+import 'package:mattermost_flutter/src/features/bootstrap/presentation/bootstrap_page.dart';
+import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
+import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
+
+void main() {
+  testWidgets('uses a drawer on compact screens', (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedOutRepository()),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Scaffold scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(scaffold.drawer, isA<Drawer>());
+    expect(find.text('Mattermost'), findsOneWidget);
+  });
+
+  testWidgets('shows categorized channels and dialogs when signed in', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Example team'), findsOneWidget);
+    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('Town Square'), findsOneWidget);
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+  });
+
+  testWidgets('lazily builds channels in a large expandable category', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _LargeSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Channel 0'), findsOneWidget);
+    expect(find.text('Channel 199'), findsNothing);
+    expect(find.byType(ListTile).evaluate().length, lessThan(30));
+
+    await tester.tap(find.text('Large category'));
+    await tester.pumpAndSettle();
+    expect(find.text('Channel 0'), findsNothing);
+
+    await tester.tap(find.text('Large category'));
+    await tester.pumpAndSettle();
+    expect(find.text('Channel 0'), findsOneWidget);
+    expect(find.byType(ListTile).evaluate().length, lessThan(30));
+  });
+
+  testWidgets('shows the channel list in compact drawer at large text scale', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+final class _SignedOutRepository implements AuthRepository {
+  @override
+  Future<AuthSession> authenticateWithPersonalAccessToken({
+    required Uri serverUrl,
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<AuthSession?> restoreSession() async => null;
+
+  @override
+  Future<void> signOut() async {}
+}
+
+final class _SignedInRepository implements AuthRepository {
+  @override
+  Future<AuthSession> authenticateWithPersonalAccessToken({
+    required Uri serverUrl,
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<AuthSession?> restoreSession() async => AuthSession(
+    serverUrl: Uri.parse('https://chat.example.com'),
+    userId: 'me',
+    username: 'current',
+  );
+
+  @override
+  Future<void> signOut() async {}
+}
+
+final class _SidebarRepository implements ChannelSidebarRepository {
+  @override
+  Future<void> refresh(AuthSession session) async {}
+
+  @override
+  Stream<ChannelSidebarSnapshot> watch(String accountId) =>
+      Stream<ChannelSidebarSnapshot>.value(
+        const ChannelSidebarSnapshot(
+          team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+          sections: <SidebarSection>[
+            SidebarSection(
+              id: 'favorites',
+              displayName: 'Favorites',
+              channels: <SidebarChannel>[
+                SidebarChannel(
+                  id: 'town-square',
+                  teamId: 'team-1',
+                  name: 'town-square',
+                  displayName: 'Town Square',
+                  kind: ChannelKind.publicChannel,
+                ),
+                SidebarChannel(
+                  id: 'direct-1',
+                  teamId: '',
+                  name: 'me__ada',
+                  displayName: 'Ada Lovelace',
+                  kind: ChannelKind.directMessage,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+final class _LargeSidebarRepository implements ChannelSidebarRepository {
+  @override
+  Future<void> refresh(AuthSession session) async {}
+
+  @override
+  Stream<ChannelSidebarSnapshot> watch(String accountId) =>
+      Stream<ChannelSidebarSnapshot>.value(
+        ChannelSidebarSnapshot(
+          team: const SidebarTeam(id: 'team-1', displayName: 'Example team'),
+          sections: <SidebarSection>[
+            SidebarSection(
+              id: 'large',
+              displayName: 'Large category',
+              channels: List<SidebarChannel>.generate(
+                200,
+                (int index) => SidebarChannel(
+                  id: 'channel-$index',
+                  teamId: 'team-1',
+                  name: 'channel-$index',
+                  displayName: 'Channel $index',
+                  kind: ChannelKind.publicChannel,
+                ),
+                growable: false,
+              ),
+            ),
+          ],
+        ),
+      );
+}
