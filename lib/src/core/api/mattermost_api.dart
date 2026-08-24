@@ -45,4 +45,13 @@ abstract interface class MattermostApi {
     required String channelId,
     required int since,
   });
+
+  /// Returns the root and posts belonging to its thread. Responses may be
+  /// paginated; [fromPost] and [fromCreateAt] resume from the last item.
+  Future<MattermostPostListDto> getPostThread({
+    required String rootPostId,
+    int perPage = 60,
+    String? fromPost,
+    int? fromCreateAt,
+  });
 }

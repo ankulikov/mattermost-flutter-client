@@ -353,6 +353,8 @@ final class MattermostPostDto {
     this.deleteAt = 0,
     this.editAt = 0,
     this.rootId = '',
+    this.replyCount = 0,
+    this.lastReplyAt = 0,
     this.originalId = '',
     this.type = '',
     this.props,
@@ -371,6 +373,8 @@ final class MattermostPostDto {
     userId: _string(json, 'user_id'),
     channelId: _string(json, 'channel_id'),
     rootId: _string(json, 'root_id'),
+    replyCount: _int(json, 'reply_count'),
+    lastReplyAt: _int(json, 'last_reply_at'),
     originalId: _string(json, 'original_id'),
     message: _string(json, 'message'),
     type: _string(json, 'type'),
@@ -389,6 +393,8 @@ final class MattermostPostDto {
   final String userId;
   final String channelId;
   final String rootId;
+  final int replyCount;
+  final int lastReplyAt;
   final String originalId;
   final String message;
   final String type;

@@ -71,9 +71,55 @@ void main() {
         await database.select(database.channelPostSyncStates).get(),
         isEmpty,
       );
+      expect(await database.select(database.threadPostOrders).get(), isEmpty);
+      expect(await database.select(database.threadSyncStates).get(), isEmpty);
     } finally {
       await database.close();
       await directory.delete(recursive: true);
     }
   });
+
+  test(
+    'migrates post rows from schema 3 without guessing root membership',
+    () async {
+      final Directory directory = await Directory.systemTemp.createTemp(
+        'mattermost-post-migration-',
+      );
+      final File file = File('${directory.path}/posts.sqlite');
+      final sqlite.Database legacy = sqlite.sqlite3.open(file.path);
+      legacy.execute('''
+      CREATE TABLE cached_channel_posts (
+        account_id TEXT NOT NULL,
+        post_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        create_at INTEGER NOT NULL,
+        update_at INTEGER NOT NULL,
+        delete_at INTEGER NOT NULL DEFAULT 0,
+        message TEXT NOT NULL,
+        PRIMARY KEY (account_id, post_id)
+      );
+      INSERT INTO cached_channel_posts VALUES (
+        'account-1', 'post-1', 'channel-1', 'user-1', 1, 1, 0, 'legacy'
+      );
+      PRAGMA user_version = 3;
+    ''');
+      legacy.close();
+
+      final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+      try {
+        final db.CachedChannelPost post = await database
+            .select(database.cachedChannelPosts)
+            .getSingle();
+        expect(post.rootId, isNull);
+        expect(post.replyCount, 0);
+        expect(post.lastReplyAt, 0);
+        expect(await database.select(database.threadPostOrders).get(), isEmpty);
+        expect(await database.select(database.threadSyncStates).get(), isEmpty);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }

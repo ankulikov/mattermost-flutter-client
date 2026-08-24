@@ -27,6 +27,9 @@ final class PostCacheItem {
     required this.deleteAt,
     required this.message,
     required this.reactions,
+    this.rootId = '',
+    this.replyCount = 0,
+    this.lastReplyAt = 0,
   });
 
   final String id;
@@ -37,6 +40,9 @@ final class PostCacheItem {
   final int deleteAt;
   final String message;
   final List<PostCacheReaction> reactions;
+  final String rootId;
+  final int replyCount;
+  final int lastReplyAt;
 }
 
 final class PostCachePage {

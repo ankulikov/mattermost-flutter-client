@@ -40,6 +40,9 @@ void main() {
             'user_id': 'user-1',
             'channel_id': 'channel-1',
             'message': 'Hello',
+            'root_id': '',
+            'reply_count': 3,
+            'last_reply_at': 99,
             'props': <String, Object?>{
               'attachments': <Object?>[
                 <String, Object?>{'title': 'Typed extension data'},
@@ -74,6 +77,8 @@ void main() {
     expect(result.nextPostId, 'post-2');
     expect(result.hasNext, isTrue);
     expect(post.message, 'Hello');
+    expect(post.replyCount, 3);
+    expect(post.lastReplyAt, 99);
     expect(post.metadata!.images['https://example.com/image.png']!.width, 320);
     expect(post.metadata!.reactions.single.emojiName, 'thumbsup');
     expect(post.props!.values['attachments'], isA<JsonArrayDto>());

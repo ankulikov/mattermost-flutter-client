@@ -58,7 +58,11 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
     final Set<String> knownIds = before.posts.map((post) => post.id).toSet();
     return ChannelPostRefreshResult(
       newPostIds: response.order
-          .where((String id) => !knownIds.contains(id))
+          .where(
+            (String id) =>
+                response.posts[id]?.rootId.isEmpty == true &&
+                !knownIds.contains(id),
+          )
           .toSet(),
     );
   }
@@ -155,6 +159,9 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
       updateAt: post.updateAt,
       deleteAt: post.deleteAt,
       message: post.message,
+      rootId: post.rootId,
+      replyCount: post.replyCount,
+      lastReplyAt: post.lastReplyAt,
       reactions: grouped.entries
           .map(
             (MapEntry<String, List<MattermostReactionDto>> entry) =>

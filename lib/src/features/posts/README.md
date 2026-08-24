@@ -33,6 +33,24 @@ visible window until the user chooses **Show recent messages**, preventing a
 scroll jump. Reaching the visual top requests the next `before` page. A reversed
 list keeps the current viewport anchored when older rows are prepended.
 
-Message text is still rendered as plain text. Markdown, files, threads,
-WebSocket reconciliation, deletion tombstones, and mutation outbox behavior are
-separate capabilities.
+Message text is still rendered as plain text. Markdown, files, WebSocket
+reconciliation, deletion tombstones, and mutation outbox behavior are separate
+capabilities.
+
+## Channel history and replies
+
+The documented channel-history endpoint does not expose a root-only filter.
+Every returned post is normalized, but only posts whose `root_id` is explicitly
+empty are added to `channel_post_orders`. Replies are indexed by root in
+`thread_post_orders`, so replies from different threads can arrive in the same
+page without appearing as standalone channel messages. A newly received reply
+also does not trigger the channel's **Show recent messages** affordance.
+
+`cached_channel_posts.root_id` is nullable only for migration safety. `null`
+means that an old cache row predates thread-aware storage; it is not treated as
+a root. New network rows always store either `''` for a root or a non-empty root
+post id for a reply. This prevents a legacy reply from being misclassified.
+
+The raw channel page cursor remains independent from the filtered root order.
+That distinction matters because using the oldest visible root as the next
+`before` cursor can skip replies or repeat server pages.

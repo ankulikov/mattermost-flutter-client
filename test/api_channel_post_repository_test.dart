@@ -109,6 +109,14 @@ final class _FakePostApi implements MattermostApi {
   String? beforeId;
 
   @override
+  Future<MattermostPostListDto> getPostThread({
+    required String rootPostId,
+    int perPage = 60,
+    String? fromPost,
+    int? fromCreateAt,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostPostListDto> getPostsForChannel({
     required String channelId,
     int page = 0,
@@ -117,8 +125,9 @@ final class _FakePostApi implements MattermostApi {
   }) async {
     latestPerPage = perPage;
     return MattermostPostListDto(
-      order: const <String>['post-2', 'post-1'],
+      order: const <String>['reply-2', 'post-2', 'post-1'],
       posts: <String, MattermostPostDto>{
+        'reply-2': _post('reply-2', 2100, rootId: 'post-1'),
         'post-2': _post('post-2', 2000),
         'post-1': _post('post-1', 1000),
       },
@@ -151,14 +160,16 @@ final class _FakePostApi implements MattermostApi {
         MattermostUserDto(id: 'ada', username: 'ada', firstName: 'Ada'),
       ];
 
-  MattermostPostDto _post(String id, int createAt) => MattermostPostDto(
-    id: id,
-    userId: 'ada',
-    channelId: 'channel-1',
-    message: id,
-    createAt: createAt,
-    updateAt: createAt,
-  );
+  MattermostPostDto _post(String id, int createAt, {String rootId = ''}) =>
+      MattermostPostDto(
+        id: id,
+        userId: 'ada',
+        channelId: 'channel-1',
+        message: id,
+        createAt: createAt,
+        updateAt: createAt,
+        rootId: rootId,
+      );
 
   @override
   Future<MattermostChannelCategoriesDto> getChannelCategories({

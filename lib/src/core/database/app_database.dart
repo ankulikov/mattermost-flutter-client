@@ -73,6 +73,13 @@ class CachedChannelPosts extends Table {
   IntColumn get deleteAt => integer().withDefault(const Constant<int>(0))();
   TextColumn get message => text()();
 
+  /// `null` is reserved for rows migrated from a schema that did not persist
+  /// thread membership. New rows always contain either `''` (a root) or the
+  /// root post id (a reply), so unknown legacy replies never leak into history.
+  TextColumn get rootId => text().nullable()();
+  IntColumn get replyCount => integer().withDefault(const Constant<int>(0))();
+  IntColumn get lastReplyAt => integer().withDefault(const Constant<int>(0))();
+
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, postId};
 }
@@ -120,6 +127,35 @@ class ChannelPostSyncStates extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, channelId};
 }
 
+/// Membership and stable order for posts observed in a specific thread.
+/// The root itself is also indexed, which lets a reply arrive before its root
+/// without inventing a placeholder domain post.
+class ThreadPostOrders extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get rootPostId => text()();
+  TextColumn get postId => text()();
+  IntColumn get createAt => integer()();
+  IntColumn get position => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{
+    accountId,
+    rootPostId,
+    postId,
+  };
+}
+
+class ThreadSyncStates extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get rootPostId => text()();
+  TextColumn get channelId => text()();
+  BoolColumn get complete => boolean().withDefault(const Constant(false))();
+  IntColumn get lastSyncedAt => integer().withDefault(const Constant<int>(0))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, rootPostId};
+}
+
 @DriftDatabase(
   tables: <Type>[
     SidebarTeams,
@@ -131,6 +167,8 @@ class ChannelPostSyncStates extends Table {
     ChannelPostOrders,
     CachedPostReactions,
     ChannelPostSyncStates,
+    ThreadPostOrders,
+    ThreadSyncStates,
   ],
 )
 final class AppDatabase extends _$AppDatabase {
@@ -139,7 +177,7 @@ final class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -163,6 +201,24 @@ final class AppDatabase extends _$AppDatabase {
         await migrator.createTable(channelPostOrders);
         await migrator.createTable(cachedPostReactions);
         await migrator.createTable(channelPostSyncStates);
+      }
+      if (from < 4) {
+        if (from >= 3) {
+          await migrator.addColumn(
+            cachedChannelPosts,
+            cachedChannelPosts.rootId,
+          );
+          await migrator.addColumn(
+            cachedChannelPosts,
+            cachedChannelPosts.replyCount,
+          );
+          await migrator.addColumn(
+            cachedChannelPosts,
+            cachedChannelPosts.lastReplyAt,
+          );
+        }
+        await migrator.createTable(threadPostOrders);
+        await migrator.createTable(threadSyncStates);
       }
     },
   );

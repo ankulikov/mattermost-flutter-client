@@ -13,6 +13,9 @@ import 'package:mattermost_flutter/src/features/channels/presentation/channel_si
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
+import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
+import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
+import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
 
 void main() {
   testWidgets('uses a drawer on compact screens', (WidgetTester tester) async {
@@ -132,6 +135,88 @@ void main() {
 
     expect(find.text('Message for town-square'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('opens a thread beside the channel on expanded width', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('2 replies'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Thread'), findsOneWidget);
+    expect(find.text('Thread reply 1'), findsOneWidget);
+    expect(find.text('Message for town-square'), findsNWidgets(2));
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey<String>('thread-town-square-post')),
+          )
+          .width,
+      380,
+    );
+  });
+
+  testWidgets('opens a thread over the channel on compact width', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('2 replies'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Thread'), findsOneWidget);
+    expect(find.text('Thread reply 1'), findsOneWidget);
+    expect(find.text('Message for town-square'), findsNWidgets(2));
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey<String>('thread-town-square-post')),
+          )
+          .width,
+      390,
+    );
   });
 
   testWidgets('keeps refreshed posts hidden until Show recent messages', (
@@ -313,6 +398,8 @@ final class _DelayedPostRepository implements ChannelPostRepository {
         sentAt: DateTime(2026, 8, 24, 10, 30),
         message: 'Message for $channelId',
         reactions: const <PostReaction>[PostReaction(emoji: '👍', count: 3)],
+        replyCount: 2,
+        lastReplyAt: DateTime(2026, 8, 24, 10, 35),
       ),
       ChannelPost(
         id: '$channelId-follow-up-1',
@@ -355,6 +442,61 @@ final class _DelayedPostRepository implements ChannelPostRepository {
     required String accountId,
     required String channelId,
   }) => const Stream<ChannelPostSnapshot>.empty();
+}
+
+final class _ThreadRepository implements ThreadRepository {
+  const _ThreadRepository();
+
+  MessageThread _thread(String rootPostId) => MessageThread(
+    rootPostId: rootPostId,
+    root: ChannelPost(
+      id: rootPostId,
+      channelId: 'town-square',
+      author: const PostAuthor(id: 'grace', displayName: 'Grace Hopper'),
+      sentAt: DateTime(2026, 8, 24, 10, 30),
+      message: 'Message for town-square',
+      replyCount: 2,
+    ),
+    replies: <ChannelPost>[
+      ChannelPost(
+        id: 'reply-1',
+        channelId: 'town-square',
+        author: const PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
+        sentAt: DateTime(2026, 8, 24, 10, 31),
+        message: 'Thread reply 1',
+        rootId: rootPostId,
+      ),
+      ChannelPost(
+        id: 'reply-2',
+        channelId: 'town-square',
+        author: const PostAuthor(id: 'alan', displayName: 'Alan Turing'),
+        sentAt: DateTime(2026, 8, 24, 10, 35),
+        message: 'Thread reply 2',
+        rootId: rootPostId,
+      ),
+    ],
+    isComplete: true,
+  );
+
+  @override
+  Future<MessageThread> read({
+    required String accountId,
+    required String rootPostId,
+  }) async => _thread(rootPostId);
+
+  @override
+  Future<void> refresh({
+    required AuthSession session,
+    required String rootPostId,
+  }) async {}
+
+  @override
+  Stream<MessageThread> watch({
+    required String accountId,
+    required String rootPostId,
+  }) async* {
+    yield _thread(rootPostId);
+  }
 }
 
 final class _RecentPostRepository implements ChannelPostRepository {

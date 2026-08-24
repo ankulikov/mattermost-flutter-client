@@ -30,6 +30,9 @@ final class ChannelPost {
     required this.sentAt,
     required this.message,
     this.reactions = const <PostReaction>[],
+    this.rootId = '',
+    this.replyCount = 0,
+    this.lastReplyAt,
   });
 
   final String id;
@@ -38,4 +41,9 @@ final class ChannelPost {
   final DateTime sentAt;
   final String message;
   final List<PostReaction> reactions;
+  final String rootId;
+  final int replyCount;
+  final DateTime? lastReplyAt;
+
+  bool get isReply => rootId.isNotEmpty;
 }

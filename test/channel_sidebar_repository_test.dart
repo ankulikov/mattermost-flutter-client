@@ -81,6 +81,14 @@ final class _FakeMattermostApi implements MattermostApi {
   final List<String> calls = <String>[];
 
   @override
+  Future<MattermostPostListDto> getPostThread({
+    required String rootPostId,
+    int perPage = 60,
+    String? fromPost,
+    int? fromCreateAt,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostChannelCategoriesDto> getChannelCategories({
     required String userId,
     required String teamId,

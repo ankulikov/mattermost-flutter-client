@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_strings.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/pat_login_dialog.dart';
@@ -33,7 +34,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final bool expanded = constraints.maxWidth >= 840;
+        final bool expanded = constraints.maxWidth >= AppBreakpoints.expanded;
         if (expanded) {
           return Scaffold(
             body: Row(

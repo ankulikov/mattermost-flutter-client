@@ -129,6 +129,24 @@ final class DioMattermostApi implements MattermostApi {
     return MattermostPostListDto.fromJson(_object(response.data));
   }
 
+  @override
+  Future<MattermostPostListDto> getPostThread({
+    required String rootPostId,
+    int perPage = 60,
+    String? fromPost,
+    int? fromCreateAt,
+  }) async {
+    final Response<Object?> response = await _dio.get<Object?>(
+      '/posts/$rootPostId/thread',
+      queryParameters: <String, Object?>{
+        'perPage': perPage,
+        if (fromPost case final String value) 'fromPost': value,
+        if (fromCreateAt case final int value) 'fromCreateAt': value,
+      },
+    );
+    return MattermostPostListDto.fromJson(_object(response.data));
+  }
+
   static Map<String, String>? _conditionalHeaders(String? etag) =>
       etag == null ? null : <String, String>{'If-None-Match': etag};
 

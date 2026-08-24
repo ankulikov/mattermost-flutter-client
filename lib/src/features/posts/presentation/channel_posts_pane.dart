@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_strings.dart';
+import 'package:mattermost_flutter/src/features/threads/presentation/thread_pane.dart';
+import 'package:mattermost_flutter/src/features/threads/presentation/thread_strings.dart';
 
 class ChannelPostsPane extends ConsumerStatefulWidget {
   const ChannelPostsPane({required this.channel, super.key});
@@ -16,6 +19,15 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
 
 class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
   ScrollController? _listController;
+  String? _selectedRootPostId;
+
+  @override
+  void didUpdateWidget(covariant ChannelPostsPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.channel.id != widget.channel.id) {
+      _selectedRootPostId = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +36,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
       channelPostsProvider(channel.id),
     );
     final ChannelPostsViewState? viewState = posts.value;
-    return Column(
+    final Widget channelPane = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _ChannelHeader(
@@ -68,6 +80,9 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                     onControllerReady: (ScrollController controller) {
                       _listController = controller;
                     },
+                    onOpenThread: (ChannelPost post) {
+                      setState(() => _selectedRootPostId = post.id);
+                    },
                   ),
                   if (state.hasRecentMessages)
                     Positioned(
@@ -106,6 +121,33 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
           ),
         ),
       ],
+    );
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final String? rootPostId = _selectedRootPostId;
+        if (rootPostId == null) return channelPane;
+        final Widget thread = ThreadPane(
+          key: ValueKey<String>('thread-$rootPostId'),
+          rootPostId: rootPostId,
+          channel: channel,
+          onClose: () => setState(() => _selectedRootPostId = null),
+        );
+        if (constraints.maxWidth >= AppBreakpoints.sideThread) {
+          return Row(
+            children: <Widget>[
+              Expanded(child: channelPane),
+              const VerticalDivider(width: 1),
+              SizedBox(width: 380, child: thread),
+            ],
+          );
+        }
+        return Stack(
+          children: <Widget>[
+            Positioned.fill(child: channelPane),
+            Positioned.fill(child: thread),
+          ],
+        );
+      },
     );
   }
 }
@@ -201,6 +243,7 @@ class _PostList extends StatefulWidget {
     required this.isLoadingOlder,
     required this.onLoadOlder,
     required this.onControllerReady,
+    required this.onOpenThread,
   });
 
   final String channelId;
@@ -208,6 +251,7 @@ class _PostList extends StatefulWidget {
   final bool isLoadingOlder;
   final VoidCallback onLoadOlder;
   final ValueChanged<ScrollController> onControllerReady;
+  final ValueChanged<ChannelPost> onOpenThread;
 
   @override
   State<_PostList> createState() => _PostListState();
@@ -277,6 +321,7 @@ class _PostListState extends State<_PostList> {
         key: ValueKey<String>(post.id),
         post: post,
         continuesAuthor: continuesAuthor,
+        onOpenThread: widget.onOpenThread,
       );
     },
   );
@@ -286,11 +331,13 @@ class _PostRow extends StatelessWidget {
   const _PostRow({
     required this.post,
     required this.continuesAuthor,
+    required this.onOpenThread,
     super.key,
   });
 
   final ChannelPost post;
   final bool continuesAuthor;
+  final ValueChanged<ChannelPost> onOpenThread;
 
   @override
   Widget build(BuildContext context) {
@@ -354,12 +401,38 @@ class _PostRow extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (post.replyCount > 0) ...<Widget>[
+                  const SizedBox(height: 6),
+                  Semantics(
+                    button: true,
+                    label: ThreadStrings.replyCount(post.replyCount),
+                    child: TextButton.icon(
+                      onPressed: () => onOpenThread(post),
+                      icon: const Icon(Icons.forum_outlined, size: 18),
+                      label: Text(_threadSummary(context, post)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: const Size(44, 44),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _threadSummary(BuildContext context, ChannelPost post) {
+    final String count = ThreadStrings.replyCount(post.replyCount);
+    final DateTime? lastReplyAt = post.lastReplyAt;
+    if (lastReplyAt == null) return count;
+    final String time = MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(lastReplyAt));
+    return '$count · ${ThreadStrings.lastReply(time)}';
   }
 }
 

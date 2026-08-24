@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
 import 'package:mattermost_flutter/src/core/database/app_database.dart' as db;
@@ -39,14 +40,26 @@ final class ChannelPostStore {
     required String accountId,
     required String channelId,
   }) async {
-    final List<db.CachedChannelPost> postRows =
-        await (_database.select(_database.cachedChannelPosts)..where(
-              (db.CachedChannelPosts table) =>
+    final List<db.ChannelPostOrder> orderRows =
+        await (_database.select(_database.channelPostOrders)..where(
+              (db.ChannelPostOrders table) =>
                   table.accountId.equals(accountId) &
-                  table.channelId.equals(channelId) &
-                  table.deleteAt.equals(0),
+                  table.channelId.equals(channelId),
             ))
             .get();
+    final Set<String> orderedIds = orderRows
+        .map((db.ChannelPostOrder row) => row.postId)
+        .toSet();
+    final List<db.CachedChannelPost> postRows = orderedIds.isEmpty
+        ? const <db.CachedChannelPost>[]
+        : await (_database.select(_database.cachedChannelPosts)..where(
+                (db.CachedChannelPosts table) =>
+                    table.accountId.equals(accountId) &
+                    table.postId.isIn(orderedIds) &
+                    table.rootId.equals('') &
+                    table.deleteAt.equals(0),
+              ))
+              .get();
     final db.ChannelPostSyncState? sync =
         await (_database.select(_database.channelPostSyncStates)..where(
               (db.ChannelPostSyncStates table) =>
@@ -63,6 +76,29 @@ final class ChannelPostStore {
     final Set<String> authorIds = postRows
         .map((db.CachedChannelPost row) => row.userId)
         .toSet();
+    final List<db.CachedChannelPost> cachedReplies =
+        await (_database.select(_database.cachedChannelPosts)..where(
+              (db.CachedChannelPosts table) =>
+                  table.accountId.equals(accountId) &
+                  table.rootId.isIn(postIds) &
+                  table.deleteAt.equals(0),
+            ))
+            .get();
+    final Map<String, int> cachedReplyCounts = <String, int>{};
+    final Map<String, int> cachedLastReplyAt = <String, int>{};
+    for (final db.CachedChannelPost reply in cachedReplies) {
+      final String rootId = reply.rootId!;
+      cachedReplyCounts.update(
+        rootId,
+        (int count) => count + 1,
+        ifAbsent: () => 1,
+      );
+      cachedLastReplyAt.update(
+        rootId,
+        (int value) => value > reply.createAt ? value : reply.createAt,
+        ifAbsent: () => reply.createAt,
+      );
+    }
     final List<db.CachedPostAuthor> authorRows =
         await (_database.select(_database.cachedPostAuthors)..where(
               (db.CachedPostAuthors table) =>
@@ -106,6 +142,24 @@ final class ChannelPostStore {
                 ),
                 sentAt: DateTime.fromMillisecondsSinceEpoch(row.createAt),
                 message: row.message,
+                rootId: row.rootId ?? '',
+                replyCount: math.max(
+                  row.replyCount,
+                  cachedReplyCounts[row.postId] ?? 0,
+                ),
+                lastReplyAt:
+                    math.max(
+                          row.lastReplyAt,
+                          cachedLastReplyAt[row.postId] ?? 0,
+                        ) ==
+                        0
+                    ? null
+                    : DateTime.fromMillisecondsSinceEpoch(
+                        math.max(
+                          row.lastReplyAt,
+                          cachedLastReplyAt[row.postId] ?? 0,
+                        ),
+                      ),
                 reactions: List<PostReaction>.unmodifiable(
                   reactions[row.postId] ?? const <PostReaction>[],
                 ),
@@ -174,18 +228,42 @@ final class ChannelPostStore {
                 updateAt: post.updateAt,
                 deleteAt: Value<int>(post.deleteAt),
                 message: post.message,
+                rootId: Value<String?>(post.rootId),
+                replyCount: Value<int>(post.replyCount),
+                lastReplyAt: Value<int>(post.lastReplyAt),
               ),
             );
-        await _database
-            .into(_database.channelPostOrders)
-            .insertOnConflictUpdate(
-              db.ChannelPostOrdersCompanion.insert(
-                accountId: accountId,
-                channelId: channelId,
-                postId: post.id,
-                createAt: post.createAt,
-              ),
-            );
+        if (post.rootId.isEmpty) {
+          await _database
+              .into(_database.channelPostOrders)
+              .insertOnConflictUpdate(
+                db.ChannelPostOrdersCompanion.insert(
+                  accountId: accountId,
+                  channelId: channelId,
+                  postId: post.id,
+                  createAt: post.createAt,
+                ),
+              );
+        } else {
+          await (_database.delete(_database.channelPostOrders)..where(
+                (db.ChannelPostOrders table) =>
+                    table.accountId.equals(accountId) &
+                    table.channelId.equals(channelId) &
+                    table.postId.equals(post.id),
+              ))
+              .go();
+          await _database
+              .into(_database.threadPostOrders)
+              .insertOnConflictUpdate(
+                db.ThreadPostOrdersCompanion.insert(
+                  accountId: accountId,
+                  rootPostId: post.rootId,
+                  postId: post.id,
+                  createAt: post.createAt,
+                  position: post.createAt,
+                ),
+              );
+        }
         await (_database.delete(_database.cachedPostReactions)..where(
               (db.CachedPostReactions table) =>
                   table.accountId.equals(accountId) &
