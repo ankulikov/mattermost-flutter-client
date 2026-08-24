@@ -135,11 +135,13 @@ final class DioMattermostApi implements MattermostApi {
     int perPage = 60,
     String? fromPost,
     int? fromCreateAt,
+    PostThreadDirection direction = PostThreadDirection.up,
   }) async {
     final Response<Object?> response = await _dio.get<Object?>(
       '/posts/$rootPostId/thread',
       queryParameters: <String, Object?>{
         'perPage': perPage,
+        'direction': direction.name,
         if (fromPost case final String value) 'fromPost': value,
         if (fromCreateAt case final int value) 'fromCreateAt': value,
       },

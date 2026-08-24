@@ -77,6 +77,7 @@ final class _FakeMattermostApi implements MattermostApi {
     int perPage = 60,
     String? fromPost,
     int? fromCreateAt,
+    PostThreadDirection direction = PostThreadDirection.up,
   }) => throw UnimplementedError();
 
   @override

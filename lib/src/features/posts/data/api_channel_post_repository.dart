@@ -63,16 +63,28 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
     final List<MattermostUserDto> users = userIds.isEmpty
         ? const <MattermostUserDto>[]
         : await api.getUsersByIds(userIds.toList(growable: false));
+    final List<ChannelPost> mappedPosts = mapMattermostPosts(
+      posts: orderedPosts,
+      users: users,
+      currentUserId: session.userId,
+    );
+    final Map<String, ChannelReplySummary> replySummaries =
+        _collectReplySummaries(mappedPosts);
     final List<ChannelPost> roots =
-        mapMattermostPosts(
-            posts: orderedPosts,
-            users: users,
-            currentUserId: session.userId,
-          ).where((ChannelPost post) => !post.isReply).toList(growable: false)
+        mappedPosts
+            .where((ChannelPost post) => !post.isReply)
+            .map(
+              (ChannelPost post) =>
+                  _applyReplySummary(post, replySummaries[post.id]),
+            )
+            .toList(growable: false)
           ..sort(_comparePosts);
     final String? beforePostId = response.order.lastOrNull;
     return ChannelPostPage(
       posts: List<ChannelPost>.unmodifiable(roots),
+      replySummaries: Map<String, ChannelReplySummary>.unmodifiable(
+        replySummaries,
+      ),
       beforePostId: beforePostId,
       hasOlder: beforePostId != null && response.previousPostId.isNotEmpty,
     );
@@ -93,5 +105,48 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
   static int _comparePosts(ChannelPost a, ChannelPost b) {
     final int byTime = a.sentAt.compareTo(b.sentAt);
     return byTime != 0 ? byTime : a.id.compareTo(b.id);
+  }
+
+  static Map<String, ChannelReplySummary> _collectReplySummaries(
+    List<ChannelPost> posts,
+  ) {
+    final Map<String, Set<String>> replyIds = <String, Set<String>>{};
+    final Map<String, DateTime> lastReplyAt = <String, DateTime>{};
+    for (final ChannelPost post in posts) {
+      if (!post.isReply) continue;
+      replyIds.putIfAbsent(post.rootId, () => <String>{}).add(post.id);
+      final DateTime? currentLastReplyAt = lastReplyAt[post.rootId];
+      if (currentLastReplyAt == null ||
+          post.sentAt.isAfter(currentLastReplyAt)) {
+        lastReplyAt[post.rootId] = post.sentAt;
+      }
+    }
+    return <String, ChannelReplySummary>{
+      for (final MapEntry<String, Set<String>> entry in replyIds.entries)
+        entry.key: ChannelReplySummary(
+          replyIds: Set<String>.unmodifiable(entry.value),
+          lastReplyAt: lastReplyAt[entry.key],
+        ),
+    };
+  }
+
+  static ChannelPost _applyReplySummary(
+    ChannelPost post,
+    ChannelReplySummary? summary,
+  ) {
+    if (summary == null) return post;
+    final int observedCount = summary.replyIds.length;
+    return post.withThreadSummary(
+      replyCount: post.replyCount > observedCount
+          ? post.replyCount
+          : observedCount,
+      lastReplyAt: _latest(post.lastReplyAt, summary.lastReplyAt),
+    );
+  }
+
+  static DateTime? _latest(DateTime? first, DateTime? second) {
+    if (first == null) return second;
+    if (second == null) return first;
+    return first.isAfter(second) ? first : second;
   }
 }

@@ -172,7 +172,14 @@ class _ThreadPost extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(post.message),
+              Text(
+                post.isDeleted ? ThreadStrings.deletedMessage : post.message,
+                style: post.isDeleted
+                    ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontStyle: FontStyle.italic,
+                      )
+                    : null,
+              ),
             ],
           ),
         ),

@@ -1,5 +1,7 @@
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 
+enum PostThreadDirection { up, down }
+
 /// Boundary of the Mattermost REST API.
 ///
 /// Feature and domain code depend on this contract, never on Dio or HTTP.
@@ -47,11 +49,13 @@ abstract interface class MattermostApi {
   });
 
   /// Returns the root and posts belonging to its thread. Responses may be
-  /// paginated; [fromPost] and [fromCreateAt] resume from the last item.
+  /// paginated; [fromPost] and [fromCreateAt] resume from the last item while
+  /// [direction] selects older (`up`) or newer (`down`) replies.
   Future<MattermostPostListDto> getPostThread({
     required String rootPostId,
     int perPage = 60,
     String? fromPost,
     int? fromCreateAt,
+    PostThreadDirection direction = PostThreadDirection.up,
   });
 }

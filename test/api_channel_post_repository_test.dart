@@ -32,6 +32,14 @@ void main() {
         'post-1',
         'post-2',
       ]);
+      expect(latest.posts.first.replyCount, 1);
+      expect(
+        latest.posts.first.lastReplyAt,
+        DateTime.fromMillisecondsSinceEpoch(2100),
+      );
+      expect(latest.replySummaries['post-1']?.replyIds, const <String>{
+        'reply-2',
+      });
       expect(latest.beforePostId, 'post-1');
       expect(latest.hasOlder, isTrue);
 
@@ -67,6 +75,10 @@ void main() {
       );
 
       expect(latest.posts, isEmpty);
+      expect(latest.replySummaries['missing-root']?.replyIds, const <String>{
+        'reply-2',
+        'reply-3',
+      });
       expect(latest.beforePostId, 'reply-2');
       expect(latest.hasOlder, isTrue);
     },
@@ -178,6 +190,7 @@ final class _FakePostApi implements MattermostApi {
     int perPage = 60,
     String? fromPost,
     int? fromCreateAt,
+    PostThreadDirection direction = PostThreadDirection.up,
   }) => throw UnimplementedError();
 
   @override

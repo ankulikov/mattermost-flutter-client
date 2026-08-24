@@ -16,6 +16,7 @@ final class ChannelPostsViewState {
   const ChannelPostsViewState({
     required this.posts,
     required this.hasOlder,
+    this.replySummaries = const <String, ChannelReplySummary>{},
     this.beforePostId,
     this.isLoadingOlder = false,
     this.loadFailed = false,
@@ -23,6 +24,7 @@ final class ChannelPostsViewState {
 
   final List<ChannelPost> posts;
   final bool hasOlder;
+  final Map<String, ChannelReplySummary> replySummaries;
   final String? beforePostId;
   final bool isLoadingOlder;
   final bool loadFailed;
@@ -30,12 +32,14 @@ final class ChannelPostsViewState {
   ChannelPostsViewState copyWith({
     List<ChannelPost>? posts,
     bool? hasOlder,
+    Map<String, ChannelReplySummary>? replySummaries,
     String? beforePostId,
     bool? isLoadingOlder,
     bool? loadFailed,
   }) => ChannelPostsViewState(
     posts: posts ?? this.posts,
     hasOlder: hasOlder ?? this.hasOlder,
+    replySummaries: replySummaries ?? this.replySummaries,
     beforePostId: beforePostId ?? this.beforePostId,
     isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
     loadFailed: loadFailed ?? this.loadFailed,
@@ -108,10 +112,16 @@ final class ChannelPostsController
       );
       final ChannelPostsViewState? latest = state.value;
       if (latest == null) return;
+      final Map<String, ChannelReplySummary> replySummaries =
+          _mergeReplySummaries(latest.replySummaries, page.replySummaries);
       state = AsyncData(
         ChannelPostsViewState(
-          posts: _mergePosts(latest.posts, page.posts),
+          posts: _applyReplySummaries(
+            _mergePosts(latest.posts, page.posts),
+            replySummaries,
+          ),
           hasOlder: page.hasOlder,
+          replySummaries: replySummaries,
           beforePostId: page.beforePostId,
         ),
       );
@@ -142,6 +152,7 @@ final class ChannelPostsController
     return ChannelPostsViewState(
       posts: page.posts,
       hasOlder: page.hasOlder,
+      replySummaries: page.replySummaries,
       beforePostId: page.beforePostId,
     );
   }
@@ -152,13 +163,68 @@ final class ChannelPostsController
   ) {
     final Map<String, ChannelPost> byId = <String, ChannelPost>{
       for (final ChannelPost post in current) post.id: post,
-      for (final ChannelPost post in incoming) post.id: post,
     };
+    for (final ChannelPost post in incoming) {
+      final ChannelPost? existing = byId[post.id];
+      byId[post.id] = existing == null
+          ? post
+          : post.withThreadSummary(
+              replyCount: existing.replyCount > post.replyCount
+                  ? existing.replyCount
+                  : post.replyCount,
+              lastReplyAt: _latest(existing.lastReplyAt, post.lastReplyAt),
+            );
+    }
     final List<ChannelPost> result = byId.values.toList(growable: false)
       ..sort((ChannelPost a, ChannelPost b) {
         final int byTime = a.sentAt.compareTo(b.sentAt);
         return byTime != 0 ? byTime : a.id.compareTo(b.id);
       });
     return List<ChannelPost>.unmodifiable(result);
+  }
+
+  static Map<String, ChannelReplySummary> _mergeReplySummaries(
+    Map<String, ChannelReplySummary> current,
+    Map<String, ChannelReplySummary> incoming,
+  ) {
+    final Set<String> rootIds = <String>{...current.keys, ...incoming.keys};
+    return Map<String, ChannelReplySummary>.unmodifiable(
+      <String, ChannelReplySummary>{
+        for (final String rootId in rootIds)
+          rootId: ChannelReplySummary(
+            replyIds: Set<String>.unmodifiable(<String>{
+              ...?current[rootId]?.replyIds,
+              ...?incoming[rootId]?.replyIds,
+            }),
+            lastReplyAt: _latest(
+              current[rootId]?.lastReplyAt,
+              incoming[rootId]?.lastReplyAt,
+            ),
+          ),
+      },
+    );
+  }
+
+  static List<ChannelPost> _applyReplySummaries(
+    List<ChannelPost> posts,
+    Map<String, ChannelReplySummary> summaries,
+  ) => List<ChannelPost>.unmodifiable(
+    posts.map((ChannelPost post) {
+      final ChannelReplySummary? summary = summaries[post.id];
+      if (summary == null) return post;
+      final int observedCount = summary.replyIds.length;
+      return post.withThreadSummary(
+        replyCount: post.replyCount > observedCount
+            ? post.replyCount
+            : observedCount,
+        lastReplyAt: _latest(post.lastReplyAt, summary.lastReplyAt),
+      );
+    }),
+  );
+
+  static DateTime? _latest(DateTime? first, DateTime? second) {
+    if (first == null) return second;
+    if (second == null) return first;
+    return first.isAfter(second) ? first : second;
   }
 }

@@ -33,6 +33,7 @@ final class ChannelPost {
     this.rootId = '',
     this.replyCount = 0,
     this.lastReplyAt,
+    this.isDeleted = false,
   });
 
   final String id;
@@ -44,6 +45,23 @@ final class ChannelPost {
   final String rootId;
   final int replyCount;
   final DateTime? lastReplyAt;
+  final bool isDeleted;
 
   bool get isReply => rootId.isNotEmpty;
+
+  ChannelPost withThreadSummary({
+    required int replyCount,
+    DateTime? lastReplyAt,
+  }) => ChannelPost(
+    id: id,
+    channelId: channelId,
+    author: author,
+    sentAt: sentAt,
+    message: message,
+    reactions: reactions,
+    rootId: rootId,
+    replyCount: replyCount,
+    lastReplyAt: lastReplyAt,
+    isDeleted: isDeleted,
+  );
 }

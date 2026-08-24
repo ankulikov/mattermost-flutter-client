@@ -164,6 +164,8 @@ void main() {
 
     expect(find.text('Thread'), findsOneWidget);
     expect(find.text('Thread reply 1'), findsOneWidget);
+    expect(find.text('This message was deleted'), findsOneWidget);
+    expect(find.text('Deleted reply contents'), findsNothing);
     expect(find.text('Message for town-square'), findsNWidgets(2));
     expect(
       tester
@@ -271,6 +273,7 @@ void main() {
 
     expect(posts.loadOlderCalls, 2);
     expect(find.text('Older root'), findsOneWidget);
+    expect(find.textContaining('1 reply'), findsOneWidget);
   });
 
   testWidgets('stops viewport auto-paging after a paging failure', (
@@ -536,8 +539,9 @@ final class _ThreadRepository implements ThreadRepository {
         channelId: 'town-square',
         author: const PostAuthor(id: 'alan', displayName: 'Alan Turing'),
         sentAt: DateTime(2026, 8, 24, 10, 35),
-        message: 'Thread reply 2',
+        message: 'Deleted reply contents',
         rootId: rootPostId,
+        isDeleted: true,
       ),
     ],
     isComplete: true,
@@ -573,6 +577,14 @@ final class _AutoPagingPostRepository implements ChannelPostRepository {
 
   ChannelPostPage get _initial => ChannelPostPage(
     posts: startsEmpty ? const <ChannelPost>[] : <ChannelPost>[_recent],
+    replySummaries: startsEmpty
+        ? <String, ChannelReplySummary>{
+            'older-root': ChannelReplySummary(
+              replyIds: const <String>{'reply-1'},
+              lastReplyAt: DateTime(2026, 8, 24, 11, 30),
+            ),
+          }
+        : const <String, ChannelReplySummary>{},
     beforePostId: 'cursor-0',
     hasOlder: true,
   );
@@ -592,7 +604,17 @@ final class _AutoPagingPostRepository implements ChannelPostRepository {
       );
     }
     if (loadOlderCalls == 1) {
-      return const ChannelPostPage(beforePostId: 'cursor-1', hasOlder: true);
+      return ChannelPostPage(
+        replySummaries: startsEmpty
+            ? const <String, ChannelReplySummary>{
+                'older-root': ChannelReplySummary(
+                  replyIds: <String>{'reply-1'},
+                ),
+              }
+            : const <String, ChannelReplySummary>{},
+        beforePostId: 'cursor-1',
+        hasOlder: true,
+      );
     }
     return ChannelPostPage(
       posts: <ChannelPost>[

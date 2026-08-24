@@ -5,13 +5,14 @@ List<ChannelPost> mapMattermostPosts({
   required Iterable<MattermostPostDto> posts,
   required Iterable<MattermostUserDto> users,
   required String currentUserId,
+  bool includeDeleted = false,
 }) {
   final Map<String, String> authorNames = <String, String>{
     for (final MattermostUserDto user in users)
       user.id: mattermostUserDisplayName(user),
   };
   return posts
-      .where((MattermostPostDto post) => post.deleteAt == 0)
+      .where((MattermostPostDto post) => includeDeleted || post.deleteAt == 0)
       .map(
         (MattermostPostDto post) => ChannelPost(
           id: post.id,
@@ -21,13 +22,16 @@ List<ChannelPost> mapMattermostPosts({
             displayName: authorNames[post.userId] ?? post.userId,
           ),
           sentAt: DateTime.fromMillisecondsSinceEpoch(post.createAt),
-          message: post.message,
+          message: post.deleteAt == 0 ? post.message : '',
           rootId: post.rootId,
           replyCount: post.replyCount,
+          isDeleted: post.deleteAt != 0,
           lastReplyAt: post.lastReplyAt == 0
               ? null
               : DateTime.fromMillisecondsSinceEpoch(post.lastReplyAt),
-          reactions: _mapReactions(post, currentUserId),
+          reactions: post.deleteAt == 0
+              ? _mapReactions(post, currentUserId)
+              : const <PostReaction>[],
         ),
       )
       .toList(growable: false);

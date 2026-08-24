@@ -38,6 +38,7 @@ final class ApiThreadRepository implements ThreadRepository {
         perPage: pageSize,
         fromPost: fromPost,
         fromCreateAt: fromCreateAt,
+        direction: PostThreadDirection.up,
       );
       posts.addAll(response.posts);
       hasNext = response.hasNext;
@@ -60,6 +61,7 @@ final class ApiThreadRepository implements ThreadRepository {
       posts: posts.values,
       users: users,
       currentUserId: session.userId,
+      includeDeleted: true,
     );
     final ChannelPost? root = mapped
         .where((ChannelPost post) => post.id == rootPostId)
