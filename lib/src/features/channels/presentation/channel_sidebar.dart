@@ -135,6 +135,7 @@ class _LazyChannelListState extends State<_LazyChannelList> {
   static const String _pageStorageIdentifier = 'collapsed-channel-sections';
 
   final Set<String> _collapsedSectionIds = <String>{};
+  final Set<String> _initializedSectionIds = <String>{};
   bool _restoredFromPageStorage = false;
 
   @override
@@ -146,11 +147,34 @@ class _LazyChannelListState extends State<_LazyChannelList> {
     final Object? storedIds = PageStorage.maybeOf(
       context,
     )?.readState(context, identifier: _pageStorageIdentifier);
-    if (storedIds case final List<Object?> ids) {
+    if (storedIds case <String, Object?>{
+      'collapsed': final List<Object?> collapsed,
+      'initialized': final List<Object?> initialized,
+    }) {
+      _collapsedSectionIds.addAll(collapsed.whereType<String>());
+      _initializedSectionIds.addAll(initialized.whereType<String>());
+    } else if (storedIds case final List<Object?> ids) {
       _collapsedSectionIds.addAll(ids.whereType<String>());
+      _initializedSectionIds.addAll(
+        widget.sections.map((SidebarSection section) => section.id),
+      );
     }
+    _applyServerDefaults();
   }
 
+  @override
+  void didUpdateWidget(_LazyChannelList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _applyServerDefaults();
+  }
+
+  void _applyServerDefaults() {
+    for (final SidebarSection section in widget.sections) {
+      if (_initializedSectionIds.add(section.id) && section.collapsed) {
+        _collapsedSectionIds.add(section.id);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -177,6 +201,7 @@ class _LazyChannelListState extends State<_LazyChannelList> {
         return _ChannelTile(
           key: ValueKey<String>('channel-${channel.id}'),
           channel: channel,
+          muted: section.muted,
         );
       },
     );
@@ -188,11 +213,10 @@ class _LazyChannelListState extends State<_LazyChannelList> {
         _collapsedSectionIds.remove(sectionId);
       }
     });
-    PageStorage.maybeOf(context)?.writeState(
-      context,
-      _collapsedSectionIds.toList(growable: false),
-      identifier: _pageStorageIdentifier,
-    );
+    PageStorage.maybeOf(context)?.writeState(context, <String, Object?>{
+      'collapsed': _collapsedSectionIds.toList(growable: false),
+      'initialized': _initializedSectionIds.toList(growable: false),
+    }, identifier: _pageStorageIdentifier);
   }
 }
 
@@ -260,41 +284,52 @@ class _ChannelSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     button: true,
     expanded: isExpanded,
-    child: ListTile(
-      title: Text(
-        section.displayName,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelLarge,
+    child: Opacity(
+      opacity: section.muted ? 0.55 : 1,
+      child: ListTile(
+        title: Text(
+          section.displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        trailing: AnimatedRotation(
+          turns: isExpanded ? 0.5 : 0,
+          duration: const Duration(milliseconds: 150),
+          child: const Icon(Icons.expand_more),
+        ),
+        onTap: onTap,
       ),
-      trailing: AnimatedRotation(
-        turns: isExpanded ? 0.5 : 0,
-        duration: const Duration(milliseconds: 150),
-        child: const Icon(Icons.expand_more),
-      ),
-      onTap: onTap,
     ),
   );
 }
 
 class _ChannelTile extends StatelessWidget {
-  const _ChannelTile({required super.key, required this.channel});
+  const _ChannelTile({
+    required super.key,
+    required this.channel,
+    required this.muted,
+  });
 
   final SidebarChannel channel;
+  final bool muted;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    dense: true,
-    leading: Icon(_iconFor(channel.kind), size: 18),
-    title: Text(
-      channel.displayName,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) => Opacity(
+    opacity: muted ? 0.55 : 1,
+    child: ListTile(
+      dense: true,
+      leading: Icon(_iconFor(channel.kind), size: 18),
+      title: Text(
+        channel.displayName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () {
+        final ScaffoldState? scaffold = Scaffold.maybeOf(context);
+        if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();
+      },
     ),
-    onTap: () {
-      final ScaffoldState? scaffold = Scaffold.maybeOf(context);
-      if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();
-    },
   );
 
   IconData _iconFor(ChannelKind kind) => switch (kind) {

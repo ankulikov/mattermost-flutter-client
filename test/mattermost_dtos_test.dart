@@ -25,6 +25,9 @@ void main() {
     expect(result.order, <String>['category-2', 'category-1']);
     expect(result.categories.single.id, 'category-1');
     expect(result.categories.single.sortOrder, 10);
+    expect(result.categories.single.sorting, 'recent');
+    expect(result.categories.single.muted, isFalse);
+    expect(result.categories.single.collapsed, isFalse);
   });
 
   test('decodes the complete post-list response into typed DTOs', () {

@@ -17,6 +17,9 @@ void main() {
       SidebarSection(
         id: 'category-1',
         displayName: 'Work',
+        collapsed: true,
+        muted: true,
+        sorting: ChannelSorting.recent,
         channels: <SidebarChannel>[
           SidebarChannel(
             id: 'second',
@@ -24,6 +27,7 @@ void main() {
             name: 'second',
             displayName: 'Second',
             kind: ChannelKind.privateChannel,
+            lastActivityAt: 200,
           ),
           SidebarChannel(
             id: 'first',
@@ -45,6 +49,10 @@ void main() {
       'https://two.example',
     );
     expect(restored.team?.displayName, 'Example team');
+    expect(restored.sections.single.collapsed, isTrue);
+    expect(restored.sections.single.muted, isTrue);
+    expect(restored.sections.single.sorting, ChannelSorting.recent);
+    expect(restored.sections.single.channels.first.lastActivityAt, 200);
     expect(
       restored.sections.single.channels.map(
         (SidebarChannel channel) => channel.id,

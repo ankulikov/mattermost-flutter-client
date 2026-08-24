@@ -26,6 +26,9 @@ SidebarChannel mapChannel(MattermostChannelDto dto) {
         ? dto.displayName.trim()
         : name,
     kind: kind,
+    lastActivityAt: dto.lastPostAt > dto.updateAt
+        ? dto.lastPostAt
+        : dto.updateAt,
   );
 }
 
@@ -57,9 +60,28 @@ List<SidebarSection> mapSections({
   }
 
   for (final MattermostChannelCategoryDto category in orderedCategories) {
-    final List<SidebarChannel> categoryChannels = category.channelIds
-        .map((String id) => byId[id])
-        .whereType<SidebarChannel>()
+    final ChannelSorting sorting = _channelSorting(category.sorting);
+    final List<({int position, SidebarChannel channel})> placedChannels =
+        <({int position, SidebarChannel channel})>[];
+    for (final (int position, String channelId)
+        in category.channelIds.indexed) {
+      final SidebarChannel? channel = byId[channelId];
+      if (channel != null) {
+        placedChannels.add((position: position, channel: channel));
+      }
+    }
+    if (sorting == ChannelSorting.recent) {
+      placedChannels.sort((left, right) {
+        final int byUpdate = right.channel.lastActivityAt.compareTo(
+          left.channel.lastActivityAt,
+        );
+        return byUpdate != 0
+            ? byUpdate
+            : left.position.compareTo(right.position);
+      });
+    }
+    final List<SidebarChannel> categoryChannels = placedChannels
+        .map((entry) => entry.channel)
         .toList(growable: false);
     if (categoryChannels.isEmpty) continue;
     assigned.addAll(categoryChannels.map((SidebarChannel item) => item.id));
@@ -68,6 +90,9 @@ List<SidebarSection> mapSections({
         id: _required(category.id, 'category.id'),
         displayName: _categoryDisplayName(category),
         channels: categoryChannels,
+        collapsed: category.collapsed,
+        muted: category.muted,
+        sorting: sorting,
       ),
     );
   }
@@ -121,6 +146,12 @@ String _categoryDisplayName(MattermostChannelCategoryDto dto) {
     _ => 'Channels',
   };
 }
+
+ChannelSorting _channelSorting(String value) => switch (value) {
+  'recent' => ChannelSorting.recent,
+  '' || 'manual' => ChannelSorting.manual,
+  _ => ChannelSorting.manual,
+};
 
 String _required(String value, String path) {
   if (value.isNotEmpty) return value;

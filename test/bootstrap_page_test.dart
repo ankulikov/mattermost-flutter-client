@@ -87,6 +87,55 @@ void main() {
     expect(find.byType(ListTile).evaluate().length, lessThan(30));
   });
 
+  testWidgets('applies collapsed and muted category presentation', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _CollapsedMutedSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Muted category'), findsOneWidget);
+    expect(find.text('Quiet channel'), findsNothing);
+    expect(
+      tester
+          .widgetList<Opacity>(
+            find.ancestor(
+              of: find.text('Muted category'),
+              matching: find.byType(Opacity),
+            ),
+          )
+          .any((Opacity opacity) => opacity.opacity == 0.55),
+      isTrue,
+    );
+
+    await tester.tap(find.text('Muted category'));
+    await tester.pumpAndSettle();
+    expect(find.text('Quiet channel'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<Opacity>(
+            find.ancestor(
+              of: find.text('Quiet channel'),
+              matching: find.byType(Opacity),
+            ),
+          )
+          .any((Opacity opacity) => opacity.opacity == 0.55),
+      isTrue,
+    );
+  });
+
   testWidgets('shows the channel list in compact drawer at large text scale', (
     WidgetTester tester,
   ) async {
@@ -210,6 +259,37 @@ final class _LargeSidebarRepository implements ChannelSidebarRepository {
                 ),
                 growable: false,
               ),
+            ),
+          ],
+        ),
+      );
+}
+
+final class _CollapsedMutedSidebarRepository
+    implements ChannelSidebarRepository {
+  @override
+  Future<void> refresh(AuthSession session) async {}
+
+  @override
+  Stream<ChannelSidebarSnapshot> watch(String accountId) =>
+      Stream<ChannelSidebarSnapshot>.value(
+        const ChannelSidebarSnapshot(
+          team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+          sections: <SidebarSection>[
+            SidebarSection(
+              id: 'muted',
+              displayName: 'Muted category',
+              collapsed: true,
+              muted: true,
+              channels: <SidebarChannel>[
+                SidebarChannel(
+                  id: 'quiet',
+                  teamId: 'team-1',
+                  name: 'quiet',
+                  displayName: 'Quiet channel',
+                  kind: ChannelKind.publicChannel,
+                ),
+              ],
             ),
           ],
         ),

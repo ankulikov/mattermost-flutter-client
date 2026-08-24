@@ -19,6 +19,8 @@ class SidebarChannels extends Table {
   TextColumn get name => text()();
   TextColumn get displayName => text()();
   IntColumn get kind => integer()();
+  IntColumn get lastActivityAt =>
+      integer().withDefault(const Constant<int>(0))();
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, channelId};
@@ -30,6 +32,9 @@ class SidebarCategories extends Table {
   TextColumn get teamId => text()();
   TextColumn get displayName => text()();
   IntColumn get position => integer()();
+  BoolColumn get collapsed => boolean().withDefault(const Constant(false))();
+  BoolColumn get muted => boolean().withDefault(const Constant(false))();
+  IntColumn get sorting => integer().withDefault(const Constant<int>(0))();
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, categoryId};
@@ -63,5 +68,24 @@ final class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (Migrator migrator) => migrator.createAll(),
+    onUpgrade: (Migrator migrator, int from, int to) async {
+      if (from < 2) {
+        await migrator.addColumn(
+          sidebarChannels,
+          sidebarChannels.lastActivityAt,
+        );
+        await migrator.addColumn(
+          sidebarCategories,
+          sidebarCategories.collapsed,
+        );
+        await migrator.addColumn(sidebarCategories, sidebarCategories.muted);
+        await migrator.addColumn(sidebarCategories, sidebarCategories.sorting);
+      }
+    },
+  );
 }

@@ -1,5 +1,7 @@
 enum ChannelKind { publicChannel, privateChannel, directMessage, groupMessage }
 
+enum ChannelSorting { manual, recent }
+
 final class SidebarTeam {
   const SidebarTeam({required this.id, required this.displayName});
 
@@ -14,6 +16,7 @@ final class SidebarChannel {
     required this.name,
     required this.displayName,
     required this.kind,
+    this.lastActivityAt = 0,
   });
 
   final String id;
@@ -21,6 +24,7 @@ final class SidebarChannel {
   final String name;
   final String displayName;
   final ChannelKind kind;
+  final int lastActivityAt;
 
   bool get isDialog =>
       kind == ChannelKind.directMessage || kind == ChannelKind.groupMessage;
@@ -31,6 +35,7 @@ final class SidebarChannel {
     name: name,
     displayName: value,
     kind: kind,
+    lastActivityAt: lastActivityAt,
   );
 }
 
@@ -39,11 +44,17 @@ final class SidebarSection {
     required this.id,
     required this.displayName,
     required this.channels,
+    this.collapsed = false,
+    this.muted = false,
+    this.sorting = ChannelSorting.manual,
   });
 
   final String id;
   final String displayName;
   final List<SidebarChannel> channels;
+  final bool collapsed;
+  final bool muted;
+  final ChannelSorting sorting;
 }
 
 final class ChannelSidebarSnapshot {

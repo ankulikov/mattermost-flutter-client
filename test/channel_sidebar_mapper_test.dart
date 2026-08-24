@@ -104,6 +104,101 @@ void main() {
     ]);
   });
 
+  test('maps category presentation properties and sorts recent channels', () {
+    final List<SidebarSection> sections = mapSections(
+      channels: const <SidebarChannel>[
+        SidebarChannel(
+          id: 'older',
+          teamId: 'team-1',
+          name: 'older',
+          displayName: 'Older',
+          kind: ChannelKind.publicChannel,
+          lastActivityAt: 100,
+        ),
+        SidebarChannel(
+          id: 'newer',
+          teamId: 'team-1',
+          name: 'newer',
+          displayName: 'Newer',
+          kind: ChannelKind.publicChannel,
+          lastActivityAt: 300,
+        ),
+        SidebarChannel(
+          id: 'same-time',
+          teamId: 'team-1',
+          name: 'same-time',
+          displayName: 'Same time',
+          kind: ChannelKind.publicChannel,
+          lastActivityAt: 100,
+        ),
+      ],
+      categories: const <MattermostChannelCategoryDto>[
+        MattermostChannelCategoryDto(
+          id: 'category-1',
+          userId: 'user-1',
+          teamId: 'team-1',
+          type: 'custom',
+          displayName: 'Muted recent',
+          sorting: 'recent',
+          channelIds: <String>['older', 'same-time', 'newer'],
+          muted: true,
+          collapsed: true,
+        ),
+      ],
+      categoryOrder: const <String>[],
+    );
+
+    expect(sections.single.collapsed, isTrue);
+    expect(sections.single.muted, isTrue);
+    expect(sections.single.sorting, ChannelSorting.recent);
+    expect(
+      sections.single.channels.map((SidebarChannel channel) => channel.id),
+      <String>['newer', 'older', 'same-time'],
+    );
+  });
+
+  test('treats empty sorting as manual', () {
+    final List<SidebarSection> sections = mapSections(
+      channels: const <SidebarChannel>[
+        SidebarChannel(
+          id: 'older',
+          teamId: 'team-1',
+          name: 'older',
+          displayName: 'Older',
+          kind: ChannelKind.publicChannel,
+          lastActivityAt: 100,
+        ),
+        SidebarChannel(
+          id: 'newer',
+          teamId: 'team-1',
+          name: 'newer',
+          displayName: 'Newer',
+          kind: ChannelKind.publicChannel,
+          lastActivityAt: 300,
+        ),
+      ],
+      categories: const <MattermostChannelCategoryDto>[
+        MattermostChannelCategoryDto(
+          id: 'category-1',
+          userId: 'user-1',
+          teamId: 'team-1',
+          type: 'custom',
+          displayName: 'Manual',
+          sorting: '',
+          channelIds: <String>['older', 'newer'],
+          muted: false,
+        ),
+      ],
+      categoryOrder: const <String>[],
+    );
+
+    expect(sections.single.sorting, ChannelSorting.manual);
+    expect(
+      sections.single.channels.map((SidebarChannel channel) => channel.id),
+      <String>['older', 'newer'],
+    );
+  });
+
   test('maps all supported Mattermost channel types', () {
     for (final (String, ChannelKind) value in <(String, ChannelKind)>[
       ('O', ChannelKind.publicChannel),
@@ -122,5 +217,33 @@ void main() {
       );
       expect(channel.kind, value.$2);
     }
+  });
+
+  test('uses the latest of last_post_at and update_at for activity', () {
+    final SidebarChannel channelWithPosts = mapChannel(
+      const MattermostChannelDto(
+        id: 'with-posts',
+        teamId: 'team-1',
+        name: 'with-posts',
+        displayName: 'With posts',
+        type: 'O',
+        updateAt: 100,
+        lastPostAt: 300,
+      ),
+    );
+    final SidebarChannel channelWithoutRecentPosts = mapChannel(
+      const MattermostChannelDto(
+        id: 'without-recent-posts',
+        teamId: 'team-1',
+        name: 'without-recent-posts',
+        displayName: 'Without recent posts',
+        type: 'O',
+        updateAt: 400,
+        lastPostAt: 0,
+      ),
+    );
+
+    expect(channelWithPosts.lastActivityAt, 300);
+    expect(channelWithoutRecentPosts.lastActivityAt, 400);
   });
 }

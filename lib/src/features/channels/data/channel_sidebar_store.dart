@@ -69,6 +69,7 @@ final class ChannelSidebarStore {
           name: row.name,
           displayName: row.displayName,
           kind: ChannelKind.values[row.kind],
+          lastActivityAt: row.lastActivityAt,
         ),
     };
     final Map<String, List<SidebarChannel>> channelsByCategory =
@@ -95,6 +96,9 @@ final class ChannelSidebarStore {
               channels: List<SidebarChannel>.unmodifiable(
                 channelsByCategory[row.categoryId] ?? <SidebarChannel>[],
               ),
+              collapsed: row.collapsed,
+              muted: row.muted,
+              sorting: ChannelSorting.values[row.sorting],
             ),
           )
           .toList(growable: false),
@@ -163,6 +167,7 @@ final class ChannelSidebarStore {
                   name: channel.name,
                   displayName: channel.displayName,
                   kind: channel.kind.index,
+                  lastActivityAt: Value<int>(channel.lastActivityAt),
                 ),
               )
               .toList(growable: false),
@@ -178,6 +183,9 @@ final class ChannelSidebarStore {
                 teamId: team.id,
                 displayName: entry.value.displayName,
                 position: entry.key,
+                collapsed: Value<bool>(entry.value.collapsed),
+                muted: Value<bool>(entry.value.muted),
+                sorting: Value<int>(entry.value.sorting.index),
               ),
           ],
         );
