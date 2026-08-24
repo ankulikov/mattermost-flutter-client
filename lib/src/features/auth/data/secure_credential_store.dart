@@ -3,7 +3,10 @@ import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart'
 
 final class SecureCredentialStore implements CredentialStore {
   SecureCredentialStore({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage(
+      mOptions: MacOsOptions(
+        accessibility: KeychainAccessibility.first_unlock,
+      ));
 
   static const String _serverKey = 'mattermost.active.server_url';
   static const String _tokenKey = 'mattermost.active.personal_access_token';

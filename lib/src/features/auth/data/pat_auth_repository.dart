@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
