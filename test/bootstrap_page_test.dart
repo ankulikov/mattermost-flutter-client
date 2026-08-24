@@ -8,6 +8,9 @@ import 'package:mattermost_flutter/src/features/bootstrap/presentation/bootstrap
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
+import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
+import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
+import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
 
 void main() {
   testWidgets('uses a drawer on compact screens', (WidgetTester tester) async {
@@ -52,6 +55,81 @@ void main() {
     expect(find.text('Favorites'), findsOneWidget);
     expect(find.text('Town Square'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
+  });
+
+  testWidgets('loads mock messages after selecting a channel', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Town Square'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Message for town-square'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 799));
+    expect(find.text('Message for town-square'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(find.text('Grace Hopper'), findsOneWidget);
+    expect(find.text('Message for town-square'), findsOneWidget);
+    expect(find.text('Follow-up message 1'), findsOneWidget);
+    expect(find.text('Follow-up message 2'), findsOneWidget);
+    expect(find.text('👍  3'), findsOneWidget);
+    expect(find.byType(CircleAvatar), findsOneWidget);
+  });
+
+  testWidgets('shows messages on compact width with large text', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Message for town-square'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('lazily builds channels in a large expandable category', (
@@ -180,6 +258,43 @@ final class _SignedOutRepository implements AuthRepository {
 
   @override
   Future<void> signOut() async {}
+}
+
+final class _DelayedPostRepository implements ChannelPostRepository {
+  const _DelayedPostRepository({
+    this.delay = const Duration(milliseconds: 800),
+  });
+
+  final Duration delay;
+
+  @override
+  Future<List<ChannelPost>> loadHistory(String channelId) async {
+    await Future<void>.delayed(delay);
+    return <ChannelPost>[
+      ChannelPost(
+        id: '$channelId-post',
+        channelId: channelId,
+        author: const PostAuthor(id: 'grace', displayName: 'Grace Hopper'),
+        sentAt: DateTime(2026, 8, 24, 10, 30),
+        message: 'Message for $channelId',
+        reactions: const <PostReaction>[PostReaction(emoji: '👍', count: 3)],
+      ),
+      ChannelPost(
+        id: '$channelId-follow-up-1',
+        channelId: channelId,
+        author: const PostAuthor(id: 'grace', displayName: 'Grace Hopper'),
+        sentAt: DateTime(2026, 8, 24, 10, 31),
+        message: 'Follow-up message 1',
+      ),
+      ChannelPost(
+        id: '$channelId-follow-up-2',
+        channelId: channelId,
+        author: const PostAuthor(id: 'grace', displayName: 'Grace Hopper'),
+        sentAt: DateTime(2026, 8, 24, 10, 32),
+        message: 'Follow-up message 2',
+      ),
+    ];
+  }
 }
 
 final class _SignedInRepository implements AuthRepository {

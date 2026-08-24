@@ -6,6 +6,7 @@ import 'package:mattermost_flutter/src/features/auth/presentation/auth_controlle
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_strings.dart';
+import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
 
 class ChannelSidebar extends ConsumerWidget {
   const ChannelSidebar({super.key});
@@ -122,16 +123,16 @@ class _TeamHeader extends StatelessWidget {
   );
 }
 
-class _LazyChannelList extends StatefulWidget {
+class _LazyChannelList extends ConsumerStatefulWidget {
   const _LazyChannelList({required this.sections});
 
   final List<SidebarSection> sections;
 
   @override
-  State<_LazyChannelList> createState() => _LazyChannelListState();
+  ConsumerState<_LazyChannelList> createState() => _LazyChannelListState();
 }
 
-class _LazyChannelListState extends State<_LazyChannelList> {
+class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
   static const String _pageStorageIdentifier = 'collapsed-channel-sections';
 
   final Set<String> _collapsedSectionIds = <String>{};
@@ -202,6 +203,12 @@ class _LazyChannelListState extends State<_LazyChannelList> {
           key: ValueKey<String>('channel-${channel.id}'),
           channel: channel,
           muted: section.muted,
+          selected: ref.watch(
+            selectedChannelProvider.select(
+              (SidebarChannel? selected) => selected?.id == channel.id,
+            ),
+          ),
+          onTap: () => _selectChannel(channel),
         );
       },
     );
@@ -217,6 +224,12 @@ class _LazyChannelListState extends State<_LazyChannelList> {
       'collapsed': _collapsedSectionIds.toList(growable: false),
       'initialized': _initializedSectionIds.toList(growable: false),
     }, identifier: _pageStorageIdentifier);
+  }
+
+  void _selectChannel(SidebarChannel channel) {
+    ref.read(selectedChannelProvider.notifier).select(channel);
+    final ScaffoldState? scaffold = Scaffold.maybeOf(context);
+    if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();
   }
 }
 
@@ -309,26 +322,30 @@ class _ChannelTile extends StatelessWidget {
     required super.key,
     required this.channel,
     required this.muted,
+    required this.selected,
+    required this.onTap,
   });
 
   final SidebarChannel channel;
   final bool muted;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => Opacity(
     opacity: muted ? 0.55 : 1,
     child: ListTile(
       dense: true,
+      selected: selected,
+      selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       leading: Icon(_iconFor(channel.kind), size: 18),
       title: Text(
         channel.displayName,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      onTap: () {
-        final ScaffoldState? scaffold = Scaffold.maybeOf(context);
-        if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();
-      },
+      onTap: onTap,
     ),
   );
 

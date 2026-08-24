@@ -5,7 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_strings.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/pat_login_dialog.dart';
+import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
+import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_pane.dart';
+import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_strings.dart';
 
 class BootstrapPage extends ConsumerStatefulWidget {
   const BootstrapPage({super.key});
@@ -26,6 +30,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
   @override
   Widget build(BuildContext context) {
     final AuthState auth = ref.watch(authControllerProvider);
+    final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool expanded = constraints.maxWidth >= 840;
@@ -35,15 +40,22 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
               children: <Widget>[
                 const SizedBox(width: 280, child: ChannelSidebar()),
                 const VerticalDivider(width: 1),
-                Expanded(child: _ContentPlaceholder(auth: auth)),
+                Expanded(
+                  child: _MainContent(
+                    auth: auth,
+                    selectedChannel: selectedChannel,
+                  ),
+                ),
               ],
             ),
           );
         }
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Mattermost')),
-          body: _ContentPlaceholder(auth: auth),
+          appBar: AppBar(
+            title: Text(selectedChannel?.displayName ?? 'Mattermost'),
+          ),
+          body: _MainContent(auth: auth, selectedChannel: selectedChannel),
           drawer: const Drawer(child: ChannelSidebar()),
         );
       },
@@ -51,10 +63,11 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
   }
 }
 
-class _ContentPlaceholder extends StatelessWidget {
-  const _ContentPlaceholder({required this.auth});
+class _MainContent extends StatelessWidget {
+  const _MainContent({required this.auth, required this.selectedChannel});
 
   final AuthState auth;
+  final SidebarChannel? selectedChannel;
 
   @override
   Widget build(BuildContext context) {
@@ -62,11 +75,14 @@ class _ContentPlaceholder extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (auth.phase == AuthPhase.signedIn) {
+      if (selectedChannel case final SidebarChannel channel) {
+        return ChannelPostsPane(channel: channel);
+      }
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Text(AuthStrings.connected),
+            const Text(ChannelPostsStrings.selectChannel),
             const SizedBox(height: 8),
             Text('${auth.session!.username} · ${auth.session!.serverUrl.host}'),
             const SizedBox(height: 20),
