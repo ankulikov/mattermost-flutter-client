@@ -71,8 +71,11 @@ void main() {
         await database.select(database.channelPostSyncStates).get(),
         isEmpty,
       );
-      expect(await database.select(database.threadPostOrders).get(), isEmpty);
       expect(await database.select(database.threadSyncStates).get(), isEmpty);
+      expect(
+        await database.select(database.channelHistoryEntries).get(),
+        isEmpty,
+      );
     } finally {
       await database.close();
       await directory.delete(recursive: true);
@@ -114,12 +117,49 @@ void main() {
         expect(post.rootId, isNull);
         expect(post.replyCount, 0);
         expect(post.lastReplyAt, 0);
-        expect(await database.select(database.threadPostOrders).get(), isEmpty);
         expect(await database.select(database.threadSyncStates).get(), isEmpty);
+        expect(
+          await database.select(database.channelHistoryEntries).get(),
+          isEmpty,
+        );
       } finally {
         await database.close();
         await directory.delete(recursive: true);
       }
     },
   );
+
+  test('drops thread post order storage from schema 5', () async {
+    final Directory directory = await Directory.systemTemp.createTemp(
+      'mattermost-thread-order-migration-',
+    );
+    final File file = File('${directory.path}/threads.sqlite');
+    final sqlite.Database legacy = sqlite.sqlite3.open(file.path);
+    legacy.execute('''
+      CREATE TABLE thread_post_orders (
+        account_id TEXT NOT NULL,
+        root_post_id TEXT NOT NULL,
+        post_id TEXT NOT NULL,
+        create_at INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (account_id, root_post_id, post_id)
+      );
+      PRAGMA user_version = 5;
+    ''');
+    legacy.close();
+
+    final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+    try {
+      final rows = await database
+          .customSelect(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'thread_post_orders'",
+          )
+          .get();
+      expect(rows, isEmpty);
+    } finally {
+      await database.close();
+      await directory.delete(recursive: true);
+    }
+  });
 }

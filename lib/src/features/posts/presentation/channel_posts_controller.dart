@@ -145,6 +145,7 @@ final class ChannelPostsController
     final ChannelPostRepository? repository = _repository;
     final ChannelPostsViewState? current = state.value;
     if (_olderRunning ||
+        _refreshRunning ||
         session == null ||
         repository == null ||
         current == null ||

@@ -66,6 +66,43 @@ void main() {
       expect(snapshot.hasOlder, isFalse);
     },
   );
+
+  test('restarts before pagination from latest post id after a gap', () async {
+    final Uri serverUrl = Uri.parse('https://chat.example.com');
+    final AuthSession session = AuthSession(
+      serverUrl: serverUrl,
+      userId: 'me',
+      username: 'current',
+    );
+    final db.AppDatabase database = db.AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final ChannelPostStore store = ChannelPostStore(database);
+    addTearDown(store.close);
+    await store.savePage(
+      accountId: session.accountId,
+      channelId: 'channel-1',
+      page: PostCachePage(
+        posts: <PostCacheItem>[_cachePost('post-1', 1000)],
+        authors: const <PostCacheAuthor>[
+          PostCacheAuthor(id: 'ada', displayName: 'Ada'),
+        ],
+        order: const <String>['post-1'],
+        oldestComplete: false,
+      ),
+      isLatestPage: true,
+    );
+    final _FakePostApi api = _FakePostApi(hasGap: true);
+    final ApiChannelPostRepository repository = ApiChannelPostRepository(
+      credentialStore: _CredentialStore(serverUrl),
+      store: store,
+      clientFactory: _ApiFactory(api),
+    );
+
+    await repository.refreshLatest(session: session, channelId: 'channel-1');
+    await repository.loadOlder(session: session, channelId: 'channel-1');
+
+    expect(api.beforeId, 'reply-2');
+  });
 }
 
 PostCacheItem _cachePost(String id, int createAt) => PostCacheItem(
@@ -105,6 +142,9 @@ final class _ApiFactory implements MattermostApiFactory {
 }
 
 final class _FakePostApi implements MattermostApi {
+  _FakePostApi({this.hasGap = false});
+
+  final bool hasGap;
   int? latestPerPage;
   String? beforeId;
 
@@ -124,6 +164,18 @@ final class _FakePostApi implements MattermostApi {
     String? etag,
   }) async {
     latestPerPage = perPage;
+    if (hasGap) {
+      return MattermostPostListDto(
+        order: const <String>['reply-3', 'reply-2'],
+        posts: <String, MattermostPostDto>{
+          'reply-3': _post('reply-3', 3000, rootId: 'missing-root'),
+          'reply-2': _post('reply-2', 2000, rootId: 'missing-root'),
+        },
+        nextPostId: '',
+        previousPostId: 'post-1',
+        hasNext: false,
+      );
+    }
     return MattermostPostListDto(
       order: const <String>['reply-2', 'post-2', 'post-1'],
       posts: <String, MattermostPostDto>{

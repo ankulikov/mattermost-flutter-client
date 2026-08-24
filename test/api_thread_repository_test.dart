@@ -39,8 +39,8 @@ void main() {
       expect(thread.root?.id, 'root-1');
       expect(thread.root?.replyCount, 2);
       expect(thread.replies.map((post) => post.id), const <String>[
-        'reply-1',
         'reply-2',
+        'reply-1',
       ]);
       expect(thread.isComplete, isTrue);
     },
@@ -89,7 +89,7 @@ final class _ThreadApi implements MattermostApi {
         order: const <String>['root-1', 'reply-1'],
         posts: <String, MattermostPostDto>{
           'root-1': _post('root-1', 1000, replyCount: 2),
-          'reply-1': _post('reply-1', 2000, rootId: 'root-1'),
+          'reply-1': _post('reply-1', 3000, rootId: 'root-1'),
         },
         nextPostId: 'reply-1',
         previousPostId: '',
@@ -101,7 +101,7 @@ final class _ThreadApi implements MattermostApi {
       order: const <String>['root-1', 'reply-2'],
       posts: <String, MattermostPostDto>{
         'root-1': _post('root-1', 1000, replyCount: 2),
-        'reply-2': _post('reply-2', 3000, rootId: 'root-1'),
+        'reply-2': _post('reply-2', 2000, rootId: 'root-1'),
       },
       nextPostId: '',
       previousPostId: '',

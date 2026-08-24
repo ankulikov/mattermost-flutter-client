@@ -144,7 +144,8 @@ app lifecycle/сети служит сигналом переподключен�
 
 - `accounts`, `users`, `teams`, `team_members`;
 - `channels`, `channel_members`, `channel_preferences`;
-- `posts`, `post_order`, `threads`, `files`;
+- `posts`, root-only `post_order`, raw `channel_history_entries`, `threads`,
+  `files`;
 - `sync_cursors`, `outbox`, `failed_operations`.
 
 Все tenant-данные имеют `account_id`; уникальные ключи включают его, чтобы

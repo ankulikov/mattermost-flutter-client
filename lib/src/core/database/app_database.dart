@@ -100,6 +100,22 @@ class ChannelPostOrders extends Table {
   };
 }
 
+/// Raw membership of the currently contiguous channel-history segment.
+/// Unlike [ChannelPostOrders], this includes replies and is used only to prove
+/// that a refreshed page overlaps the segment before retaining its deep cursor.
+class ChannelHistoryEntries extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get channelId => text()();
+  TextColumn get postId => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{
+    accountId,
+    channelId,
+    postId,
+  };
+}
+
 class CachedPostReactions extends Table {
   TextColumn get accountId => text()();
   TextColumn get postId => text()();
@@ -127,24 +143,6 @@ class ChannelPostSyncStates extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, channelId};
 }
 
-/// Membership and stable order for posts observed in a specific thread.
-/// The root itself is also indexed, which lets a reply arrive before its root
-/// without inventing a placeholder domain post.
-class ThreadPostOrders extends Table {
-  TextColumn get accountId => text()();
-  TextColumn get rootPostId => text()();
-  TextColumn get postId => text()();
-  IntColumn get createAt => integer()();
-  IntColumn get position => integer()();
-
-  @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{
-    accountId,
-    rootPostId,
-    postId,
-  };
-}
-
 class ThreadSyncStates extends Table {
   TextColumn get accountId => text()();
   TextColumn get rootPostId => text()();
@@ -165,9 +163,9 @@ class ThreadSyncStates extends Table {
     CachedPostAuthors,
     CachedChannelPosts,
     ChannelPostOrders,
+    ChannelHistoryEntries,
     CachedPostReactions,
     ChannelPostSyncStates,
-    ThreadPostOrders,
     ThreadSyncStates,
   ],
 )
@@ -177,7 +175,7 @@ final class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -217,8 +215,13 @@ final class AppDatabase extends _$AppDatabase {
             cachedChannelPosts.lastReplyAt,
           );
         }
-        await migrator.createTable(threadPostOrders);
         await migrator.createTable(threadSyncStates);
+      }
+      if (from < 5) {
+        await migrator.createTable(channelHistoryEntries);
+      }
+      if (from >= 4 && from < 6) {
+        await migrator.deleteTable('thread_post_orders');
       }
     },
   );

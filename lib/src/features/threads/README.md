@@ -1,10 +1,14 @@
 # Message threads
 
 Threads are an offline-first projection over normalized posts. The root and
-each reply remain regular cached post rows; `thread_post_orders` records thread
-membership/order and `thread_sync_states` records whether the bounded refresh
-reached the end. This avoids copying message bodies into a second table and
-allows a reply to be persisted before its root exists locally.
+each reply remain regular cached post rows. `root_id` records membership and
+`thread_sync_states` records whether the bounded refresh reached the end. This
+avoids copying message bodies or order into a second table and allows a reply
+to be persisted before its root exists locally.
+
+Replies use stable creation order: `create_at ASC`, then `post_id` as a
+deterministic tie-breaker. `update_at` is deliberately excluded because editing
+an old reply must not move it to the end of the conversation.
 
 ## API strategy
 
@@ -25,11 +29,11 @@ See the official
 ## Orphan replies and consistency
 
 When a reply arrives before its root, the reply is saved immediately with its
-real root id and indexed in `thread_post_orders`. No placeholder root is
-created: placeholders tend to leak incorrect author, timestamps, deletion, and
-permission state into UI. The channel list excludes the orphan. A thread refresh
-retrieves the authoritative root and replies together and publishes them only
-through the database-backed stream.
+real root id. No placeholder root is created: placeholders tend to leak
+incorrect author, timestamps, deletion, and permission state into UI. The
+channel list excludes the orphan. A thread refresh retrieves the authoritative
+root and replies together and publishes them only through the database-backed
+stream.
 
 Root `reply_count` and `last_reply_at` are server summaries and may be newer
 than the locally cached reply set. The channel uses those summaries for its

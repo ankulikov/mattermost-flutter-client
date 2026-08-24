@@ -49,41 +49,22 @@ final class ApiThreadRepository implements ThreadRepository {
     required String accountId,
     required String rootPostId,
   }) async {
-    final List<db.ThreadPostOrder> orderRows =
-        await (_database.select(_database.threadPostOrders)..where(
-              (table) =>
-                  table.accountId.equals(accountId) &
-                  table.rootPostId.equals(rootPostId),
-            ))
-            .get();
-    final Set<String> ids = <String>{
-      rootPostId,
-      ...orderRows.map((row) => row.postId),
-    };
     final List<db.CachedChannelPost> postRows =
         await (_database.select(_database.cachedChannelPosts)..where(
               (table) =>
                   table.accountId.equals(accountId) &
-                  table.postId.isIn(ids) &
+                  (table.postId.equals(rootPostId) |
+                      table.rootId.equals(rootPostId)) &
                   table.deleteAt.equals(0),
             ))
             .get();
     final List<ChannelPost> posts = await _mapRows(accountId, postRows);
-    final Map<String, int> positions = <String, int>{
-      for (final db.ThreadPostOrder row in orderRows) row.postId: row.position,
-    };
     final ChannelPost? root = posts
         .where((post) => post.id == rootPostId)
         .firstOrNull;
     final List<ChannelPost> replies =
         posts.where((post) => post.rootId == rootPostId).toList(growable: false)
-          ..sort((ChannelPost a, ChannelPost b) {
-            final int byPosition =
-                (positions[a.id] ?? a.sentAt.millisecondsSinceEpoch).compareTo(
-                  positions[b.id] ?? b.sentAt.millisecondsSinceEpoch,
-                );
-            return byPosition != 0 ? byPosition : _comparePosts(a, b);
-          });
+          ..sort(_comparePosts);
     final db.ThreadSyncState? sync =
         await (_database.select(_database.threadSyncStates)..where(
               (table) =>
@@ -142,7 +123,6 @@ final class ApiThreadRepository implements ThreadRepository {
       accountId: session.accountId,
       rootPostId: rootPostId,
       posts: posts,
-      order: order,
       users: users,
       complete: !hasNext,
       currentUserId: session.userId,
@@ -153,7 +133,6 @@ final class ApiThreadRepository implements ThreadRepository {
     required String accountId,
     required String rootPostId,
     required Map<String, MattermostPostDto> posts,
-    required List<String> order,
     required List<MattermostUserDto> users,
     required bool complete,
     required String currentUserId,
@@ -221,34 +200,20 @@ final class ApiThreadRepository implements ThreadRepository {
               );
         }
       }
-      final List<String> orderedIds = <String>[
-        ...order,
-        ...posts.keys.where((String id) => !order.contains(id)),
-      ];
-      for (final MapEntry<int, String> entry in orderedIds.asMap().entries) {
-        final MattermostPostDto? post = posts[entry.value];
-        if (post == null) continue;
-        await _database
-            .into(_database.threadPostOrders)
-            .insertOnConflictUpdate(
-              db.ThreadPostOrdersCompanion.insert(
-                accountId: accountId,
-                rootPostId: rootPostId,
-                postId: post.id,
-                createAt: post.createAt,
-                position: entry.key,
-              ),
-            );
-      }
       if (complete) {
         final Set<String> returnedIds = posts.keys.toSet();
-        await (_database.delete(_database.threadPostOrders)..where(
+        await (_database.update(_database.cachedChannelPosts)..where(
               (table) =>
                   table.accountId.equals(accountId) &
-                  table.rootPostId.equals(rootPostId) &
-                  table.postId.isNotIn(returnedIds),
+                  table.rootId.equals(rootPostId) &
+                  table.postId.isNotIn(returnedIds) &
+                  table.deleteAt.equals(0),
             ))
-            .go();
+            .write(
+              db.CachedChannelPostsCompanion(
+                deleteAt: Value<int>(DateTime.now().millisecondsSinceEpoch),
+              ),
+            );
       }
       await _database
           .into(_database.threadSyncStates)

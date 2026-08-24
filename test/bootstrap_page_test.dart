@@ -219,6 +219,123 @@ void main() {
     );
   });
 
+  testWidgets('auto-pages when replies leave a short root list unscrollable', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _AutoPagingPostRepository posts = _AutoPagingPostRepository();
+    addTearDown(posts.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(posts),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    expect(posts.loadOlderCalls, 2);
+    expect(find.text('Older root'), findsOneWidget);
+  });
+
+  testWidgets('auto-pages when a page contains no visible roots', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _AutoPagingPostRepository posts = _AutoPagingPostRepository(
+      startsEmpty: true,
+    );
+    addTearDown(posts.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(posts),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    expect(posts.loadOlderCalls, 2);
+    expect(find.text('Older root'), findsOneWidget);
+  });
+
+  testWidgets('stops viewport auto-paging after a paging failure', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _AutoPagingPostRepository posts = _AutoPagingPostRepository(
+      failLoads: true,
+    );
+    addTearDown(posts.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(posts),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    expect(posts.loadOlderCalls, 1);
+  });
+
+  testWidgets('bounds viewport auto-paging and leaves a manual fallback', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _AutoPagingPostRepository posts = _AutoPagingPostRepository(
+      neverCompletes: true,
+    );
+    addTearDown(posts.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(posts),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    expect(posts.loadOlderCalls, 20);
+    expect(find.text('Load older messages'), findsOneWidget);
+  });
+
   testWidgets('keeps refreshed posts hidden until Show recent messages', (
     WidgetTester tester,
   ) async {
@@ -497,6 +614,87 @@ final class _ThreadRepository implements ThreadRepository {
   }) async* {
     yield _thread(rootPostId);
   }
+}
+
+final class _AutoPagingPostRepository implements ChannelPostRepository {
+  _AutoPagingPostRepository({
+    this.startsEmpty = false,
+    this.failLoads = false,
+    this.neverCompletes = false,
+  });
+
+  final bool startsEmpty;
+  final bool failLoads;
+  final bool neverCompletes;
+  final StreamController<ChannelPostSnapshot> _changes =
+      StreamController<ChannelPostSnapshot>.broadcast();
+  int loadOlderCalls = 0;
+
+  ChannelPost get _recent => ChannelPost(
+    id: 'recent-root',
+    channelId: 'town-square',
+    author: const PostAuthor(id: 'ada', displayName: 'Ada'),
+    sentAt: DateTime(2026, 8, 24, 12),
+    message: 'Recent root',
+    replyCount: 60,
+  );
+
+  ChannelPostSnapshot get _initial => ChannelPostSnapshot(
+    posts: startsEmpty ? const <ChannelPost>[] : <ChannelPost>[_recent],
+    hasOlder: true,
+  );
+
+  Future<void> close() => _changes.close();
+
+  @override
+  Future<void> loadOlder({
+    required AuthSession session,
+    required String channelId,
+  }) async {
+    loadOlderCalls += 1;
+    if (failLoads) throw StateError('paging failed');
+    if (neverCompletes) {
+      _changes.add(_initial);
+      return;
+    }
+    if (loadOlderCalls == 1) {
+      _changes.add(_initial);
+      return;
+    }
+    _changes.add(
+      ChannelPostSnapshot(
+        posts: <ChannelPost>[
+          ChannelPost(
+            id: 'older-root',
+            channelId: channelId,
+            author: const PostAuthor(id: 'grace', displayName: 'Grace'),
+            sentAt: DateTime(2026, 8, 24, 11),
+            message: 'Older root',
+          ),
+          if (!startsEmpty) _recent,
+        ],
+        hasOlder: false,
+      ),
+    );
+  }
+
+  @override
+  Future<ChannelPostSnapshot> read({
+    required String accountId,
+    required String channelId,
+  }) async => _initial;
+
+  @override
+  Future<ChannelPostRefreshResult> refreshLatest({
+    required AuthSession session,
+    required String channelId,
+  }) async => const ChannelPostRefreshResult(newPostIds: <String>{});
+
+  @override
+  Stream<ChannelPostSnapshot> watch({
+    required String accountId,
+    required String channelId,
+  }) => _changes.stream;
 }
 
 final class _RecentPostRepository implements ChannelPostRepository {

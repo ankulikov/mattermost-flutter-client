@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
@@ -65,7 +67,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                       .retry(),
                 );
               }
-              if (items.isEmpty) {
+              if (items.isEmpty && !state.hasOlder) {
                 return const Center(child: Text(ChannelPostsStrings.empty));
               }
               return Stack(
@@ -74,6 +76,8 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                     channelId: channel.id,
                     posts: items,
                     isLoadingOlder: state.isLoadingOlder,
+                    hasOlder: state.hasOlder,
+                    autoLoadOlder: !state.loadFailed && !state.isRefreshing,
                     onLoadOlder: () => ref
                         .read(channelPostsProvider(channel.id).notifier)
                         .loadOlder(),
@@ -241,6 +245,8 @@ class _PostList extends StatefulWidget {
     required this.channelId,
     required this.posts,
     required this.isLoadingOlder,
+    required this.hasOlder,
+    required this.autoLoadOlder,
     required this.onLoadOlder,
     required this.onControllerReady,
     required this.onOpenThread,
@@ -249,7 +255,9 @@ class _PostList extends StatefulWidget {
   final String channelId;
   final List<ChannelPost> posts;
   final bool isLoadingOlder;
-  final VoidCallback onLoadOlder;
+  final bool hasOlder;
+  final bool autoLoadOlder;
+  final Future<void> Function() onLoadOlder;
   final ValueChanged<ScrollController> onControllerReady;
   final ValueChanged<ChannelPost> onOpenThread;
 
@@ -258,22 +266,35 @@ class _PostList extends StatefulWidget {
 }
 
 class _PostListState extends State<_PostList> {
+  static const int _maxAutomaticLoads = 20;
+
   late final ScrollController _controller = ScrollController(
     keepScrollOffset: true,
   )..addListener(_onScroll);
+  bool _autoLoadPending = false;
+  bool _viewportCheckScheduled = false;
+  int _automaticLoadCount = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onControllerReady(_controller);
+      if (!mounted) return;
+      widget.onControllerReady(_controller);
+      _maybeFillViewport();
     });
   }
 
   @override
   void didUpdateWidget(covariant _PostList oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.channelId != widget.channelId ||
+        (oldWidget.isLoadingOlder && !widget.isLoadingOlder)) {
+      _autoLoadPending = false;
+    }
+    if (oldWidget.channelId != widget.channelId) _automaticLoadCount = 0;
     widget.onControllerReady(_controller);
+    _scheduleViewportCheck();
   }
 
   @override
@@ -285,46 +306,103 @@ class _PostListState extends State<_PostList> {
   }
 
   void _onScroll() {
-    if (_controller.position.extentAfter < 160 && !widget.isLoadingOlder) {
-      widget.onLoadOlder();
+    if (_controller.position.extentAfter < 160) _requestOlder();
+  }
+
+  void _scheduleViewportCheck() {
+    if (_viewportCheckScheduled) return;
+    _viewportCheckScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _viewportCheckScheduled = false;
+      if (mounted) _maybeFillViewport();
+    });
+  }
+
+  void _maybeFillViewport() {
+    if (!widget.autoLoadOlder ||
+        _automaticLoadCount >= _maxAutomaticLoads ||
+        !_controller.hasClients ||
+        !_controller.position.hasContentDimensions) {
+      return;
     }
+    final ScrollPosition position = _controller.position;
+    if (position.maxScrollExtent > position.minScrollExtent + 0.5) return;
+    _requestOlder(automatic: true);
+  }
+
+  void _requestOlder({bool automatic = false}) {
+    if (_autoLoadPending || widget.isLoadingOlder || !widget.hasOlder) return;
+    if (automatic) _automaticLoadCount += 1;
+    _autoLoadPending = true;
+    unawaited(
+      widget.onLoadOlder().whenComplete(() {
+        if (!mounted) return;
+        _autoLoadPending = false;
+        _scheduleViewportCheck();
+      }),
+    );
   }
 
   @override
-  Widget build(BuildContext context) => ListView.builder(
-    controller: _controller,
-    reverse: true,
-    key: PageStorageKey<String>('channel-posts-${widget.channelId}'),
-    padding: const EdgeInsets.fromLTRB(10, 12, 10, 24),
-    itemCount: widget.posts.length + (widget.isLoadingOlder ? 1 : 0),
-    itemBuilder: (BuildContext context, int index) {
-      if (index == widget.posts.length) {
-        return Semantics(
-          label: ChannelPostsStrings.loadingOlder,
-          child: const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(
-              child: SizedBox.square(
-                dimension: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
+  Widget build(BuildContext context) {
+    final bool showManualLoad =
+        _automaticLoadCount >= _maxAutomaticLoads &&
+        widget.hasOlder &&
+        !widget.isLoadingOlder;
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: (ScrollMetricsNotification notification) {
+        _scheduleViewportCheck();
+        return false;
+      },
+      child: ListView.builder(
+        controller: _controller,
+        reverse: true,
+        key: PageStorageKey<String>('channel-posts-${widget.channelId}'),
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 24),
+        itemCount:
+            widget.posts.length +
+            (widget.isLoadingOlder || showManualLoad ? 1 : 0),
+        itemBuilder: (BuildContext context, int index) {
+          if (index == widget.posts.length) {
+            if (showManualLoad) {
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: OutlinedButton(
+                    onPressed: _requestOlder,
+                    child: const Text(ChannelPostsStrings.loadOlder),
+                  ),
+                ),
+              );
+            }
+            return Semantics(
+              label: ChannelPostsStrings.loadingOlder,
+              child: const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(
+                  child: SizedBox.square(
+                    dimension: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
               ),
-            ),
-          ),
-        );
-      }
-      final int postIndex = widget.posts.length - 1 - index;
-      final ChannelPost post = widget.posts[postIndex];
-      final bool continuesAuthor =
-          postIndex > 0 &&
-          widget.posts[postIndex - 1].author.id == post.author.id;
-      return _PostRow(
-        key: ValueKey<String>(post.id),
-        post: post,
-        continuesAuthor: continuesAuthor,
-        onOpenThread: widget.onOpenThread,
-      );
-    },
-  );
+            );
+          }
+          final int postIndex = widget.posts.length - 1 - index;
+          final ChannelPost post = widget.posts[postIndex];
+          final bool continuesAuthor =
+              postIndex > 0 &&
+              widget.posts[postIndex - 1].author.id == post.author.id;
+          return _PostRow(
+            key: ValueKey<String>(post.id),
+            post: post,
+            continuesAuthor: continuesAuthor,
+            onOpenThread: widget.onOpenThread,
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _PostRow extends StatelessWidget {

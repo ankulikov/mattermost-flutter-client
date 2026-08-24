@@ -57,7 +57,73 @@ void main() {
       await store.oldestPostId(accountId: 'account-a', channelId: 'channel-1'),
       'post-1',
     );
+
+    await store.savePage(
+      accountId: 'account-a',
+      channelId: 'channel-1',
+      page: _page(
+        ids: const <String>['post-4', 'post-3'],
+        oldestComplete: false,
+      ),
+      isLatestPage: true,
+    );
+    expect(
+      await store.oldestPostId(accountId: 'account-a', channelId: 'channel-1'),
+      'post-1',
+    );
   });
+
+  test(
+    'restarts the post-id cursor when latest page has a history gap',
+    () async {
+      final db.AppDatabase database = db.AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final ChannelPostStore store = ChannelPostStore(database);
+      addTearDown(store.close);
+
+      await store.savePage(
+        accountId: 'account-a',
+        channelId: 'channel-1',
+        page: _page(
+          ids: const <String>['post-2', 'post-1'],
+          oldestComplete: true,
+        ),
+        isLatestPage: true,
+      );
+      await store.savePage(
+        accountId: 'account-a',
+        channelId: 'channel-1',
+        page: _page(
+          ids: const <String>['post-6', 'post-5'],
+          oldestComplete: false,
+        ),
+        isLatestPage: true,
+      );
+
+      final ChannelPostSnapshot snapshot = await store.read(
+        accountId: 'account-a',
+        channelId: 'channel-1',
+      );
+      expect(snapshot.posts.map((post) => post.id), const <String>[
+        'post-5',
+        'post-6',
+      ]);
+      expect(
+        await store.oldestPostId(
+          accountId: 'account-a',
+          channelId: 'channel-1',
+        ),
+        'post-5',
+      );
+      expect(
+        await database
+            .select(database.channelHistoryEntries)
+            .get()
+            .then((rows) => rows.map((row) => row.postId).toSet()),
+        const <String>{'post-5', 'post-6'},
+      );
+    },
+  );
 
   test(
     'keeps replies out of channel history and stores orphan membership',
@@ -110,11 +176,10 @@ void main() {
       );
       expect(snapshot.posts.map((post) => post.id), const <String>['root-1']);
       expect(snapshot.posts.single.replyCount, 2);
-      final List<db.ThreadPostOrder> threadRows = await database
-          .select(database.threadPostOrders)
-          .get();
-      expect(threadRows.single.rootPostId, 'missing-root');
-      expect(threadRows.single.postId, 'reply-1');
+      final db.CachedChannelPost reply = await (database.select(
+        database.cachedChannelPosts,
+      )..where((table) => table.postId.equals('reply-1'))).getSingle();
+      expect(reply.rootId, 'missing-root');
     },
   );
 }

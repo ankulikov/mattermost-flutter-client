@@ -7,4 +7,5 @@ abstract final class ChannelPostsStrings {
   static const String reactions = 'Reactions';
   static const String showRecentMessages = 'Show recent messages';
   static const String loadingOlder = 'Loading older messages';
+  static const String loadOlder = 'Load older messages';
 }

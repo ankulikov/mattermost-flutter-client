@@ -204,6 +204,49 @@ final class ChannelPostStore {
                     table.channelId.equals(channelId),
               ))
               .getSingleOrNull();
+      final Set<String> incomingOrderIds = page.order.toSet();
+      final bool overlapsActiveSegment =
+          incomingOrderIds.isNotEmpty &&
+          (await (_database.select(_database.channelHistoryEntries)
+                    ..where(
+                      (db.ChannelHistoryEntries table) =>
+                          table.accountId.equals(accountId) &
+                          table.channelId.equals(channelId) &
+                          table.postId.isIn(incomingOrderIds),
+                    )
+                    ..limit(1))
+                  .get())
+              .isNotEmpty;
+      final bool resetActiveSegment =
+          isLatestPage &&
+          oldSync != null &&
+          incomingOrderIds.isNotEmpty &&
+          !overlapsActiveSegment;
+      if (resetActiveSegment) {
+        await (_database.delete(_database.channelPostOrders)..where(
+              (db.ChannelPostOrders table) =>
+                  table.accountId.equals(accountId) &
+                  table.channelId.equals(channelId),
+            ))
+            .go();
+        await (_database.delete(_database.channelHistoryEntries)..where(
+              (db.ChannelHistoryEntries table) =>
+                  table.accountId.equals(accountId) &
+                  table.channelId.equals(channelId),
+            ))
+            .go();
+      }
+      for (final String postId in page.order) {
+        await _database
+            .into(_database.channelHistoryEntries)
+            .insertOnConflictUpdate(
+              db.ChannelHistoryEntriesCompanion.insert(
+                accountId: accountId,
+                channelId: channelId,
+                postId: postId,
+              ),
+            );
+      }
       for (final PostCacheAuthor author in page.authors) {
         await _database
             .into(_database.cachedPostAuthors)
@@ -252,17 +295,6 @@ final class ChannelPostStore {
                     table.postId.equals(post.id),
               ))
               .go();
-          await _database
-              .into(_database.threadPostOrders)
-              .insertOnConflictUpdate(
-                db.ThreadPostOrdersCompanion.insert(
-                  accountId: accountId,
-                  rootPostId: post.rootId,
-                  postId: post.id,
-                  createAt: post.createAt,
-                  position: post.createAt,
-                ),
-              );
         }
         await (_database.delete(_database.cachedPostReactions)..where(
               (db.CachedPostReactions table) =>
@@ -285,7 +317,8 @@ final class ChannelPostStore {
         }
       }
       final String? pageOldest = page.order.isEmpty ? null : page.order.last;
-      final bool keepExistingOldest = isLatestPage && oldSync != null;
+      final bool keepExistingOldest =
+          isLatestPage && oldSync != null && !resetActiveSegment;
       await _database
           .into(_database.channelPostSyncStates)
           .insertOnConflictUpdate(
