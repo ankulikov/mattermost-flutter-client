@@ -366,6 +366,35 @@ void main() {
     expect(find.byType(ListTile).evaluate().length, lessThan(30));
   });
 
+  testWidgets('uses compact vertical spacing for channel rows', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder channelTile = find.ancestor(
+      of: find.text('Town Square'),
+      matching: find.byType(ListTile),
+    );
+    expect(
+      tester.widget<ListTile>(channelTile).visualDensity,
+      const VisualDensity(vertical: -2),
+    );
+  });
+
   testWidgets('applies collapsed and muted category presentation', (
     WidgetTester tester,
   ) async {

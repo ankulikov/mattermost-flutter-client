@@ -312,6 +312,8 @@ class _ChannelSectionHeader extends StatelessWidget {
           child: const Icon(Icons.expand_more),
         ),
         onTap: onTap,
+        dense: true,
+        visualDensity: const VisualDensity(vertical: -2),
       ),
     ),
   );
@@ -336,6 +338,7 @@ class _ChannelTile extends StatelessWidget {
     opacity: muted ? 0.55 : 1,
     child: ListTile(
       dense: true,
+      visualDensity: const VisualDensity(vertical: -4),
       selected: selected,
       selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
