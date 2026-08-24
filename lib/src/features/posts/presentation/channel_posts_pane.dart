@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
+import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
@@ -11,9 +13,14 @@ import 'package:mattermost_flutter/src/features/threads/presentation/thread_pane
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_strings.dart';
 
 class ChannelPostsPane extends ConsumerStatefulWidget {
-  const ChannelPostsPane({required this.channel, super.key});
+  const ChannelPostsPane({
+    required this.channel,
+    this.onSelectChannel,
+    super.key,
+  });
 
   final SidebarChannel channel;
+  final ValueChanged<String>? onSelectChannel;
 
   @override
   ConsumerState<ChannelPostsPane> createState() => _ChannelPostsPaneState();
@@ -33,6 +40,11 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
   @override
   Widget build(BuildContext context) {
     final SidebarChannel channel = widget.channel;
+    final Uri? serverUrl = ref.watch(
+      authControllerProvider.select(
+        (AuthState value) => value.session?.serverUrl,
+      ),
+    );
     final AsyncValue<ChannelPostsViewState> posts = ref.watch(
       channelPostsProvider(channel.id),
     );
@@ -66,6 +78,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
               }
               return _PostList(
                 channelId: channel.id,
+                serverUrl: serverUrl,
                 posts: items,
                 isLoadingOlder: state.isLoadingOlder,
                 hasOlder: state.hasOlder,
@@ -76,6 +89,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                 onOpenThread: (ChannelPost post) {
                   setState(() => _selectedRootPostId = post.id);
                 },
+                onSelectChannel: widget.onSelectChannel,
               );
             },
           ),
@@ -90,6 +104,8 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
           key: ValueKey<String>('thread-$rootPostId'),
           rootPostId: rootPostId,
           channel: channel,
+          serverUrl: serverUrl,
+          onSelectChannel: widget.onSelectChannel,
           onClose: () => setState(() => _selectedRootPostId = null),
         );
         if (constraints.maxWidth >= AppBreakpoints.sideThread) {
@@ -199,21 +215,25 @@ class _PostsError extends StatelessWidget {
 class _PostList extends StatefulWidget {
   const _PostList({
     required this.channelId,
+    required this.serverUrl,
     required this.posts,
     required this.isLoadingOlder,
     required this.hasOlder,
     required this.autoLoadOlder,
     required this.onLoadOlder,
     required this.onOpenThread,
+    required this.onSelectChannel,
   });
 
   final String channelId;
+  final Uri? serverUrl;
   final List<ChannelPost> posts;
   final bool isLoadingOlder;
   final bool hasOlder;
   final bool autoLoadOlder;
   final Future<void> Function() onLoadOlder;
   final ValueChanged<ChannelPost> onOpenThread;
+  final ValueChanged<String>? onSelectChannel;
 
   @override
   State<_PostList> createState() => _PostListState();
@@ -348,8 +368,10 @@ class _PostListState extends State<_PostList> {
           return _PostRow(
             key: ValueKey<String>(post.id),
             post: post,
+            serverUrl: widget.serverUrl,
             continuesAuthor: continuesAuthor,
             onOpenThread: widget.onOpenThread,
+            onSelectChannel: widget.onSelectChannel,
           );
         },
       ),
@@ -360,14 +382,18 @@ class _PostListState extends State<_PostList> {
 class _PostRow extends StatelessWidget {
   const _PostRow({
     required this.post,
+    required this.serverUrl,
     required this.continuesAuthor,
     required this.onOpenThread,
+    required this.onSelectChannel,
     super.key,
   });
 
   final ChannelPost post;
+  final Uri? serverUrl;
   final bool continuesAuthor;
   final ValueChanged<ChannelPost> onOpenThread;
+  final ValueChanged<String>? onSelectChannel;
 
   @override
   Widget build(BuildContext context) {
@@ -414,7 +440,12 @@ class _PostRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                 ],
-                Text(post.message, style: theme.textTheme.bodyMedium),
+                MattermostMarkdown(
+                  data: post.message,
+                  serverUrl: serverUrl,
+                  onTapChannel: onSelectChannel,
+                  textStyle: theme.textTheme.bodyMedium,
+                ),
                 if (post.reactions.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 8),
                   Semantics(

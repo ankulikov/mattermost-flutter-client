@@ -22,4 +22,8 @@ Opening a thread performs a separate authoritative thread request. An initial
 network failure shows a retry state; an older-page failure preserves the history
 already held in memory.
 
+Post bodies use the shared `MattermostMarkdown` widget. Its documented syntax,
+Mattermost extensions, URL safety policy, and dependency rationale are recorded
+in [`docs/MARKDOWN.md`](../../../../docs/MARKDOWN.md).
+
 See the official [post endpoint specification](https://github.com/mattermost/mattermost/blob/master/api/v4/source/posts.yaml).

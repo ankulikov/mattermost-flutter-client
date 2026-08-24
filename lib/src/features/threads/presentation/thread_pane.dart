@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
@@ -10,12 +11,16 @@ class ThreadPane extends ConsumerWidget {
     required this.rootPostId,
     required this.channel,
     required this.onClose,
+    this.serverUrl,
+    this.onSelectChannel,
     super.key,
   });
 
   final String rootPostId;
   final SidebarChannel channel;
   final VoidCallback onClose;
+  final Uri? serverUrl;
+  final ValueChanged<String>? onSelectChannel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -66,7 +71,11 @@ class ThreadPane extends ConsumerWidget {
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                         children: <Widget>[
-                          _ThreadPost(post: root),
+                          _ThreadPost(
+                            post: root,
+                            serverUrl: serverUrl,
+                            onSelectChannel: onSelectChannel,
+                          ),
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Row(
@@ -84,7 +93,11 @@ class ThreadPane extends ConsumerWidget {
                           for (final ChannelPost reply in state.thread.replies)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),
-                              child: _ThreadPost(post: reply),
+                              child: _ThreadPost(
+                                post: reply,
+                                serverUrl: serverUrl,
+                                onSelectChannel: onSelectChannel,
+                              ),
                             ),
                         ],
                       ),
@@ -141,9 +154,15 @@ class _ThreadHeader extends StatelessWidget {
 }
 
 class _ThreadPost extends StatelessWidget {
-  const _ThreadPost({required this.post});
+  const _ThreadPost({
+    required this.post,
+    required this.serverUrl,
+    required this.onSelectChannel,
+  });
 
   final ChannelPost post;
+  final Uri? serverUrl;
+  final ValueChanged<String>? onSelectChannel;
 
   @override
   Widget build(BuildContext context) {
@@ -172,14 +191,20 @@ class _ThreadPost extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(
-                post.isDeleted ? ThreadStrings.deletedMessage : post.message,
-                style: post.isDeleted
-                    ? Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontStyle: FontStyle.italic,
-                      )
-                    : null,
-              ),
+              if (post.isDeleted)
+                Text(
+                  ThreadStrings.deletedMessage,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic),
+                )
+              else
+                MattermostMarkdown(
+                  data: post.message,
+                  serverUrl: serverUrl,
+                  onTapChannel: onSelectChannel,
+                  textStyle: Theme.of(context).textTheme.bodyMedium,
+                ),
             ],
           ),
         ),

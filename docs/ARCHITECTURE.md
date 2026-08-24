@@ -105,6 +105,9 @@ reply сохраняет позицию и показывается placeholder-
 ## Адаптивность, безопасность и асинхронность
 
 - Макет выбирается по доступной ширине через constraints, а не по платформе.
+- Тела постов и ответов рендерятся общим `MattermostMarkdown`: GFM дополняется
+  channel links, LaTeX, размерами inline-изображений и подсветкой кода. Полная
+  матрица совместимости и URL-политика описаны в `docs/MARKDOWN.md`.
 - Все user-facing строки локализуются вне widgets; поддерживаются keyboard,
   semantics, scalable text и light/dark themes.
 - Токены хранятся только в secure storage и не попадают в Drift или логи.

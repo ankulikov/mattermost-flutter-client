@@ -8,6 +8,7 @@ import 'package:mattermost_flutter/src/features/auth/presentation/auth_strings.d
 import 'package:mattermost_flutter/src/features/auth/presentation/pat_login_dialog.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_pane.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_strings.dart';
@@ -45,6 +46,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
                   child: _MainContent(
                     auth: auth,
                     selectedChannel: selectedChannel,
+                    onSelectChannel: _selectChannelNamed,
                   ),
                 ),
               ],
@@ -56,19 +58,43 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
           appBar: AppBar(
             title: Text(selectedChannel?.displayName ?? 'Mattermost'),
           ),
-          body: _MainContent(auth: auth, selectedChannel: selectedChannel),
+          body: _MainContent(
+            auth: auth,
+            selectedChannel: selectedChannel,
+            onSelectChannel: _selectChannelNamed,
+          ),
           drawer: const Drawer(child: ChannelSidebar()),
         );
       },
     );
   }
+
+  void _selectChannelNamed(String name) {
+    final ChannelSidebarSnapshot? snapshot = ref
+        .read(channelSidebarProvider)
+        .value;
+    if (snapshot == null) return;
+    for (final SidebarSection section in snapshot.sections) {
+      for (final SidebarChannel channel in section.channels) {
+        if (channel.name == name) {
+          ref.read(selectedChannelProvider.notifier).select(channel);
+          return;
+        }
+      }
+    }
+  }
 }
 
 class _MainContent extends StatelessWidget {
-  const _MainContent({required this.auth, required this.selectedChannel});
+  const _MainContent({
+    required this.auth,
+    required this.selectedChannel,
+    required this.onSelectChannel,
+  });
 
   final AuthState auth;
   final SidebarChannel? selectedChannel;
+  final ValueChanged<String> onSelectChannel;
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +103,10 @@ class _MainContent extends StatelessWidget {
     }
     if (auth.phase == AuthPhase.signedIn) {
       if (selectedChannel case final SidebarChannel channel) {
-        return ChannelPostsPane(channel: channel);
+        return ChannelPostsPane(
+          channel: channel,
+          onSelectChannel: onSelectChannel,
+        );
       }
       return Center(
         child: Column(
