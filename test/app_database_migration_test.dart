@@ -66,6 +66,11 @@ void main() {
       expect(snapshot.sections.single.muted, isFalse);
       expect(snapshot.sections.single.sorting, ChannelSorting.manual);
       expect(snapshot.sections.single.channels.single.lastActivityAt, 0);
+      expect(await database.select(database.cachedChannelPosts).get(), isEmpty);
+      expect(
+        await database.select(database.channelPostSyncStates).get(),
+        isEmpty,
+      );
     } finally {
       await database.close();
       await directory.delete(recursive: true);

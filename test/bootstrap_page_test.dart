@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -130,6 +132,40 @@ void main() {
 
     expect(find.text('Message for town-square'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keeps refreshed posts hidden until Show recent messages', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _RecentPostRepository posts = _RecentPostRepository();
+    addTearDown(posts.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(posts),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cached message'), findsOneWidget);
+    expect(find.text('New message'), findsNothing);
+    expect(find.text('Show recent messages'), findsOneWidget);
+
+    await tester.tap(find.text('Show recent messages'));
+    await tester.pumpAndSettle();
+    expect(find.text('New message'), findsOneWidget);
+    expect(find.text('Show recent messages'), findsNothing);
   });
 
   testWidgets('lazily builds channels in a large expandable category', (
@@ -267,8 +303,7 @@ final class _DelayedPostRepository implements ChannelPostRepository {
 
   final Duration delay;
 
-  @override
-  Future<List<ChannelPost>> loadHistory(String channelId) async {
+  Future<List<ChannelPost>> _posts(String channelId) async {
     await Future<void>.delayed(delay);
     return <ChannelPost>[
       ChannelPost(
@@ -295,6 +330,92 @@ final class _DelayedPostRepository implements ChannelPostRepository {
       ),
     ];
   }
+
+  @override
+  Future<void> loadOlder({
+    required AuthSession session,
+    required String channelId,
+  }) async {}
+
+  @override
+  Future<ChannelPostSnapshot> read({
+    required String accountId,
+    required String channelId,
+  }) async =>
+      ChannelPostSnapshot(posts: await _posts(channelId), hasOlder: false);
+
+  @override
+  Future<ChannelPostRefreshResult> refreshLatest({
+    required AuthSession session,
+    required String channelId,
+  }) async => const ChannelPostRefreshResult(newPostIds: <String>{});
+
+  @override
+  Stream<ChannelPostSnapshot> watch({
+    required String accountId,
+    required String channelId,
+  }) => const Stream<ChannelPostSnapshot>.empty();
+}
+
+final class _RecentPostRepository implements ChannelPostRepository {
+  final StreamController<ChannelPostSnapshot> _changes =
+      StreamController<ChannelPostSnapshot>.broadcast();
+
+  ChannelPostSnapshot get _cached => ChannelPostSnapshot(
+    posts: <ChannelPost>[
+      ChannelPost(
+        id: 'cached',
+        channelId: 'town-square',
+        author: const PostAuthor(id: 'ada', displayName: 'Ada'),
+        sentAt: DateTime(2026, 8, 24, 10),
+        message: 'Cached message',
+      ),
+    ],
+    hasOlder: false,
+  );
+
+  ChannelPostSnapshot get _refreshed => ChannelPostSnapshot(
+    posts: <ChannelPost>[
+      ..._cached.posts,
+      ChannelPost(
+        id: 'new',
+        channelId: 'town-square',
+        author: const PostAuthor(id: 'ada', displayName: 'Ada'),
+        sentAt: DateTime(2026, 8, 24, 11),
+        message: 'New message',
+      ),
+    ],
+    hasOlder: false,
+  );
+
+  Future<void> close() => _changes.close();
+
+  @override
+  Future<void> loadOlder({
+    required AuthSession session,
+    required String channelId,
+  }) async {}
+
+  @override
+  Future<ChannelPostSnapshot> read({
+    required String accountId,
+    required String channelId,
+  }) async => _cached;
+
+  @override
+  Future<ChannelPostRefreshResult> refreshLatest({
+    required AuthSession session,
+    required String channelId,
+  }) async {
+    _changes.add(_refreshed);
+    return const ChannelPostRefreshResult(newPostIds: <String>{'new'});
+  }
+
+  @override
+  Stream<ChannelPostSnapshot> watch({
+    required String accountId,
+    required String channelId,
+  }) => _changes.stream;
 }
 
 final class _SignedInRepository implements AuthRepository {

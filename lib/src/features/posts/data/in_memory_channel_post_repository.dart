@@ -1,3 +1,4 @@
+import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 
@@ -24,7 +25,6 @@ final class InMemoryChannelPostRepository implements ChannelPostRepository {
     'Спасибо! Проверил на узком и широком экранах, поведение осталось стабильным.',
   ];
 
-  @override
   Future<List<ChannelPost>> loadHistory(String channelId) async {
     await Future<void>.delayed(delay);
 
@@ -51,6 +51,33 @@ final class InMemoryChannelPostRepository implements ChannelPostRepository {
         reactions: _reactionsFor(seed + index),
       );
     }, growable: false);
+  }
+
+  @override
+  Future<void> loadOlder({
+    required AuthSession session,
+    required String channelId,
+  }) async {}
+
+  @override
+  Future<ChannelPostSnapshot> read({
+    required String accountId,
+    required String channelId,
+  }) async =>
+      ChannelPostSnapshot(posts: await loadHistory(channelId), hasOlder: false);
+
+  @override
+  Future<ChannelPostRefreshResult> refreshLatest({
+    required AuthSession session,
+    required String channelId,
+  }) async => const ChannelPostRefreshResult(newPostIds: <String>{});
+
+  @override
+  Stream<ChannelPostSnapshot> watch({
+    required String accountId,
+    required String channelId,
+  }) async* {
+    yield await read(accountId: accountId, channelId: channelId);
   }
 
   static int _stableHash(String value) {

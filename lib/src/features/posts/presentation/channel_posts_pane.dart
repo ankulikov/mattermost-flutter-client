@@ -5,30 +5,104 @@ import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_strings.dart';
 
-class ChannelPostsPane extends ConsumerWidget {
+class ChannelPostsPane extends ConsumerStatefulWidget {
   const ChannelPostsPane({required this.channel, super.key});
 
   final SidebarChannel channel;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<List<ChannelPost>> posts = ref.watch(
+  ConsumerState<ChannelPostsPane> createState() => _ChannelPostsPaneState();
+}
+
+class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
+  ScrollController? _listController;
+
+  @override
+  Widget build(BuildContext context) {
+    final SidebarChannel channel = widget.channel;
+    final AsyncValue<ChannelPostsViewState> posts = ref.watch(
       channelPostsProvider(channel.id),
     );
+    final ChannelPostsViewState? viewState = posts.value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        _ChannelHeader(channel: channel),
+        _ChannelHeader(
+          channel: channel,
+          isLoading:
+              viewState?.isRefreshing == true ||
+              viewState?.isLoadingOlder == true,
+        ),
         const Divider(height: 1),
         Expanded(
           child: posts.when(
             loading: () => const _PostsLoading(),
             error: (Object error, StackTrace stackTrace) => _PostsError(
-              onRetry: () => ref.invalidate(channelPostsProvider(channel.id)),
+              onRetry: () =>
+                  ref.read(channelPostsProvider(channel.id).notifier).retry(),
             ),
-            data: (List<ChannelPost> items) => items.isEmpty
-                ? const Center(child: Text(ChannelPostsStrings.empty))
-                : _PostList(channelId: channel.id, posts: items),
+            data: (ChannelPostsViewState state) {
+              final List<ChannelPost> items = state.visiblePosts;
+              if (items.isEmpty && state.isRefreshing) {
+                return const _PostsLoading();
+              }
+              if (items.isEmpty && state.loadFailed) {
+                return _PostsError(
+                  onRetry: () => ref
+                      .read(channelPostsProvider(channel.id).notifier)
+                      .retry(),
+                );
+              }
+              if (items.isEmpty) {
+                return const Center(child: Text(ChannelPostsStrings.empty));
+              }
+              return Stack(
+                children: <Widget>[
+                  _PostList(
+                    channelId: channel.id,
+                    posts: items,
+                    isLoadingOlder: state.isLoadingOlder,
+                    onLoadOlder: () => ref
+                        .read(channelPostsProvider(channel.id).notifier)
+                        .loadOlder(),
+                    onControllerReady: (ScrollController controller) {
+                      _listController = controller;
+                    },
+                  ),
+                  if (state.hasRecentMessages)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 20,
+                      child: Center(
+                        child: FloatingActionButton.extended(
+                          heroTag: 'recent-${channel.id}',
+                          onPressed: () {
+                            ref
+                                .read(channelPostsProvider(channel.id).notifier)
+                                .showRecentMessages();
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              final ScrollController? controller =
+                                  _listController;
+                              if (controller?.hasClients == true) {
+                                controller!.animateTo(
+                                  0,
+                                  duration: const Duration(milliseconds: 280),
+                                  curve: Curves.easeOut,
+                                );
+                              }
+                            });
+                          },
+                          icon: const Icon(Icons.arrow_downward),
+                          label: const Text(
+                            ChannelPostsStrings.showRecentMessages,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ],
@@ -37,9 +111,10 @@ class ChannelPostsPane extends ConsumerWidget {
 }
 
 class _ChannelHeader extends StatelessWidget {
-  const _ChannelHeader({required this.channel});
+  const _ChannelHeader({required this.channel, required this.isLoading});
 
   final SidebarChannel channel;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -58,6 +133,16 @@ class _ChannelHeader extends StatelessWidget {
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
+        if (isLoading) ...<Widget>[
+          const SizedBox(width: 12),
+          Semantics(
+            label: ChannelPostsStrings.loading,
+            child: const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        ],
       ],
     ),
   );
@@ -109,21 +194,85 @@ class _PostsError extends StatelessWidget {
   );
 }
 
-class _PostList extends StatelessWidget {
-  const _PostList({required this.channelId, required this.posts});
+class _PostList extends StatefulWidget {
+  const _PostList({
+    required this.channelId,
+    required this.posts,
+    required this.isLoadingOlder,
+    required this.onLoadOlder,
+    required this.onControllerReady,
+  });
 
   final String channelId;
   final List<ChannelPost> posts;
+  final bool isLoadingOlder;
+  final VoidCallback onLoadOlder;
+  final ValueChanged<ScrollController> onControllerReady;
+
+  @override
+  State<_PostList> createState() => _PostListState();
+}
+
+class _PostListState extends State<_PostList> {
+  late final ScrollController _controller = ScrollController(
+    keepScrollOffset: true,
+  )..addListener(_onScroll);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onControllerReady(_controller);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _PostList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    widget.onControllerReady(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_controller.position.extentAfter < 160 && !widget.isLoadingOlder) {
+      widget.onLoadOlder();
+    }
+  }
 
   @override
   Widget build(BuildContext context) => ListView.builder(
-    key: PageStorageKey<String>('channel-posts-$channelId'),
+    controller: _controller,
+    reverse: true,
+    key: PageStorageKey<String>('channel-posts-${widget.channelId}'),
     padding: const EdgeInsets.fromLTRB(10, 12, 10, 24),
-    itemCount: posts.length,
+    itemCount: widget.posts.length + (widget.isLoadingOlder ? 1 : 0),
     itemBuilder: (BuildContext context, int index) {
-      final ChannelPost post = posts[index];
+      if (index == widget.posts.length) {
+        return Semantics(
+          label: ChannelPostsStrings.loadingOlder,
+          child: const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(
+              child: SizedBox.square(
+                dimension: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        );
+      }
+      final int postIndex = widget.posts.length - 1 - index;
+      final ChannelPost post = widget.posts[postIndex];
       final bool continuesAuthor =
-          index > 0 && posts[index - 1].author.id == post.author.id;
+          postIndex > 0 &&
+          widget.posts[postIndex - 1].author.id == post.author.id;
       return _PostRow(
         key: ValueKey<String>(post.id),
         post: post,

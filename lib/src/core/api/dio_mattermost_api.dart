@@ -99,6 +99,36 @@ final class DioMattermostApi implements MattermostApi {
     return MattermostPostListDto.fromJson(_object(response.data));
   }
 
+  @override
+  Future<MattermostPostListDto> getPostsBefore({
+    required String channelId,
+    required String postId,
+    int page = 0,
+    int perPage = 60,
+  }) async {
+    final Response<Object?> response = await _dio.get<Object?>(
+      '/channels/$channelId/posts',
+      queryParameters: <String, Object?>{
+        'before': postId,
+        'page': page,
+        'per_page': perPage,
+      },
+    );
+    return MattermostPostListDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<MattermostPostListDto> getPostsSince({
+    required String channelId,
+    required int since,
+  }) async {
+    final Response<Object?> response = await _dio.get<Object?>(
+      '/channels/$channelId/posts',
+      queryParameters: <String, Object?>{'since': since},
+    );
+    return MattermostPostListDto.fromJson(_object(response.data));
+  }
+
   static Map<String, String>? _conditionalHeaders(String? etag) =>
       etag == null ? null : <String, String>{'If-None-Match': etag};
 

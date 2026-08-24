@@ -31,4 +31,18 @@ abstract interface class MattermostApi {
     int perPage = 60,
     String? etag,
   });
+
+  Future<MattermostPostListDto> getPostsBefore({
+    required String channelId,
+    required String postId,
+    int page = 0,
+    int perPage = 60,
+  });
+
+  /// Returns posts modified after [since] (Unix milliseconds). Mattermost may
+  /// return up to 1000 non-consecutive posts, so callers must reconcile holes.
+  Future<MattermostPostListDto> getPostsSince({
+    required String channelId,
+    required int since,
+  });
 }

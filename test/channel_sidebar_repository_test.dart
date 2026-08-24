@@ -140,6 +140,20 @@ final class _FakeMattermostApi implements MattermostApi {
   }) => throw UnimplementedError();
 
   @override
+  Future<MattermostPostListDto> getPostsBefore({
+    required String channelId,
+    required String postId,
+    int page = 0,
+    int perPage = 60,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<MattermostPostListDto> getPostsSince({
+    required String channelId,
+    required int since,
+  }) => throw UnimplementedError();
+
+  @override
   Future<List<MattermostTeamDto>> getTeamsForCurrentUser() async {
     calls.add('teams');
     return const <MattermostTeamDto>[

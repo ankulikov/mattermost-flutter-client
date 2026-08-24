@@ -54,12 +54,83 @@ class SidebarCategoryChannels extends Table {
   };
 }
 
+class CachedPostAuthors extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get userId => text()();
+  TextColumn get displayName => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, userId};
+}
+
+class CachedChannelPosts extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get postId => text()();
+  TextColumn get channelId => text()();
+  TextColumn get userId => text()();
+  IntColumn get createAt => integer()();
+  IntColumn get updateAt => integer()();
+  IntColumn get deleteAt => integer().withDefault(const Constant<int>(0))();
+  TextColumn get message => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, postId};
+}
+
+/// Server order is kept separately from post contents so pagination can evolve
+/// without making the wire DTO or a timestamp the UI's ordering contract.
+class ChannelPostOrders extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get channelId => text()();
+  TextColumn get postId => text()();
+  IntColumn get createAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{
+    accountId,
+    channelId,
+    postId,
+  };
+}
+
+class CachedPostReactions extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get postId => text()();
+  TextColumn get emojiName => text()();
+  IntColumn get reactionCount => integer()();
+  BoolColumn get reactedByCurrentUser => boolean()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{
+    accountId,
+    postId,
+    emojiName,
+  };
+}
+
+class ChannelPostSyncStates extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get channelId => text()();
+  TextColumn get oldestPostId => text().nullable()();
+  BoolColumn get oldestComplete =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get lastSyncedAt => integer().withDefault(const Constant<int>(0))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, channelId};
+}
+
 @DriftDatabase(
   tables: <Type>[
     SidebarTeams,
     SidebarChannels,
     SidebarCategories,
     SidebarCategoryChannels,
+    CachedPostAuthors,
+    CachedChannelPosts,
+    ChannelPostOrders,
+    CachedPostReactions,
+    ChannelPostSyncStates,
   ],
 )
 final class AppDatabase extends _$AppDatabase {
@@ -68,7 +139,7 @@ final class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -85,6 +156,13 @@ final class AppDatabase extends _$AppDatabase {
         );
         await migrator.addColumn(sidebarCategories, sidebarCategories.muted);
         await migrator.addColumn(sidebarCategories, sidebarCategories.sorting);
+      }
+      if (from < 3) {
+        await migrator.createTable(cachedPostAuthors);
+        await migrator.createTable(cachedChannelPosts);
+        await migrator.createTable(channelPostOrders);
+        await migrator.createTable(cachedPostReactions);
+        await migrator.createTable(channelPostSyncStates);
       }
     },
   );

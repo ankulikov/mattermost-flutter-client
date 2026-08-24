@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/core/database/app_database.dart' as db;
+import 'package:mattermost_flutter/src/core/database/database_provider.dart';
 import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
@@ -9,14 +9,6 @@ import 'package:mattermost_flutter/src/features/channels/data/api_channel_sideba
 import 'package:mattermost_flutter/src/features/channels/data/channel_sidebar_store.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
-
-final Provider<db.AppDatabase> appDatabaseProvider = Provider<db.AppDatabase>((
-  Ref ref,
-) {
-  final db.AppDatabase database = db.AppDatabase.open();
-  ref.onDispose(() => unawaited(database.close()));
-  return database;
-});
 
 final Provider<ChannelSidebarStore> channelSidebarStoreProvider =
     Provider<ChannelSidebarStore>((Ref ref) {
