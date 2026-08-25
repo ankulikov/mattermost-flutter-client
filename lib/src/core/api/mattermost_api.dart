@@ -23,6 +23,15 @@ abstract interface class MattermostApi {
 
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds);
 
+  /// Returns the authenticated user's view of [userId]'s profile image.
+  ///
+  /// Mattermost ignores [lastPictureUpdate] on the server; it exists solely to
+  /// version client and intermediary cache keys.
+  Future<MattermostImageDto> getUserProfileImage({
+    required String userId,
+    int lastPictureUpdate = 0,
+  });
+
   Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
     List<String> channelIds,
   );

@@ -48,6 +48,12 @@ void main() {
 }
 
 final class _ThreadsApi implements MattermostApi {
+  @override
+  Future<MattermostImageDto> getUserProfileImage({
+    required String userId,
+    int lastPictureUpdate = 0,
+  }) => throw UnimplementedError();
+
   int threadCalls = 0;
   int? perPage;
   String? before;

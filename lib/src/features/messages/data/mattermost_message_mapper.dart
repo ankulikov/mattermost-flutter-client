@@ -14,8 +14,8 @@ final class MattermostMessageMapper
     required String currentUserId,
     bool includeDeleted = false,
   }) {
-    final Map<String, String> authorNames = <String, String>{
-      for (final MattermostUserDto user in users) user.id: _displayName(user),
+    final Map<String, MattermostUserDto> authors = <String, MattermostUserDto>{
+      for (final MattermostUserDto user in users) user.id: user,
     };
     return posts
         .where((MattermostPostDto post) => includeDeleted || post.deleteAt == 0)
@@ -23,10 +23,7 @@ final class MattermostMessageMapper
           (MattermostPostDto post) => ChannelPost(
             id: post.id,
             channelId: post.channelId,
-            author: PostAuthor(
-              id: post.userId,
-              displayName: authorNames[post.userId] ?? post.userId,
-            ),
+            author: _mapAuthor(post.userId, authors[post.userId]),
             sentAt: DateTime.fromMillisecondsSinceEpoch(post.createAt),
             message: post.deleteAt == 0 ? post.message : '',
             rootId: post.rootId,
@@ -43,6 +40,12 @@ final class MattermostMessageMapper
         .toList(growable: false);
   }
 }
+
+PostAuthor _mapAuthor(String userId, MattermostUserDto? user) => PostAuthor(
+  id: userId,
+  displayName: user == null ? userId : _displayName(user),
+  profileImageUpdatedAt: user?.profileImageUpdatedAt ?? 0,
+);
 
 String _displayName(MattermostUserDto user) => resolveUserDisplayName(
   id: user.id,

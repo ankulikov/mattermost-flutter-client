@@ -2,12 +2,14 @@ final class PostAuthor {
   const PostAuthor({
     required this.id,
     required this.displayName,
-    this.avatarUrl,
+    this.profileImageUpdatedAt = 0,
   });
 
   final String id;
   final String displayName;
-  final Uri? avatarUrl;
+
+  /// Version used to invalidate this user's cached Mattermost profile image.
+  final int profileImageUpdatedAt;
 }
 
 final class PostReaction {

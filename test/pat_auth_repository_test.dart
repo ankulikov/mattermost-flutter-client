@@ -111,6 +111,12 @@ final class _ApiClient implements MattermostApiClient {
 
 final class _AuthApi implements MattermostApi {
   @override
+  Future<MattermostImageDto> getUserProfileImage({
+    required String userId,
+    int lastPictureUpdate = 0,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostUserDto> getCurrentUser() async =>
       const MattermostUserDto(id: 'user-1', username: 'ada');
 

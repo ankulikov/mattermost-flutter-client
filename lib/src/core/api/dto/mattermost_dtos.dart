@@ -4,6 +4,8 @@
 /// rows must be produced by explicit mappers.
 library;
 
+import 'dart:typed_data';
+
 typedef JsonMap = Map<String, Object?>;
 
 final class MattermostUserDto {
@@ -25,6 +27,8 @@ final class MattermostUserDto {
     this.props,
     this.lastPasswordUpdate = 0,
     this.lastPictureUpdate = 0,
+    this.isBot = false,
+    this.botLastIconUpdate = 0,
     this.failedAttempts = 0,
     this.mfaActive = false,
     this.timezone,
@@ -50,6 +54,8 @@ final class MattermostUserDto {
     props: _nested(json, 'props', UserPropsDto.fromJson),
     lastPasswordUpdate: _int(json, 'last_password_update'),
     lastPictureUpdate: _int(json, 'last_picture_update'),
+    isBot: _bool(json, 'is_bot'),
+    botLastIconUpdate: _int(json, 'bot_last_icon_update'),
     failedAttempts: _int(json, 'failed_attempts'),
     mfaActive: _bool(json, 'mfa_active'),
     timezone: _nested(json, 'timezone', MattermostTimezoneDto.fromJson),
@@ -74,11 +80,24 @@ final class MattermostUserDto {
   final UserPropsDto? props;
   final int lastPasswordUpdate;
   final int lastPictureUpdate;
+  final bool isBot;
+  final int botLastIconUpdate;
   final int failedAttempts;
   final bool mfaActive;
   final MattermostTimezoneDto? timezone;
   final String? termsOfServiceId;
   final int termsOfServiceCreateAt;
+
+  int get profileImageUpdatedAt =>
+      isBot ? botLastIconUpdate : lastPictureUpdate;
+}
+
+/// Binary response returned by the user profile-image endpoint.
+final class MattermostImageDto {
+  const MattermostImageDto({required this.bytes, this.contentType});
+
+  final Uint8List bytes;
+  final String? contentType;
 }
 
 final class UserNotifyPropsDto {

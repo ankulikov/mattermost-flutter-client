@@ -24,6 +24,10 @@ import 'package:mattermost_flutter/src/features/threads/domain/followed_threads_
 import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
+import 'package:mattermost_flutter/src/features/users/data/api_user_avatar_repository.dart';
+import 'package:mattermost_flutter/src/features/users/data/user_avatar_cache.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_avatar_repository.dart';
 
 final Provider<CredentialStore> credentialStoreProvider =
     Provider<CredentialStore>((Ref ref) => SecureCredentialStore());
@@ -74,6 +78,32 @@ final Provider<MattermostApi> activeMattermostApiProvider =
         throw StateError('No API client for the active Mattermost account');
       }
       return api;
+    });
+
+final Provider<UserAvatarCache> userAvatarCacheProvider =
+    Provider<UserAvatarCache>((Ref ref) => FlutterUserAvatarCache());
+
+final Provider<UserAvatarRepository> userAvatarRepositoryProvider =
+    Provider<UserAvatarRepository>(
+      (Ref ref) => ApiUserAvatarRepository(
+        api: ref.watch(activeMattermostApiProvider),
+        cache: ref.watch(userAvatarCacheProvider),
+      ),
+    );
+
+typedef UserAvatarRequest = ({String userId, int profileImageUpdatedAt});
+
+final userAvatarProvider = FutureProvider.autoDispose
+    .family<UserAvatar?, UserAvatarRequest>((Ref ref, UserAvatarRequest input) {
+      final AuthSession? session = ref.watch(authSessionProvider);
+      if (session == null || input.userId.isEmpty) return null;
+      return ref
+          .watch(userAvatarRepositoryProvider)
+          .getAvatar(
+            accountId: session.accountId,
+            userId: input.userId,
+            profileImageUpdatedAt: input.profileImageUpdatedAt,
+          );
     });
 
 final Provider<MessageMapper<MattermostPostDto, MattermostUserDto>>

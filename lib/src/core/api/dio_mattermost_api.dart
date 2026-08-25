@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
@@ -54,6 +55,34 @@ final class DioMattermostApi implements MattermostApi {
       data: jsonEncode(userIds),
     );
     return _dtoList(response.data, MattermostUserDto.fromJson);
+  }
+
+  @override
+  Future<MattermostImageDto> getUserProfileImage({
+    required String userId,
+    int lastPictureUpdate = 0,
+  }) async {
+    final Response<List<int>> response = await _withCancellation(
+      (CancelToken? cancelToken) => _dio.get<List<int>>(
+        '/users/$userId/image',
+        queryParameters: <String, Object?>{
+          if (lastPictureUpdate > 0) '_': lastPictureUpdate,
+        },
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: const <String, String>{'Accept': 'image/*'},
+        ),
+        cancelToken: cancelToken,
+      ),
+    );
+    final List<int>? data = response.data;
+    if (data == null) {
+      throw const FormatException('Expected a binary image response');
+    }
+    return MattermostImageDto(
+      bytes: data is Uint8List ? data : Uint8List.fromList(data),
+      contentType: response.headers.value(Headers.contentTypeHeader),
+    );
   }
 
   @override
@@ -191,8 +220,8 @@ final class DioMattermostApi implements MattermostApi {
             _dio.post<Object?>(path, data: data, cancelToken: cancelToken),
       );
 
-  Future<Response<Object?>> _withCancellation(
-    Future<Response<Object?>> Function(CancelToken? cancelToken) request,
+  Future<Response<T>> _withCancellation<T>(
+    Future<Response<T>> Function(CancelToken? cancelToken) request,
   ) async {
     final RequestCancellation? cancellation = RequestCancellation.current;
     if (cancellation == null) return request(null);

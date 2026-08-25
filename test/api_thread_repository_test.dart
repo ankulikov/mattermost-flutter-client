@@ -72,6 +72,12 @@ void main() {
 final class _ThreadApi implements MattermostApi {
   _ThreadApi({this.deletedOnly = false});
 
+  @override
+  Future<MattermostImageDto> getUserProfileImage({
+    required String userId,
+    int lastPictureUpdate = 0,
+  }) => throw UnimplementedError();
+
   final bool deletedOnly;
   int threadCalls = 0;
   String? secondFromPost;

@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/core/ui/avatar_initials.dart';
 import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
 
-class MessageAvatar extends StatelessWidget {
+class MessageAvatar extends ConsumerWidget {
   const MessageAvatar({required this.author, this.radius = 19, super.key});
 
   final PostAuthor author;
   final double radius;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    image: true,
-    label: author.displayName,
-    child: CircleAvatar(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<UserAvatar?> avatar = ref.watch(
+      userAvatarProvider((
+        userId: author.id,
+        profileImageUpdatedAt: author.profileImageUpdatedAt,
+      )),
+    );
+    final Widget fallback = CircleAvatar(
       radius: radius,
       backgroundColor: _avatarColor(author.id),
       foregroundColor: Colors.white,
@@ -23,8 +30,37 @@ class MessageAvatar extends StatelessWidget {
           context,
         ).textTheme.labelMedium?.copyWith(color: Colors.white),
       ),
-    ),
-  );
+    );
+    final double diameter = radius * 2;
+    final int cacheWidth = (diameter * MediaQuery.devicePixelRatioOf(context))
+        .ceil();
+    return Semantics(
+      image: true,
+      label: author.displayName,
+      child: SizedBox.square(
+        dimension: diameter,
+        child: ClipOval(
+          child: avatar.when(
+            data: (UserAvatar? value) => value == null
+                ? fallback
+                : Image.memory(
+                    value.bytes,
+                    fit: BoxFit.cover,
+                    cacheWidth: cacheWidth,
+                    gaplessPlayback: true,
+                    excludeFromSemantics: true,
+                    errorBuilder:
+                        (BuildContext context, Object _, StackTrace? _) {
+                          return fallback;
+                        },
+                  ),
+            loading: () => fallback,
+            error: (Object _, StackTrace _) => fallback,
+          ),
+        ),
+      ),
+    );
+  }
 
   static Color _avatarColor(String id) {
     const List<Color> colors = <Color>[

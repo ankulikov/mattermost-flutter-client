@@ -9,6 +9,28 @@ import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 
 void main() {
+  test('downloads a versioned authenticated profile image as bytes', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      bytes: Uint8List.fromList(<int>[1, 2, 3]),
+      contentType: 'image/png',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    final MattermostImageDto image = await api.getUserProfileImage(
+      userId: 'user-1',
+      lastPictureUpdate: 1234,
+    );
+
+    expect(adapter.request?.path, '/users/user-1/image');
+    expect(adapter.request?.queryParameters, <String, Object?>{'_': 1234});
+    expect(adapter.request?.headers['Accept'], 'image/*');
+    expect(adapter.request?.responseType, ResponseType.bytes);
+    expect(image.bytes, <int>[1, 2, 3]);
+    expect(image.contentType, 'image/png');
+  });
+
   test('sends the complete cursor for upward thread pagination', () async {
     final _RecordingAdapter adapter = _RecordingAdapter();
     final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
@@ -112,9 +134,13 @@ final class _RecordingAdapter implements HttpClientAdapter {
     this.body =
         '{"order":[],"posts":{},"next_post_id":"",'
         '"prev_post_id":"","has_next":false}',
+    this.bytes,
+    this.contentType = 'application/json',
   });
 
   final String body;
+  final Uint8List? bytes;
+  final String contentType;
   RequestOptions? request;
 
   @override
@@ -124,11 +150,13 @@ final class _RecordingAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     request = options;
-    return ResponseBody.fromString(
-      body,
+    return ResponseBody(
+      bytes == null
+          ? Stream<Uint8List>.value(Uint8List.fromList(body.codeUnits))
+          : Stream<Uint8List>.value(bytes!),
       200,
       headers: <String, List<String>>{
-        Headers.contentTypeHeader: <String>['application/json'],
+        Headers.contentTypeHeader: <String>[contentType],
       },
     );
   }

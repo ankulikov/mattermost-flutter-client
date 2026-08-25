@@ -87,8 +87,11 @@ final class ApiFollowedThreadsRepository implements FollowedThreadsRepository {
             unreadMentions: raw.unreadMentions,
             participants: List<PostAuthor>.unmodifiable(
               raw.participants.map(
-                (MattermostUserDto user) =>
-                    PostAuthor(id: user.id, displayName: _displayName(user)),
+                (MattermostUserDto user) => PostAuthor(
+                  id: user.id,
+                  displayName: _displayName(user),
+                  profileImageUpdatedAt: user.profileImageUpdatedAt,
+                ),
               ),
             ),
           );

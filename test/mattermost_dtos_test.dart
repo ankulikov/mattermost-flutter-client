@@ -2,6 +2,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 
 void main() {
+  test('decodes profile picture versions for people and bots', () {
+    final MattermostUserDto person = MattermostUserDto.fromJson(
+      <String, Object?>{
+        'id': 'person-1',
+        'username': 'person',
+        'last_picture_update': 123,
+      },
+    );
+    final MattermostUserDto bot = MattermostUserDto.fromJson(<String, Object?>{
+      'id': 'bot-1',
+      'username': 'bot',
+      'is_bot': true,
+      'last_picture_update': 123,
+      'bot_last_icon_update': 456,
+    });
+
+    expect(person.profileImageUpdatedAt, 123);
+    expect(bot.profileImageUpdatedAt, 456);
+  });
+
   test('decodes channel categories with their separate order', () {
     final MattermostChannelCategoriesDto result =
         MattermostChannelCategoriesDto.fromJson(<String, Object?>{

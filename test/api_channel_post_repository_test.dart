@@ -32,6 +32,7 @@ void main() {
         'post-2',
       ]);
       expect(latest.posts.first.replyCount, 1);
+      expect(latest.posts.first.author.profileImageUpdatedAt, 99);
       expect(
         latest.posts.first.lastReplyAt,
         DateTime.fromMillisecondsSinceEpoch(2100),
@@ -86,6 +87,12 @@ void main() {
 
 final class _FakePostApi implements MattermostApi {
   _FakePostApi({this.hasReplyOnlyLatest = false});
+
+  @override
+  Future<MattermostImageDto> getUserProfileImage({
+    required String userId,
+    int lastPictureUpdate = 0,
+  }) => throw UnimplementedError();
 
   @override
   Future<MattermostUserThreadsDto> getUserThreads({
@@ -154,7 +161,12 @@ final class _FakePostApi implements MattermostApi {
   @override
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async =>
       const <MattermostUserDto>[
-        MattermostUserDto(id: 'ada', username: 'ada', firstName: 'Ada'),
+        MattermostUserDto(
+          id: 'ada',
+          username: 'ada',
+          firstName: 'Ada',
+          lastPictureUpdate: 99,
+        ),
       ];
 
   MattermostPostDto _post(String id, int createAt, {String rootId = ''}) =>
