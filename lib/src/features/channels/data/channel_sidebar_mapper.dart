@@ -1,5 +1,6 @@
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_display_name.dart';
 
 SidebarTeam mapTeam(MattermostTeamDto dto) => SidebarTeam(
   id: _required(dto.id, 'team.id'),
@@ -127,14 +128,13 @@ List<SidebarSection> mapSections({
   return List<SidebarSection>.unmodifiable(sections);
 }
 
-String userDisplayName(MattermostUserDto user) {
-  final String fullName = <String>[user.firstName, user.lastName]
-      .map((String value) => value.trim())
-      .where((String value) => value.isNotEmpty)
-      .join(' ');
-  if (fullName.isNotEmpty) return fullName;
-  return _required(user.username, 'user.username');
-}
+String userDisplayName(MattermostUserDto user) => resolveUserDisplayName(
+  id: user.id,
+  username: user.username,
+  nickname: user.nickname,
+  firstName: user.firstName,
+  lastName: user.lastName,
+);
 
 String _categoryDisplayName(MattermostChannelCategoryDto dto) {
   if (dto.displayName.trim().isNotEmpty) {

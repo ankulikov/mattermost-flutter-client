@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 
 final class DioMattermostApi implements MattermostApi {
   DioMattermostApi({required Dio dio}) : _dio = dio;
@@ -11,15 +12,13 @@ final class DioMattermostApi implements MattermostApi {
 
   @override
   Future<MattermostUserDto> getCurrentUser() async {
-    final Response<Object?> response = await _dio.get<Object?>('/users/me');
+    final Response<Object?> response = await _get('/users/me');
     return MattermostUserDto.fromJson(_object(response.data));
   }
 
   @override
   Future<List<MattermostTeamDto>> getTeamsForCurrentUser() async {
-    final Response<Object?> response = await _dio.get<Object?>(
-      '/users/me/teams',
-    );
+    final Response<Object?> response = await _get('/users/me/teams');
     return _dtoList(response.data, MattermostTeamDto.fromJson);
   }
 
@@ -29,7 +28,7 @@ final class DioMattermostApi implements MattermostApi {
     required String teamId,
     String? etag,
   }) async {
-    final Response<Object?> response = await _dio.get<Object?>(
+    final Response<Object?> response = await _get(
       '/users/$userId/teams/$teamId/channels',
       options: Options(headers: _conditionalHeaders(etag)),
     );
@@ -41,7 +40,7 @@ final class DioMattermostApi implements MattermostApi {
     required String userId,
     required String teamId,
   }) async {
-    final Response<Object?> response = await _dio.get<Object?>(
+    final Response<Object?> response = await _get(
       '/users/$userId/teams/$teamId/channels/categories',
     );
     return MattermostChannelCategoriesDto.fromJson(_object(response.data));
@@ -50,7 +49,7 @@ final class DioMattermostApi implements MattermostApi {
   @override
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async {
     if (userIds.isEmpty) return const <MattermostUserDto>[];
-    final Response<Object?> response = await _dio.post<Object?>(
+    final Response<Object?> response = await _post(
       '/users/ids',
       data: jsonEncode(userIds),
     );
@@ -66,7 +65,7 @@ final class DioMattermostApi implements MattermostApi {
         usersByChannelId: <String, List<MattermostUserDto>>{},
       );
     }
-    final Response<Object?> response = await _dio.post<Object?>(
+    final Response<Object?> response = await _post(
       '/users/group_channels',
       data: jsonEncode(channelIds),
     );
@@ -91,7 +90,7 @@ final class DioMattermostApi implements MattermostApi {
     int perPage = 60,
     String? etag,
   }) async {
-    final Response<Object?> response = await _dio.get<Object?>(
+    final Response<Object?> response = await _get(
       '/channels/$channelId/posts',
       queryParameters: <String, Object?>{'page': page, 'per_page': perPage},
       options: Options(headers: _conditionalHeaders(etag)),
@@ -106,7 +105,7 @@ final class DioMattermostApi implements MattermostApi {
     int page = 0,
     int perPage = 60,
   }) async {
-    final Response<Object?> response = await _dio.get<Object?>(
+    final Response<Object?> response = await _get(
       '/channels/$channelId/posts',
       queryParameters: <String, Object?>{
         'before': postId,
@@ -122,7 +121,7 @@ final class DioMattermostApi implements MattermostApi {
     required String channelId,
     required int since,
   }) async {
-    final Response<Object?> response = await _dio.get<Object?>(
+    final Response<Object?> response = await _get(
       '/channels/$channelId/posts',
       queryParameters: <String, Object?>{'since': since},
     );
@@ -137,7 +136,7 @@ final class DioMattermostApi implements MattermostApi {
     int? fromCreateAt,
     PostThreadDirection direction = PostThreadDirection.up,
   }) async {
-    final Response<Object?> response = await _dio.get<Object?>(
+    final Response<Object?> response = await _get(
       '/posts/$rootPostId/thread',
       queryParameters: <String, Object?>{
         'perPage': perPage,
@@ -158,7 +157,7 @@ final class DioMattermostApi implements MattermostApi {
     bool extended = true,
     bool unread = false,
   }) async {
-    final Response<Object?> response = await _dio.get<Object?>(
+    final Response<Object?> response = await _get(
       '/users/$userId/teams/$teamId/threads',
       queryParameters: <String, Object?>{
         'per_page': perPage,
@@ -172,6 +171,39 @@ final class DioMattermostApi implements MattermostApi {
 
   static Map<String, String>? _conditionalHeaders(String? etag) =>
       etag == null ? null : <String, String>{'If-None-Match': etag};
+
+  Future<Response<Object?>> _get(
+    String path, {
+    Map<String, Object?>? queryParameters,
+    Options? options,
+  }) => _withCancellation(
+    (CancelToken? cancelToken) => _dio.get<Object?>(
+      path,
+      queryParameters: queryParameters,
+      options: options,
+      cancelToken: cancelToken,
+    ),
+  );
+
+  Future<Response<Object?>> _post(String path, {Object? data}) =>
+      _withCancellation(
+        (CancelToken? cancelToken) =>
+            _dio.post<Object?>(path, data: data, cancelToken: cancelToken),
+      );
+
+  Future<Response<Object?>> _withCancellation(
+    Future<Response<Object?>> Function(CancelToken? cancelToken) request,
+  ) async {
+    final RequestCancellation? cancellation = RequestCancellation.current;
+    if (cancellation == null) return request(null);
+    final CancelToken token = CancelToken();
+    final void Function() detach = cancellation.addListener(token.cancel);
+    try {
+      return await request(token);
+    } finally {
+      detach();
+    }
+  }
 
   static Map<String, Object?> _object(Object? value) {
     if (value is Map<String, Object?>) return value;

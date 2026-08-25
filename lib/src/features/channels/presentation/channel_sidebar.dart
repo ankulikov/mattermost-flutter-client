@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
-import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
 

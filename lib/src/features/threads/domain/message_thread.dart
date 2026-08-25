@@ -1,4 +1,4 @@
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 
 final class MessageThread {
   const MessageThread({

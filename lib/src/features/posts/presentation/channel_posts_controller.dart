@@ -1,16 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
+import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
+import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
-import 'package:mattermost_flutter/src/features/posts/data/api_channel_post_repository.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
-
-final Provider<ChannelPostRepository> channelPostRepositoryProvider =
-    Provider<ChannelPostRepository>(
-      (Ref ref) =>
-          ApiChannelPostRepository(credentialStore: SecureCredentialStore()),
-    );
 
 final class ChannelPostsViewState {
   const ChannelPostsViewState({
@@ -46,45 +39,56 @@ final class ChannelPostsViewState {
   );
 }
 
-final channelPostsProvider = AsyncNotifierProvider.autoDispose
-    .family<ChannelPostsController, ChannelPostsViewState, String>(
-      ChannelPostsController.new,
-    );
-
 final class ChannelPostsController
     extends AsyncNotifier<ChannelPostsViewState> {
-  ChannelPostsController(this.channelId);
+  ChannelPostsController(
+    this.channelId,
+    this._sessionProvider,
+    this._repositoryProvider,
+  );
 
   final String channelId;
+  final Provider<AuthSession?> _sessionProvider;
+  final Provider<ChannelPostRepository> _repositoryProvider;
+  late RequestCancellation _cancellation;
   AuthSession? _session;
   ChannelPostRepository? _repository;
   bool _olderRunning = false;
 
   @override
   Future<ChannelPostsViewState> build() async {
-    final AuthSession? session = ref.watch(
-      authControllerProvider.select((AuthState value) => value.session),
-    );
+    final RequestCancellation cancellation = RequestCancellation();
+    _cancellation = cancellation;
+    ref.onDispose(cancellation.cancel);
+    _session = null;
+    _repository = null;
+    final AuthSession? session = ref.watch(_sessionProvider);
     if (session == null) {
       return const ChannelPostsViewState(
         posts: <ChannelPost>[],
         hasOlder: false,
       );
     }
-    final ChannelPostRepository repository = ref.watch(
-      channelPostRepositoryProvider,
-    );
+    final ChannelPostRepository repository = ref.watch(_repositoryProvider);
     _session = session;
     _repository = repository;
-    return _loadLatest(session, repository);
+    return cancellation.run(() => _loadLatest(session, repository));
   }
 
   Future<void> retry() async {
     final AuthSession? session = _session;
     final ChannelPostRepository? repository = _repository;
     if (session == null || repository == null) return;
+    final RequestCancellation cancellation = _cancellation;
     state = const AsyncLoading<ChannelPostsViewState>();
-    state = await AsyncValue.guard(() => _loadLatest(session, repository));
+    try {
+      state = AsyncData(
+        await cancellation.run(() => _loadLatest(session, repository)),
+      );
+    } on Object catch (error, stackTrace) {
+      if (cancellation.isCancelled) return;
+      state = AsyncError<ChannelPostsViewState>(error, stackTrace);
+    }
   }
 
   Future<void> loadOlder() async {
@@ -100,15 +104,18 @@ final class ChannelPostsController
         !current.hasOlder) {
       return;
     }
+    final RequestCancellation cancellation = _cancellation;
     _olderRunning = true;
     state = AsyncData(
       current.copyWith(isLoadingOlder: true, loadFailed: false),
     );
     try {
-      final ChannelPostPage page = await repository.loadOlder(
-        session: session,
-        channelId: channelId,
-        beforePostId: beforePostId,
+      final ChannelPostPage page = await cancellation.run(
+        () => repository.loadOlder(
+          session: session,
+          channelId: channelId,
+          beforePostId: beforePostId,
+        ),
       );
       final ChannelPostsViewState? latest = state.value;
       if (latest == null) return;
@@ -126,6 +133,7 @@ final class ChannelPostsController
         ),
       );
     } on Object {
+      if (cancellation.isCancelled) return;
       final ChannelPostsViewState? latest = state.value;
       if (latest != null) {
         state = AsyncData(
@@ -134,9 +142,11 @@ final class ChannelPostsController
       }
     } finally {
       _olderRunning = false;
-      final ChannelPostsViewState? latest = state.value;
-      if (latest != null && latest.isLoadingOlder) {
-        state = AsyncData(latest.copyWith(isLoadingOlder: false));
+      if (!cancellation.isCancelled) {
+        final ChannelPostsViewState? latest = state.value;
+        if (latest != null && latest.isLoadingOlder) {
+          state = AsyncData(latest.copyWith(isLoadingOlder: false));
+        }
       }
     }
   }
@@ -172,14 +182,14 @@ final class ChannelPostsController
               replyCount: existing.replyCount > post.replyCount
                   ? existing.replyCount
                   : post.replyCount,
-              lastReplyAt: _latest(existing.lastReplyAt, post.lastReplyAt),
+              lastReplyAt: latestDateTime(
+                existing.lastReplyAt,
+                post.lastReplyAt,
+              ),
             );
     }
     final List<ChannelPost> result = byId.values.toList(growable: false)
-      ..sort((ChannelPost a, ChannelPost b) {
-        final int byTime = a.sentAt.compareTo(b.sentAt);
-        return byTime != 0 ? byTime : a.id.compareTo(b.id);
-      });
+      ..sort(compareMessagesBySentAt);
     return List<ChannelPost>.unmodifiable(result);
   }
 
@@ -196,7 +206,7 @@ final class ChannelPostsController
               ...?current[rootId]?.replyIds,
               ...?incoming[rootId]?.replyIds,
             }),
-            lastReplyAt: _latest(
+            lastReplyAt: latestDateTime(
               current[rootId]?.lastReplyAt,
               incoming[rootId]?.lastReplyAt,
             ),
@@ -217,14 +227,8 @@ final class ChannelPostsController
         replyCount: post.replyCount > observedCount
             ? post.replyCount
             : observedCount,
-        lastReplyAt: _latest(post.lastReplyAt, summary.lastReplyAt),
+        lastReplyAt: latestDateTime(post.lastReplyAt, summary.lastReplyAt),
       );
     }),
   );
-
-  static DateTime? _latest(DateTime? first, DateTime? second) {
-    if (first == null) return second;
-    if (second == null) return first;
-    return first.isAfter(second) ? first : second;
-  }
 }

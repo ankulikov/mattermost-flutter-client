@@ -4,15 +4,21 @@ import 'package:mattermost_flutter/src/core/api/debug_http_logging_interceptor.d
 import 'package:mattermost_flutter/src/core/api/dio_mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 
-abstract interface class MattermostApiFactory {
-  MattermostApi create({required Uri serverUrl, required String token});
+abstract interface class MattermostApiClientFactory {
+  MattermostApiClient create({required Uri serverUrl, required String token});
 }
 
-final class MattermostClientFactory implements MattermostApiFactory {
+abstract interface class MattermostApiClient {
+  MattermostApi get api;
+
+  void close();
+}
+
+final class MattermostClientFactory implements MattermostApiClientFactory {
   const MattermostClientFactory();
 
   @override
-  MattermostApi create({required Uri serverUrl, required String token}) {
+  MattermostApiClient create({required Uri serverUrl, required String token}) {
     final String base = serverUrl.toString().replaceAll(RegExp(r'/$'), '');
     final Dio dio = Dio(
       BaseOptions(
@@ -28,6 +34,18 @@ final class MattermostClientFactory implements MattermostApiFactory {
     if (kDebugMode) {
       dio.interceptors.add(DebugHttpLoggingInterceptor());
     }
-    return DioMattermostApi(dio: dio);
+    return DioMattermostApiClient(dio);
   }
+}
+
+final class DioMattermostApiClient implements MattermostApiClient {
+  DioMattermostApiClient(this._dio) : api = DioMattermostApi(dio: _dio);
+
+  final Dio _dio;
+
+  @override
+  final MattermostApi api;
+
+  @override
+  void close() => _dio.close(force: true);
 }

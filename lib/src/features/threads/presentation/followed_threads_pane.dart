@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/features/messages/presentation/message_primitives.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_strings.dart';
@@ -242,10 +244,7 @@ class _ThreadTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              CircleAvatar(
-                radius: 18,
-                child: Text(_initials(thread.root.author.displayName)),
-              ),
+              MessageAvatar(author: thread.root.author, radius: 18),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -310,14 +309,6 @@ class _ThreadTile extends StatelessWidget {
     }
     return FollowedThreadsStrings.replies(thread.replyCount);
   }
-
-  static String _initials(String name) => name
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((String part) => part.isNotEmpty)
-      .take(2)
-      .map((String part) => part[0].toUpperCase())
-      .join();
 }
 
 class _UnreadIndicator extends StatelessWidget {

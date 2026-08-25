@@ -1,17 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
+import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
-import 'package:mattermost_flutter/src/features/threads/data/api_followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_threads_repository.dart';
-
-final Provider<FollowedThreadsRepository> followedThreadsRepositoryProvider =
-    Provider<FollowedThreadsRepository>(
-      (Ref ref) => ApiFollowedThreadsRepository(
-        credentialStore: SecureCredentialStore(),
-      ),
-    );
 
 final class FollowedThreadsViewState {
   const FollowedThreadsViewState({
@@ -57,33 +48,38 @@ final class FollowedThreadsViewState {
   );
 }
 
-final followedThreadsProvider = AsyncNotifierProvider.autoDispose
-    .family<FollowedThreadsController, FollowedThreadsViewState, String>(
-      FollowedThreadsController.new,
-    );
-
 final class FollowedThreadsController
     extends AsyncNotifier<FollowedThreadsViewState> {
-  FollowedThreadsController(this.teamId);
+  FollowedThreadsController(
+    this.teamId,
+    this._sessionProvider,
+    this._repositoryProvider,
+  );
 
   final String teamId;
+  final Provider<AuthSession?> _sessionProvider;
+  final Provider<FollowedThreadsRepository> _repositoryProvider;
+  late RequestCancellation _cancellation;
   AuthSession? _session;
   FollowedThreadsRepository? _repository;
   bool _busy = false;
 
   @override
   Future<FollowedThreadsViewState> build() async {
-    final AuthSession? session = ref.watch(
-      authControllerProvider.select((AuthState state) => state.session),
-    );
+    final RequestCancellation cancellation = RequestCancellation();
+    _cancellation = cancellation;
+    ref.onDispose(cancellation.cancel);
+    _session = null;
+    _repository = null;
+    final AuthSession? session = ref.watch(_sessionProvider);
     if (session == null) return const FollowedThreadsViewState();
-    final FollowedThreadsRepository repository = ref.watch(
-      followedThreadsRepositoryProvider,
-    );
+    final FollowedThreadsRepository repository = ref.watch(_repositoryProvider);
     _session = session;
     _repository = repository;
     return _stateFromPage(
-      await repository.loadPage(session: session, teamId: teamId),
+      await cancellation.run(
+        () => repository.loadPage(session: session, teamId: teamId),
+      ),
     );
   }
 
@@ -93,6 +89,7 @@ final class FollowedThreadsController
     final AuthSession? session = _session;
     final FollowedThreadsRepository? repository = _repository;
     if (session == null || repository == null) return;
+    final RequestCancellation cancellation = _cancellation;
     _busy = true;
     state = AsyncData(
       current.copyWith(isRefreshing: true, refreshFailed: false),
@@ -100,10 +97,13 @@ final class FollowedThreadsController
     try {
       state = AsyncData(
         _stateFromPage(
-          await repository.loadPage(session: session, teamId: teamId),
+          await cancellation.run(
+            () => repository.loadPage(session: session, teamId: teamId),
+          ),
         ),
       );
     } on Object {
+      if (cancellation.isCancelled) return;
       state = AsyncData(
         current.copyWith(isRefreshing: false, refreshFailed: true),
       );
@@ -120,15 +120,18 @@ final class FollowedThreadsController
     final AuthSession? session = _session;
     final FollowedThreadsRepository? repository = _repository;
     if (session == null || repository == null) return;
+    final RequestCancellation cancellation = _cancellation;
     _busy = true;
     state = AsyncData(
       current.copyWith(isLoadingMore: true, loadMoreFailed: false),
     );
     try {
-      final FollowedThreadsPage page = await repository.loadPage(
-        session: session,
-        teamId: teamId,
-        before: current.items.last.id,
+      final FollowedThreadsPage page = await cancellation.run(
+        () => repository.loadPage(
+          session: session,
+          teamId: teamId,
+          before: current.items.last.id,
+        ),
       );
       final Map<String, FollowedThread> merged = <String, FollowedThread>{
         for (final FollowedThread item in current.items) item.id: item,
@@ -143,6 +146,7 @@ final class FollowedThreadsController
         ),
       );
     } on Object {
+      if (cancellation.isCancelled) return;
       state = AsyncData(
         current.copyWith(isLoadingMore: false, loadMoreFailed: true),
       );

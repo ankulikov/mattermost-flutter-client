@@ -1,35 +1,33 @@
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
+import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/posts/data/mattermost_post_mapper.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 
 final class ApiChannelPostRepository implements ChannelPostRepository {
-  ApiChannelPostRepository({
-    required CredentialStore credentialStore,
-    MattermostApiFactory clientFactory = const MattermostClientFactory(),
-  }) : _credentialStore = credentialStore,
-       _clientFactory = clientFactory;
+  const ApiChannelPostRepository({
+    required MattermostApi api,
+    required MessageMapper<MattermostPostDto, MattermostUserDto> messageMapper,
+  }) : _api = api,
+       _messageMapper = messageMapper;
 
   static const int pageSize = 60;
 
-  final CredentialStore _credentialStore;
-  final MattermostApiFactory _clientFactory;
+  final MattermostApi _api;
+  final MessageMapper<MattermostPostDto, MattermostUserDto> _messageMapper;
 
   @override
   Future<ChannelPostPage> loadLatest({
     required AuthSession session,
     required String channelId,
   }) async {
-    final MattermostApi api = await _apiFor(session);
-    final MattermostPostListDto response = await api.getPostsForChannel(
+    final MattermostPostListDto response = await _api.getPostsForChannel(
       channelId: channelId,
       perPage: pageSize,
     );
-    return _mapPage(api: api, session: session, response: response);
+    return _mapPage(api: _api, session: session, response: response);
   }
 
   @override
@@ -38,13 +36,12 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
     required String channelId,
     required String beforePostId,
   }) async {
-    final MattermostApi api = await _apiFor(session);
-    final MattermostPostListDto response = await api.getPostsBefore(
+    final MattermostPostListDto response = await _api.getPostsBefore(
       channelId: channelId,
       postId: beforePostId,
       perPage: pageSize,
     );
-    return _mapPage(api: api, session: session, response: response);
+    return _mapPage(api: _api, session: session, response: response);
   }
 
   Future<ChannelPostPage> _mapPage({
@@ -63,7 +60,7 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
     final List<MattermostUserDto> users = userIds.isEmpty
         ? const <MattermostUserDto>[]
         : await api.getUsersByIds(userIds.toList(growable: false));
-    final List<ChannelPost> mappedPosts = mapMattermostPosts(
+    final List<ChannelPost> mappedPosts = _messageMapper.map(
       posts: orderedPosts,
       users: users,
       currentUserId: session.userId,
@@ -78,7 +75,7 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
                   _applyReplySummary(post, replySummaries[post.id]),
             )
             .toList(growable: false)
-          ..sort(_comparePosts);
+          ..sort(compareMessagesBySentAt);
     final String? beforePostId = response.order.lastOrNull;
     return ChannelPostPage(
       posts: List<ChannelPost>.unmodifiable(roots),
@@ -88,23 +85,6 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
       beforePostId: beforePostId,
       hasOlder: beforePostId != null && response.previousPostId.isNotEmpty,
     );
-  }
-
-  Future<MattermostApi> _apiFor(AuthSession session) async {
-    final ({Uri serverUrl, String token})? credentials = await _credentialStore
-        .read();
-    if (credentials == null || credentials.serverUrl != session.serverUrl) {
-      throw StateError('No credentials for active Mattermost account');
-    }
-    return _clientFactory.create(
-      serverUrl: credentials.serverUrl,
-      token: credentials.token,
-    );
-  }
-
-  static int _comparePosts(ChannelPost a, ChannelPost b) {
-    final int byTime = a.sentAt.compareTo(b.sentAt);
-    return byTime != 0 ? byTime : a.id.compareTo(b.id);
   }
 
   static Map<String, ChannelReplySummary> _collectReplySummaries(
@@ -140,13 +120,7 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
       replyCount: post.replyCount > observedCount
           ? post.replyCount
           : observedCount,
-      lastReplyAt: _latest(post.lastReplyAt, summary.lastReplyAt),
+      lastReplyAt: latestDateTime(post.lastReplyAt, summary.lastReplyAt),
     );
-  }
-
-  static DateTime? _latest(DateTime? first, DateTime? second) {
-    if (first == null) return second;
-    if (second == null) return first;
-    return first.isAfter(second) ? first : second;
   }
 }

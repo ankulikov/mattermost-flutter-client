@@ -1,22 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/bootstrap/presentation/bootstrap_page.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
-import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
-import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
-import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_controller.dart';
-import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
 
 void main() {
   testWidgets('uses a drawer on compact screens', (WidgetTester tester) async {

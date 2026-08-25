@@ -39,6 +39,13 @@ Presentation не вызывает HTTP, WebSocket, DAO или secure storage н
 Контроллер обращается к domain-контракту репозитория; data-реализация получает
 DTO через `MattermostApi` и явно преобразует их в domain entities.
 
+Provider wiring находится в `app/di`: presentation-классы получают только
+domain-контракты через конструкторы. Auth-репозиторий владеет единственным
+закрываемым `MattermostApi` активного аккаунта. Он читает secure storage один раз
+при восстановлении сессии или использует только что введенный PAT, а logout и
+смена сервера закрывают Dio вместе с его connection pool. Feature-repository
+получают уже аутентифицированный API и не имеют доступа к токену.
+
 ## Модули и зависимости
 
 Продуктовый код организован вертикальными feature slices:
@@ -58,6 +65,11 @@ presentation -> domain <- data -> core infrastructure
 
 Domain не импортирует Flutter, Riverpod, Dio, Drift или API DTO. Все REST-вызовы
 проходят через `MattermostApi`; Dio создается только в core API wiring.
+
+Общая message entity и DTO mapping находятся в публичном `messages` slice.
+Posts и threads не импортируют data/presentation internals друг друга. Единая
+domain policy выбора display name находится в `users/domain`; avatar initials и
+малые author/time/Markdown primitives переиспользуются всеми message surfaces.
 
 ## Посты и пагинация
 
@@ -120,6 +132,9 @@ reply сохраняет позицию и показывается placeholder-
 - Токены хранятся только в secure storage и не попадают в Drift или логи.
 - Большой JSON parsing переносится с UI isolate; запросы и пагинация имеют
   ограниченную конкуренцию и обязаны учитывать rate limits.
+- Auto-disposed контроллер создает framework-neutral request scope. Его
+  `ref.onDispose` отменяет связанные Dio `CancelToken`, не протаскивая Dio через
+  domain-контракты.
 - Каждый Future await-ится либо явно передается в централизованную обработку.
 
 ## Проверка изменений

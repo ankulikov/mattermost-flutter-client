@@ -1,5 +1,5 @@
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 
 final class InMemoryChannelPostRepository implements ChannelPostRepository {

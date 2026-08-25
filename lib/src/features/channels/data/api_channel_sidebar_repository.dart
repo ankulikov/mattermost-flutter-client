@@ -1,39 +1,23 @@
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/channels/data/channel_sidebar_mapper.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
 
 final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
-  ApiChannelSidebarRepository({
-    required CredentialStore credentialStore,
-    MattermostApiFactory clientFactory = const MattermostClientFactory(),
-  }) : _credentialStore = credentialStore,
-       _clientFactory = clientFactory;
+  const ApiChannelSidebarRepository({required MattermostApi api}) : _api = api;
 
-  final CredentialStore _credentialStore;
-  final MattermostApiFactory _clientFactory;
+  final MattermostApi _api;
 
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async {
-    final ({Uri serverUrl, String token})? credentials = await _credentialStore
-        .read();
-    if (credentials == null || credentials.serverUrl != session.serverUrl) {
-      throw StateError('No credentials for active Mattermost account');
-    }
-    final MattermostApi api = _clientFactory.create(
-      serverUrl: credentials.serverUrl,
-      token: credentials.token,
-    );
-    final List<MattermostTeamDto> teams = await api.getTeamsForCurrentUser();
+    final List<MattermostTeamDto> teams = await _api.getTeamsForCurrentUser();
     if (teams.isEmpty) return const ChannelSidebarSnapshot();
     final SidebarTeam team = mapTeam(teams.first);
-    final Future<List<MattermostChannelDto>> channelsFuture = api
+    final Future<List<MattermostChannelDto>> channelsFuture = _api
         .getChannelsForUser(userId: session.userId, teamId: team.id);
-    final Future<MattermostChannelCategoriesDto> categoriesFuture = api
+    final Future<MattermostChannelCategoriesDto> categoriesFuture = _api
         .getChannelCategories(userId: session.userId, teamId: team.id);
     final List<MattermostChannelDto> rawChannels = await channelsFuture;
     final MattermostChannelCategoriesDto categoryResponse =
@@ -43,7 +27,7 @@ final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
         .toList(growable: false);
     try {
       channels = await _resolveDialogNames(
-        api: api,
+        api: _api,
         currentUserId: session.userId,
         channels: channels,
       );

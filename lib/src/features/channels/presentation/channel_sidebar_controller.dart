@@ -1,47 +1,40 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
+import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
-import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
 
-final Provider<ChannelSidebarRepository> channelSidebarRepositoryProvider =
-    Provider<ChannelSidebarRepository>(
-      (Ref ref) =>
-          ApiChannelSidebarRepository(credentialStore: SecureCredentialStore()),
-    );
-
-final AsyncNotifierProvider<ChannelSidebarController, ChannelSidebarSnapshot>
-channelSidebarProvider =
-    AsyncNotifierProvider<ChannelSidebarController, ChannelSidebarSnapshot>(
-      ChannelSidebarController.new,
-    );
-
 final class ChannelSidebarController
     extends AsyncNotifier<ChannelSidebarSnapshot> {
+  ChannelSidebarController(this._sessionProvider, this._repositoryProvider);
+
+  final Provider<AuthSession?> _sessionProvider;
+  final Provider<ChannelSidebarRepository> _repositoryProvider;
+  late RequestCancellation _cancellation;
   AuthSession? _session;
   ChannelSidebarRepository? _repository;
   bool _refreshing = false;
 
   @override
   Future<ChannelSidebarSnapshot> build() async {
-    final AuthSession? session = ref.watch(
-      authControllerProvider.select((AuthState state) => state.session),
-    );
+    final RequestCancellation cancellation = RequestCancellation();
+    _cancellation = cancellation;
+    ref.onDispose(cancellation.cancel);
+    _session = null;
+    _repository = null;
+    final AuthSession? session = ref.watch(_sessionProvider);
     if (session == null) return const ChannelSidebarSnapshot();
-    final ChannelSidebarRepository repository = ref.watch(
-      channelSidebarRepositoryProvider,
-    );
+    final ChannelSidebarRepository repository = ref.watch(_repositoryProvider);
     _session = session;
     _repository = repository;
-    return repository.load(session);
+    return cancellation.run(() => repository.load(session));
   }
 
   Future<void> refresh() async {
     final AuthSession? session = _session;
     final ChannelSidebarRepository? repository = _repository;
     if (_refreshing || session == null || repository == null) return;
+    final RequestCancellation cancellation = _cancellation;
     _refreshing = true;
     final ChannelSidebarSnapshot? current = state.value;
     if (current == null) {
@@ -52,8 +45,9 @@ final class ChannelSidebarController
       );
     }
     try {
-      state = AsyncData(await repository.load(session));
+      state = AsyncData(await cancellation.run(() => repository.load(session)));
     } on Object catch (error, stackTrace) {
+      if (cancellation.isCancelled) return;
       final ChannelSidebarSnapshot? latest = state.value;
       state = latest == null
           ? AsyncError<ChannelSidebarSnapshot>(error, stackTrace)
@@ -65,6 +59,3 @@ final class ChannelSidebarController
     }
   }
 }
-
-Future<void> refreshChannelSidebar(WidgetRef ref) =>
-    ref.read(channelSidebarProvider.notifier).refresh();

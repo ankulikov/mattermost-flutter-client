@@ -1,9 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
+import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/features/posts/data/api_channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 
@@ -19,8 +18,8 @@ void main() {
       );
       final _FakePostApi api = _FakePostApi();
       final ApiChannelPostRepository repository = ApiChannelPostRepository(
-        credentialStore: _CredentialStore(serverUrl),
-        clientFactory: _ApiFactory(api),
+        api: api,
+        messageMapper: const MattermostMessageMapper(),
       );
 
       final ChannelPostPage latest = await repository.loadLatest(
@@ -65,8 +64,8 @@ void main() {
       );
       final _FakePostApi api = _FakePostApi(hasReplyOnlyLatest: true);
       final ApiChannelPostRepository repository = ApiChannelPostRepository(
-        credentialStore: _CredentialStore(serverUrl),
-        clientFactory: _ApiFactory(api),
+        api: api,
+        messageMapper: const MattermostMessageMapper(),
       );
 
       final ChannelPostPage latest = await repository.loadLatest(
@@ -83,31 +82,6 @@ void main() {
       expect(latest.hasOlder, isTrue);
     },
   );
-}
-
-final class _CredentialStore implements CredentialStore {
-  const _CredentialStore(this.serverUrl);
-
-  final Uri serverUrl;
-
-  @override
-  Future<void> clear() async {}
-
-  @override
-  Future<({Uri serverUrl, String token})?> read() async =>
-      (serverUrl: serverUrl, token: 'token');
-
-  @override
-  Future<void> save({required Uri serverUrl, required String token}) async {}
-}
-
-final class _ApiFactory implements MattermostApiFactory {
-  const _ApiFactory(this.api);
-
-  final MattermostApi api;
-
-  @override
-  MattermostApi create({required Uri serverUrl, required String token}) => api;
 }
 
 final class _FakePostApi implements MattermostApi {

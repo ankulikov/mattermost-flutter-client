@@ -1,6 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/features/auth/data/pat_auth_repository.dart';
-import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
@@ -20,15 +18,11 @@ final class AuthState {
   final AuthFailureKind? failure;
 }
 
-final Provider<AuthRepository> authRepositoryProvider =
-    Provider<AuthRepository>(
-      (Ref ref) => PatAuthRepository(credentialStore: SecureCredentialStore()),
-    );
-
-final NotifierProvider<AuthController, AuthState> authControllerProvider =
-    NotifierProvider<AuthController, AuthState>(AuthController.new);
-
 final class AuthController extends Notifier<AuthState> {
+  AuthController(this._repositoryProvider);
+
+  final Provider<AuthRepository> _repositoryProvider;
+
   @override
   AuthState build() => const AuthState();
 
@@ -37,7 +31,7 @@ final class AuthController extends Notifier<AuthState> {
     state = const AuthState(phase: AuthPhase.restoring);
     try {
       final AuthSession? session = await ref
-          .read(authRepositoryProvider)
+          .read(_repositoryProvider)
           .restoreSession();
       state = session == null
           ? const AuthState()
@@ -54,7 +48,7 @@ final class AuthController extends Notifier<AuthState> {
     state = const AuthState(phase: AuthPhase.submitting);
     try {
       final AuthSession session = await AuthenticateWithPat(
-        ref.read(authRepositoryProvider),
+        ref.read(_repositoryProvider),
       )(serverUrl: serverUrl, token: token);
       state = AuthState(phase: AuthPhase.signedIn, session: session);
       return true;
@@ -65,7 +59,7 @@ final class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> signOut() async {
-    await ref.read(authRepositoryProvider).signOut();
+    await ref.read(_repositoryProvider).signOut();
     state = const AuthState();
   }
 }

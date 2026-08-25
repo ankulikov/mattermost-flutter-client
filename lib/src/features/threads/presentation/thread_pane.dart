@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
+import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/messages/presentation/message_primitives.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_strings.dart';
 
@@ -166,59 +167,29 @@ class _ThreadPost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String time = MaterialLocalizations.of(
-      context,
-    ).formatTimeOfDay(TimeOfDay.fromDateTime(post.sentAt));
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        CircleAvatar(child: Text(_initials(post.author.displayName))),
+        MessageAvatar(author: post.author),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Wrap(
-                spacing: 8,
-                children: <Widget>[
-                  Text(
-                    post.author.displayName,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(time, style: Theme.of(context).textTheme.labelMedium),
-                ],
-              ),
+              MessageAuthorLine(author: post.author, sentAt: post.sentAt),
               const SizedBox(height: 4),
-              if (post.isDeleted)
-                Text(
-                  ThreadStrings.deletedMessage,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic),
-                )
-              else
-                MattermostMarkdown(
-                  data: post.message,
-                  serverUrl: serverUrl,
-                  onTapChannel: onSelectChannel,
-                  textStyle: Theme.of(context).textTheme.bodyMedium,
-                ),
+              MessageBody(
+                post: post,
+                serverUrl: serverUrl,
+                onSelectChannel: onSelectChannel,
+                deletedMessage: ThreadStrings.deletedMessage,
+              ),
             ],
           ),
         ),
       ],
     );
   }
-
-  static String _initials(String name) => name
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((part) => part.isNotEmpty)
-      .take(2)
-      .map((part) => part[0].toUpperCase())
-      .join();
 }
 
 class _ThreadError extends StatelessWidget {

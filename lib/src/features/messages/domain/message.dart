@@ -22,6 +22,7 @@ final class PostReaction {
   final bool reactedByCurrentUser;
 }
 
+/// Shared message entity used by channel, thread, and followed-thread slices.
 final class ChannelPost {
   const ChannelPost({
     required this.id,
@@ -64,4 +65,9 @@ final class ChannelPost {
     lastReplyAt: lastReplyAt,
     isDeleted: isDeleted,
   );
+}
+
+int compareMessagesBySentAt(ChannelPost first, ChannelPost second) {
+  final int byTime = first.sentAt.compareTo(second.sentAt);
+  return byTime != 0 ? byTime : first.id.compareTo(second.id);
 }

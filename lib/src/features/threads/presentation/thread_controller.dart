@@ -1,16 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
+import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
-import 'package:mattermost_flutter/src/features/threads/data/api_thread_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
-
-final Provider<ThreadRepository> threadRepositoryProvider =
-    Provider<ThreadRepository>(
-      (Ref ref) =>
-          ApiThreadRepository(credentialStore: SecureCredentialStore()),
-    );
 
 final class ThreadViewState {
   const ThreadViewState({
@@ -34,31 +26,37 @@ final class ThreadViewState {
   );
 }
 
-final threadProvider = AsyncNotifierProvider.autoDispose
-    .family<ThreadController, ThreadViewState, String>(ThreadController.new);
-
 final class ThreadController extends AsyncNotifier<ThreadViewState> {
-  ThreadController(this.rootPostId);
+  ThreadController(
+    this.rootPostId,
+    this._sessionProvider,
+    this._repositoryProvider,
+  );
 
   final String rootPostId;
+  final Provider<AuthSession?> _sessionProvider;
+  final Provider<ThreadRepository> _repositoryProvider;
+  late RequestCancellation _cancellation;
   AuthSession? _session;
   ThreadRepository? _repository;
   bool _refreshing = false;
 
   @override
   Future<ThreadViewState> build() async {
-    final AuthSession? session = ref.watch(
-      authControllerProvider.select((AuthState state) => state.session),
-    );
+    final RequestCancellation cancellation = RequestCancellation();
+    _cancellation = cancellation;
+    ref.onDispose(cancellation.cancel);
+    _session = null;
+    _repository = null;
+    final AuthSession? session = ref.watch(_sessionProvider);
     if (session == null) {
       return ThreadViewState(thread: MessageThread(rootPostId: rootPostId));
     }
-    final ThreadRepository repository = ref.watch(threadRepositoryProvider);
+    final ThreadRepository repository = ref.watch(_repositoryProvider);
     _session = session;
     _repository = repository;
-    final MessageThread thread = await repository.load(
-      session: session,
-      rootPostId: rootPostId,
+    final MessageThread thread = await cancellation.run(
+      () => repository.load(session: session, rootPostId: rootPostId),
     );
     return ThreadViewState(thread: thread);
   }
@@ -67,6 +65,7 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     final AuthSession? session = _session;
     final ThreadRepository? repository = _repository;
     if (_refreshing || session == null || repository == null) return;
+    final RequestCancellation cancellation = _cancellation;
     _refreshing = true;
     final ThreadViewState? current = state.value;
     if (current == null) {
@@ -77,12 +76,12 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
       );
     }
     try {
-      final MessageThread thread = await repository.load(
-        session: session,
-        rootPostId: rootPostId,
+      final MessageThread thread = await cancellation.run(
+        () => repository.load(session: session, rootPostId: rootPostId),
       );
       state = AsyncData(ThreadViewState(thread: thread));
     } on Object catch (error, stackTrace) {
+      if (cancellation.isCancelled) return;
       final ThreadViewState? latest = state.value;
       state = latest == null
           ? AsyncError<ThreadViewState>(error, stackTrace)

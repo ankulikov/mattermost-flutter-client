@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/api/dio_mattermost_api.dart';
+import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 
 void main() {
   test('sends the complete cursor for upward thread pagination', () async {
@@ -52,6 +55,56 @@ void main() {
       'before': 'root-200',
     });
   });
+
+  test(
+    'cancels an in-flight Dio request from its presentation scope',
+    () async {
+      final _CancellableAdapter adapter = _CancellableAdapter();
+      final Dio dio = Dio(
+        BaseOptions(baseUrl: 'https://chat.example.com/api/v4'),
+      )..httpClientAdapter = adapter;
+      final DioMattermostApi api = DioMattermostApi(dio: dio);
+      final RequestCancellation cancellation = RequestCancellation();
+
+      final Future<MattermostUserDto> request = cancellation.run(
+        api.getCurrentUser,
+      );
+      await adapter.started.future;
+      cancellation.cancel('screen disposed');
+
+      await expectLater(
+        request,
+        throwsA(
+          isA<DioException>().having(
+            (DioException error) => error.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+      expect(adapter.cancelled, isTrue);
+    },
+  );
+}
+
+final class _CancellableAdapter implements HttpClientAdapter {
+  final Completer<void> started = Completer<void>();
+  bool cancelled = false;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    started.complete();
+    await cancelFuture;
+    cancelled = true;
+    return ResponseBody.fromString('{}', 200);
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 final class _RecordingAdapter implements HttpClientAdapter {

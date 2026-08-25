@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/posts/data/in_memory_channel_post_repository.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
 
 void main() {
   test('generates stable channel-specific post history', () async {

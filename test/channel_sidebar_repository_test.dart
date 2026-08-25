@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
@@ -14,10 +12,7 @@ void main() {
       final Uri serverUrl = Uri.parse('https://chat.example.com');
       final _FakeMattermostApi api = _FakeMattermostApi();
       final ApiChannelSidebarRepository repository =
-          ApiChannelSidebarRepository(
-            credentialStore: _FakeCredentialStore(serverUrl),
-            clientFactory: _FakeApiFactory(api),
-          );
+          ApiChannelSidebarRepository(api: api);
       final AuthSession session = AuthSession(
         serverUrl: serverUrl,
         userId: 'me',
@@ -41,31 +36,6 @@ void main() {
       expect(snapshot.refreshFailed, isFalse);
     },
   );
-}
-
-final class _FakeCredentialStore implements CredentialStore {
-  const _FakeCredentialStore(this.serverUrl);
-
-  final Uri serverUrl;
-
-  @override
-  Future<void> clear() async {}
-
-  @override
-  Future<({Uri serverUrl, String token})?> read() async =>
-      (serverUrl: serverUrl, token: 'token');
-
-  @override
-  Future<void> save({required Uri serverUrl, required String token}) async {}
-}
-
-final class _FakeApiFactory implements MattermostApiFactory {
-  const _FakeApiFactory(this.api);
-
-  final MattermostApi api;
-
-  @override
-  MattermostApi create({required Uri serverUrl, required String token}) => api;
 }
 
 final class _FakeMattermostApi implements MattermostApi {

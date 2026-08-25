@@ -1,23 +1,23 @@
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_threads_repository.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_display_name.dart';
 
 final class ApiFollowedThreadsRepository implements FollowedThreadsRepository {
-  ApiFollowedThreadsRepository({
-    required CredentialStore credentialStore,
-    MattermostApiFactory clientFactory = const MattermostClientFactory(),
-  }) : _credentialStore = credentialStore,
-       _clientFactory = clientFactory;
+  const ApiFollowedThreadsRepository({
+    required MattermostApi api,
+    required MessageMapper<MattermostPostDto, MattermostUserDto> messageMapper,
+  }) : _api = api,
+       _messageMapper = messageMapper;
 
   static const int pageSize = 60;
 
-  final CredentialStore _credentialStore;
-  final MattermostApiFactory _clientFactory;
+  final MattermostApi _api;
+  final MessageMapper<MattermostPostDto, MattermostUserDto> _messageMapper;
 
   @override
   Future<FollowedThreadsPage> loadPage({
@@ -25,8 +25,7 @@ final class ApiFollowedThreadsRepository implements FollowedThreadsRepository {
     required String teamId,
     String? before,
   }) async {
-    final MattermostApi api = await _apiFor(session);
-    final MattermostUserThreadsDto response = await api.getUserThreads(
+    final MattermostUserThreadsDto response = await _api.getUserThreads(
       userId: session.userId,
       teamId: teamId,
       perPage: pageSize,
@@ -51,7 +50,7 @@ final class ApiFollowedThreadsRepository implements FollowedThreadsRepository {
         .toSet();
     if (missingAuthorIds.isNotEmpty) {
       try {
-        final List<MattermostUserDto> authors = await api.getUsersByIds(
+        final List<MattermostUserDto> authors = await _api.getUsersByIds(
           missingAuthorIds.toList(growable: false),
         );
         usersById.addEntries(
@@ -68,20 +67,14 @@ final class ApiFollowedThreadsRepository implements FollowedThreadsRepository {
     final List<FollowedThread> items = rawThreads
         .map((raw) {
           final MattermostPostDto post = raw.post!;
-          final MattermostUserDto? author = usersById[post.userId];
-          final ChannelPost root = ChannelPost(
-            id: post.id,
-            channelId: post.channelId,
-            author: PostAuthor(
-              id: post.userId,
-              displayName: author == null ? post.userId : _displayName(author),
-            ),
-            sentAt: _dateOrEpoch(post.createAt),
-            message: post.deleteAt == 0 ? post.message : '',
-            replyCount: post.replyCount,
-            lastReplyAt: _dateOrNull(post.lastReplyAt),
-            isDeleted: post.deleteAt != 0,
-          );
+          final ChannelPost root = _messageMapper
+              .map(
+                posts: <MattermostPostDto>[post],
+                users: usersById.values,
+                currentUserId: session.userId,
+                includeDeleted: true,
+              )
+              .single;
           return FollowedThread(
             root: root.withThreadSummary(
               replyCount: raw.replyCount,
@@ -109,28 +102,17 @@ final class ApiFollowedThreadsRepository implements FollowedThreadsRepository {
     );
   }
 
-  Future<MattermostApi> _apiFor(AuthSession session) async {
-    final ({Uri serverUrl, String token})? credentials = await _credentialStore
-        .read();
-    if (credentials == null || credentials.serverUrl != session.serverUrl) {
-      throw StateError('No credentials for active Mattermost account');
-    }
-    return _clientFactory.create(
-      serverUrl: credentials.serverUrl,
-      token: credentials.token,
-    );
-  }
-
   static DateTime _dateOrEpoch(int milliseconds) =>
       DateTime.fromMillisecondsSinceEpoch(milliseconds);
 
   static DateTime? _dateOrNull(int milliseconds) =>
       milliseconds == 0 ? null : _dateOrEpoch(milliseconds);
 
-  static String _displayName(MattermostUserDto user) {
-    final String fullName = '${user.firstName} ${user.lastName}'.trim();
-    if (fullName.isNotEmpty) return fullName;
-    if (user.nickname.isNotEmpty) return user.nickname;
-    return user.username.isEmpty ? user.id : user.username;
-  }
+  static String _displayName(MattermostUserDto user) => resolveUserDisplayName(
+    id: user.id,
+    username: user.username,
+    nickname: user.nickname,
+    firstName: user.firstName,
+    lastName: user.lastName,
+  );
 }

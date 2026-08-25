@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
-import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/messages/presentation/message_primitives.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_strings.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_pane.dart';
@@ -397,10 +398,6 @@ class _PostRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final String time = MaterialLocalizations.of(
-      context,
-    ).formatTimeOfDay(TimeOfDay.fromDateTime(post.sentAt));
     return Padding(
       padding: EdgeInsets.only(
         top: continuesAuthor ? 2 : 8,
@@ -412,39 +409,20 @@ class _PostRow extends StatelessWidget {
           if (continuesAuthor)
             const SizedBox(width: 38)
           else
-            _AuthorAvatar(author: post.author),
+            MessageAvatar(author: post.author),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 if (!continuesAuthor) ...<Widget>[
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 2,
-                    children: <Widget>[
-                      Text(
-                        post.author.displayName,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        time,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
+                  MessageAuthorLine(author: post.author, sentAt: post.sentAt),
                   const SizedBox(height: 5),
                 ],
-                MattermostMarkdown(
-                  data: post.message,
+                MessageBody(
+                  post: post,
                   serverUrl: serverUrl,
-                  onTapChannel: onSelectChannel,
-                  textStyle: theme.textTheme.bodyMedium,
+                  onSelectChannel: onSelectChannel,
                 ),
                 if (post.reactions.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 8),
@@ -494,49 +472,6 @@ class _PostRow extends StatelessWidget {
       context,
     ).formatTimeOfDay(TimeOfDay.fromDateTime(lastReplyAt));
     return '$count · ${ThreadStrings.lastReply(time)}';
-  }
-}
-
-class _AuthorAvatar extends StatelessWidget {
-  const _AuthorAvatar({required this.author});
-
-  final PostAuthor author;
-
-  @override
-  Widget build(BuildContext context) {
-    final String initials = author.displayName
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((String part) => part.isNotEmpty)
-        .take(2)
-        .map((String part) => part[0].toUpperCase())
-        .join();
-    return Semantics(
-      image: true,
-      label: author.displayName,
-      child: CircleAvatar(
-        radius: 19,
-        backgroundColor: _avatarColor(author.id),
-        foregroundColor: Colors.white,
-        child: Text(
-          initials,
-          style: Theme.of(
-            context,
-          ).textTheme.labelMedium?.copyWith(color: Colors.white),
-        ),
-      ),
-    );
-  }
-
-  Color _avatarColor(String id) {
-    const List<Color> colors = <Color>[
-      Color(0xff3f51b5),
-      Color(0xff00796b),
-      Color(0xffad4b00),
-      Color(0xff7b1fa2),
-    ];
-    final int sum = id.codeUnits.fold(0, (int value, int unit) => value + unit);
-    return colors[sum % colors.length];
   }
 }
 
