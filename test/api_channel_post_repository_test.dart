@@ -113,6 +113,16 @@ final class _ApiFactory implements MattermostApiFactory {
 final class _FakePostApi implements MattermostApi {
   _FakePostApi({this.hasReplyOnlyLatest = false});
 
+  @override
+  Future<MattermostUserThreadsDto> getUserThreads({
+    required String userId,
+    required String teamId,
+    int perPage = 60,
+    String? before,
+    bool extended = true,
+    bool unread = false,
+  }) => throw UnimplementedError();
+
   final bool hasReplyOnlyLatest;
   int? latestPerPage;
   String? beforeId;

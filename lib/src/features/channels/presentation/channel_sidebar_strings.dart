@@ -7,4 +7,5 @@ abstract final class ChannelSidebarStrings {
       'Could not refresh. Showing previously loaded data.';
   static const String retry = 'Retry';
   static const String refresh = 'Refresh channels';
+  static const String threads = 'Threads';
 }

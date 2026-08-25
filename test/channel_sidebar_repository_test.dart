@@ -69,6 +69,16 @@ final class _FakeApiFactory implements MattermostApiFactory {
 }
 
 final class _FakeMattermostApi implements MattermostApi {
+  @override
+  Future<MattermostUserThreadsDto> getUserThreads({
+    required String userId,
+    required String teamId,
+    int perPage = 60,
+    String? before,
+    bool extended = true,
+    bool unread = false,
+  }) => throw UnimplementedError();
+
   final List<String> calls = <String>[];
 
   @override

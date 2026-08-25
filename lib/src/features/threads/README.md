@@ -1,5 +1,21 @@
 # Message threads
 
+## Followed threads (CRT)
+
+The Threads sidebar destination loads followed threads with
+`GET /api/v4/users/{user_id}/teams/{team_id}/threads`. It requests the maximum
+60-item page with `extended=true`; the response already contains each root
+post, reply summary, participants, and server-authoritative `unread_replies` and
+`unread_mentions`. Root-author profiles that are not among the returned
+participants are resolved in one optional `POST /users/ids` batch. The list
+never loads every root through `GET /posts/{id}/thread`.
+
+Older list pages use the root id of the last displayed thread as the `before`
+cursor. Pages are deduplicated by root id and remain visible if refresh or
+pagination fails. A thread with mentions shows the mention count; otherwise an
+unread thread shows a dot. Opening an item is the point where the existing
+authoritative thread endpoint is called.
+
 Threads are network-first, volatile domain snapshots. Opening a thread calls
 `GET /api/v4/posts/{post_id}/thread`; closing its auto-disposed controller drops
 the root, replies, and completeness flag from memory. Drift is not involved.

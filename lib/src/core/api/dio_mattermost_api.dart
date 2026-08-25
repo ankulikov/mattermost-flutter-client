@@ -149,6 +149,27 @@ final class DioMattermostApi implements MattermostApi {
     return MattermostPostListDto.fromJson(_object(response.data));
   }
 
+  @override
+  Future<MattermostUserThreadsDto> getUserThreads({
+    required String userId,
+    required String teamId,
+    int perPage = 60,
+    String? before,
+    bool extended = true,
+    bool unread = false,
+  }) async {
+    final Response<Object?> response = await _dio.get<Object?>(
+      '/users/$userId/teams/$teamId/threads',
+      queryParameters: <String, Object?>{
+        'per_page': perPage,
+        'extended': extended,
+        if (before case final String value) 'before': value,
+        if (unread) 'unread': true,
+      },
+    );
+    return MattermostUserThreadsDto.fromJson(_object(response.data));
+  }
+
   static Map<String, String>? _conditionalHeaders(String? etag) =>
       etag == null ? null : <String, String>{'If-None-Match': etag};
 

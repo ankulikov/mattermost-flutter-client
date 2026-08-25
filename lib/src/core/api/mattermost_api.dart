@@ -58,4 +58,18 @@ abstract interface class MattermostApi {
     int? fromCreateAt,
     PostThreadDirection direction = PostThreadDirection.up,
   });
+
+  /// Returns followed CRT threads ordered by their latest activity.
+  ///
+  /// [before] is the root-post cursor for the next older page. Setting
+  /// [extended] lets the server include participant profiles in the same
+  /// response, avoiding a profile request per thread.
+  Future<MattermostUserThreadsDto> getUserThreads({
+    required String userId,
+    required String teamId,
+    int perPage = 60,
+    String? before,
+    bool extended = true,
+    bool unread = false,
+  });
 }

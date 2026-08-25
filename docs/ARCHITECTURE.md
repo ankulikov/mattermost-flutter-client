@@ -78,6 +78,13 @@ Domain не импортирует Flutter, Riverpod, Dio, Drift или API DTO.
 
 ## Треды
 
+Пункт Threads в сайдбаре загружает список отслеживаемых CRT-тредов через
+`GET /users/{user_id}/teams/{team_id}/threads` страницами по 60 элементов с
+`extended=true`. Root post, счетчики replies/unread/mentions и участники приходят
+одним ответом; отсутствующие среди participants авторы root-постов дополняются
+одним batch-запросом `/users/ids`. Пагинация использует `before=<root_post_id>`.
+Список не вызывает endpoint полного треда для каждого элемента.
+
 Открытие треда вызывает `GET /posts/{post_id}/thread`. Репозиторий использует
 `direction=up`, `fromPost` и `fromCreateAt`, ограничивает одну загрузку 20
 страницами и возвращает root с replies одним domain-снимком. Replies сортируются

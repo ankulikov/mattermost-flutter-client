@@ -97,4 +97,41 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('decodes followed thread unread counts and extended participants', () {
+    final MattermostUserThreadsDto result = MattermostUserThreadsDto.fromJson(
+      <String, Object?>{
+        'total': 4,
+        'total_unread_threads': 2,
+        'total_unread_mentions': 3,
+        'threads': <Object?>[
+          <String, Object?>{
+            'id': 'root-1',
+            'reply_count': 5,
+            'last_reply_at': 2000,
+            'last_viewed_at': 1500,
+            'unread_replies': 2,
+            'unread_mentions': 1,
+            'participants': <Object?>[
+              <String, Object?>{'id': 'ada', 'username': 'ada'},
+            ],
+            'post': <String, Object?>{
+              'id': 'root-1',
+              'user_id': 'ada',
+              'channel_id': 'town-square',
+              'message': 'Root',
+            },
+          },
+        ],
+      },
+    );
+
+    expect(result.total, 4);
+    expect(result.totalUnreadThreads, 2);
+    expect(result.totalUnreadMentions, 3);
+    expect(result.threads.single.unreadReplies, 2);
+    expect(result.threads.single.unreadMentions, 1);
+    expect(result.threads.single.participants.single.username, 'ada');
+    expect(result.threads.single.post!.message, 'Root');
+  });
 }

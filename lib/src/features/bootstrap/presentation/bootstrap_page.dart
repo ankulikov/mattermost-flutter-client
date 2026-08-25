@@ -12,6 +12,7 @@ import 'package:mattermost_flutter/src/features/channels/presentation/channel_si
 import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_pane.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_strings.dart';
+import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_pane.dart';
 
 class BootstrapPage extends ConsumerStatefulWidget {
   const BootstrapPage({super.key});
@@ -33,6 +34,10 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
   Widget build(BuildContext context) {
     final AuthState auth = ref.watch(authControllerProvider);
     final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
+    final bool threadsSelected = ref.watch(threadsDestinationProvider);
+    final ChannelSidebarSnapshot? sidebar = ref
+        .watch(channelSidebarProvider)
+        .value;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool expanded = constraints.maxWidth >= AppBreakpoints.expanded;
@@ -46,6 +51,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
                   child: _MainContent(
                     auth: auth,
                     selectedChannel: selectedChannel,
+                    threadsSelected: threadsSelected,
+                    sidebar: sidebar,
                     onSelectChannel: _selectChannelNamed,
                   ),
                 ),
@@ -56,11 +63,17 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
 
         return Scaffold(
           appBar: AppBar(
-            title: Text(selectedChannel?.displayName ?? 'Mattermost'),
+            title: Text(
+              threadsSelected
+                  ? 'Threads'
+                  : selectedChannel?.displayName ?? 'Mattermost',
+            ),
           ),
           body: _MainContent(
             auth: auth,
             selectedChannel: selectedChannel,
+            threadsSelected: threadsSelected,
+            sidebar: sidebar,
             onSelectChannel: _selectChannelNamed,
           ),
           drawer: const Drawer(child: ChannelSidebar()),
@@ -77,6 +90,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     for (final SidebarSection section in snapshot.sections) {
       for (final SidebarChannel channel in section.channels) {
         if (channel.name == name) {
+          ref.read(threadsDestinationProvider.notifier).clear();
           ref.read(selectedChannelProvider.notifier).select(channel);
           return;
         }
@@ -89,11 +103,15 @@ class _MainContent extends StatelessWidget {
   const _MainContent({
     required this.auth,
     required this.selectedChannel,
+    required this.threadsSelected,
+    required this.sidebar,
     required this.onSelectChannel,
   });
 
   final AuthState auth;
   final SidebarChannel? selectedChannel;
+  final bool threadsSelected;
+  final ChannelSidebarSnapshot? sidebar;
   final ValueChanged<String> onSelectChannel;
 
   @override
@@ -102,6 +120,19 @@ class _MainContent extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (auth.phase == AuthPhase.signedIn) {
+      if (threadsSelected && sidebar?.team != null) {
+        final Map<String, SidebarChannel> channelsById =
+            <String, SidebarChannel>{
+              for (final SidebarSection section in sidebar!.sections)
+                for (final SidebarChannel channel in section.channels)
+                  channel.id: channel,
+            };
+        return FollowedThreadsPane(
+          team: sidebar!.team!,
+          channelsById: channelsById,
+          onSelectChannel: onSelectChannel,
+        );
+      }
       if (selectedChannel case final SidebarChannel channel) {
         return ChannelPostsPane(
           channel: channel,

@@ -1,0 +1,161 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
+import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
+import 'package:mattermost_flutter/src/features/threads/data/api_followed_threads_repository.dart';
+import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
+import 'package:mattermost_flutter/src/features/threads/domain/followed_threads_repository.dart';
+
+final Provider<FollowedThreadsRepository> followedThreadsRepositoryProvider =
+    Provider<FollowedThreadsRepository>(
+      (Ref ref) => ApiFollowedThreadsRepository(
+        credentialStore: SecureCredentialStore(),
+      ),
+    );
+
+final class FollowedThreadsViewState {
+  const FollowedThreadsViewState({
+    this.items = const <FollowedThread>[],
+    this.total = 0,
+    this.totalUnreadThreads = 0,
+    this.totalUnreadMentions = 0,
+    this.isLoadingMore = false,
+    this.loadMoreFailed = false,
+    this.isRefreshing = false,
+    this.refreshFailed = false,
+  });
+
+  final List<FollowedThread> items;
+  final int total;
+  final int totalUnreadThreads;
+  final int totalUnreadMentions;
+  final bool isLoadingMore;
+  final bool loadMoreFailed;
+  final bool isRefreshing;
+  final bool refreshFailed;
+
+  bool get hasMore => items.length < total;
+
+  FollowedThreadsViewState copyWith({
+    List<FollowedThread>? items,
+    int? total,
+    int? totalUnreadThreads,
+    int? totalUnreadMentions,
+    bool? isLoadingMore,
+    bool? loadMoreFailed,
+    bool? isRefreshing,
+    bool? refreshFailed,
+  }) => FollowedThreadsViewState(
+    items: items ?? this.items,
+    total: total ?? this.total,
+    totalUnreadThreads: totalUnreadThreads ?? this.totalUnreadThreads,
+    totalUnreadMentions: totalUnreadMentions ?? this.totalUnreadMentions,
+    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+    loadMoreFailed: loadMoreFailed ?? this.loadMoreFailed,
+    isRefreshing: isRefreshing ?? this.isRefreshing,
+    refreshFailed: refreshFailed ?? this.refreshFailed,
+  );
+}
+
+final followedThreadsProvider = AsyncNotifierProvider.autoDispose
+    .family<FollowedThreadsController, FollowedThreadsViewState, String>(
+      FollowedThreadsController.new,
+    );
+
+final class FollowedThreadsController
+    extends AsyncNotifier<FollowedThreadsViewState> {
+  FollowedThreadsController(this.teamId);
+
+  final String teamId;
+  AuthSession? _session;
+  FollowedThreadsRepository? _repository;
+  bool _busy = false;
+
+  @override
+  Future<FollowedThreadsViewState> build() async {
+    final AuthSession? session = ref.watch(
+      authControllerProvider.select((AuthState state) => state.session),
+    );
+    if (session == null) return const FollowedThreadsViewState();
+    final FollowedThreadsRepository repository = ref.watch(
+      followedThreadsRepositoryProvider,
+    );
+    _session = session;
+    _repository = repository;
+    return _stateFromPage(
+      await repository.loadPage(session: session, teamId: teamId),
+    );
+  }
+
+  Future<void> refresh() async {
+    final FollowedThreadsViewState? current = state.value;
+    if (_busy || current == null) return;
+    final AuthSession? session = _session;
+    final FollowedThreadsRepository? repository = _repository;
+    if (session == null || repository == null) return;
+    _busy = true;
+    state = AsyncData(
+      current.copyWith(isRefreshing: true, refreshFailed: false),
+    );
+    try {
+      state = AsyncData(
+        _stateFromPage(
+          await repository.loadPage(session: session, teamId: teamId),
+        ),
+      );
+    } on Object {
+      state = AsyncData(
+        current.copyWith(isRefreshing: false, refreshFailed: true),
+      );
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> loadMore() async {
+    final FollowedThreadsViewState? current = state.value;
+    if (_busy || current == null || !current.hasMore || current.items.isEmpty) {
+      return;
+    }
+    final AuthSession? session = _session;
+    final FollowedThreadsRepository? repository = _repository;
+    if (session == null || repository == null) return;
+    _busy = true;
+    state = AsyncData(
+      current.copyWith(isLoadingMore: true, loadMoreFailed: false),
+    );
+    try {
+      final FollowedThreadsPage page = await repository.loadPage(
+        session: session,
+        teamId: teamId,
+        before: current.items.last.id,
+      );
+      final Map<String, FollowedThread> merged = <String, FollowedThread>{
+        for (final FollowedThread item in current.items) item.id: item,
+        for (final FollowedThread item in page.items) item.id: item,
+      };
+      state = AsyncData(
+        FollowedThreadsViewState(
+          items: List<FollowedThread>.unmodifiable(merged.values),
+          total: page.total,
+          totalUnreadThreads: page.totalUnreadThreads,
+          totalUnreadMentions: page.totalUnreadMentions,
+        ),
+      );
+    } on Object {
+      state = AsyncData(
+        current.copyWith(isLoadingMore: false, loadMoreFailed: true),
+      );
+    } finally {
+      _busy = false;
+    }
+  }
+
+  static FollowedThreadsViewState _stateFromPage(FollowedThreadsPage page) =>
+      FollowedThreadsViewState(
+        items: page.items,
+        total: page.total,
+        totalUnreadThreads: page.totalUnreadThreads,
+        totalUnreadMentions: page.totalUnreadMentions,
+      );
+}

@@ -89,14 +89,48 @@ class _SidebarContent extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           ),
         Expanded(
-          child: snapshot.sections.isEmpty
-              ? const Center(child: Text(ChannelSidebarStrings.empty))
-              : RefreshIndicator(
-                  onRefresh: onRefresh,
-                  child: _LazyChannelList(sections: snapshot.sections),
-                ),
+          child: Column(
+            children: <Widget>[
+              const _ThreadsTile(),
+              const Divider(height: 1),
+              Expanded(
+                child: snapshot.sections.isEmpty
+                    ? const Center(child: Text(ChannelSidebarStrings.empty))
+                    : RefreshIndicator(
+                        onRefresh: onRefresh,
+                        child: _LazyChannelList(sections: snapshot.sections),
+                      ),
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _ThreadsTile extends ConsumerWidget {
+  const _ThreadsTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bool selected = ref.watch(threadsDestinationProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ListTile(
+        dense: true,
+        selected: selected,
+        selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        leading: const Icon(Icons.forum_outlined, size: 18),
+        title: const Text(ChannelSidebarStrings.threads),
+        onTap: () {
+          ref.read(threadsDestinationProvider.notifier).select();
+          ref.read(selectedChannelProvider.notifier).clear();
+          final ScaffoldState? scaffold = Scaffold.maybeOf(context);
+          if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();
+        },
+      ),
     );
   }
 }
@@ -227,6 +261,7 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
   }
 
   void _selectChannel(SidebarChannel channel) {
+    ref.read(threadsDestinationProvider.notifier).clear();
     ref.read(selectedChannelProvider.notifier).select(channel);
     final ScaffoldState? scaffold = Scaffold.maybeOf(context);
     if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();
@@ -338,7 +373,7 @@ class _ChannelTile extends StatelessWidget {
     opacity: muted ? 0.55 : 1,
     child: ListTile(
       dense: true,
-      visualDensity: const VisualDensity(vertical: -4),
+      visualDensity: const VisualDensity(vertical: -2),
       selected: selected,
       selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

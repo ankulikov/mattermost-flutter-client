@@ -11,8 +11,11 @@ import 'package:mattermost_flutter/src/features/channels/presentation/channel_si
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
+import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
+import 'package:mattermost_flutter/src/features/threads/domain/followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
+import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
 
 void main() {
@@ -58,6 +61,82 @@ void main() {
     expect(find.text('Favorites'), findsOneWidget);
     expect(find.text('Town Square'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
+  });
+
+  testWidgets('shows followed threads with mention count or unread dot', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          followedThreadsRepositoryProvider.overrideWithValue(
+            const _FollowedThreadsRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.forum_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mentioned root'), findsOneWidget);
+    expect(find.text('Unread root'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('thread-mention-count-root-mention')),
+      findsOneWidget,
+    );
+    expect(find.text('2'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('thread-unread-dot-root-unread')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('shows threads on compact width with large text', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          followedThreadsRepositoryProvider.overrideWithValue(
+            const _FollowedThreadsRepository(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.forum_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mentioned root'), findsOneWidget);
+    expect(find.text('Unread root'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('loads mock messages after selecting a channel', (
@@ -712,6 +791,51 @@ final class _SidebarRepository implements ChannelSidebarRepository {
           ),
         ],
       );
+}
+
+final class _FollowedThreadsRepository implements FollowedThreadsRepository {
+  const _FollowedThreadsRepository();
+
+  @override
+  Future<FollowedThreadsPage> loadPage({
+    required AuthSession session,
+    required String teamId,
+    String? before,
+  }) async => FollowedThreadsPage(
+    total: 2,
+    totalUnreadThreads: 2,
+    totalUnreadMentions: 2,
+    items: <FollowedThread>[
+      FollowedThread(
+        root: ChannelPost(
+          id: 'root-mention',
+          channelId: 'town-square',
+          author: const PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
+          sentAt: DateTime(2026, 8, 24, 10),
+          message: 'Mentioned root',
+        ),
+        replyCount: 4,
+        lastReplyAt: DateTime(2026, 8, 25, 10),
+        lastViewedAt: DateTime(2026, 8, 24, 10),
+        unreadReplies: 3,
+        unreadMentions: 2,
+      ),
+      FollowedThread(
+        root: ChannelPost(
+          id: 'root-unread',
+          channelId: 'town-square',
+          author: const PostAuthor(id: 'grace', displayName: 'Grace Hopper'),
+          sentAt: DateTime(2026, 8, 24, 11),
+          message: 'Unread root',
+        ),
+        replyCount: 2,
+        lastReplyAt: DateTime(2026, 8, 25, 11),
+        lastViewedAt: DateTime(2026, 8, 24, 11),
+        unreadReplies: 1,
+        unreadMentions: 0,
+      ),
+    ],
+  );
 }
 
 final class _LargeSidebarRepository implements ChannelSidebarRepository {

@@ -15,3 +15,18 @@ final class SelectedChannelController extends Notifier<SidebarChannel?> {
 
   void clear() => state = null;
 }
+
+final NotifierProvider<ThreadsDestinationController, bool>
+threadsDestinationProvider =
+    NotifierProvider<ThreadsDestinationController, bool>(
+      ThreadsDestinationController.new,
+    );
+
+final class ThreadsDestinationController extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void select() => state = true;
+
+  void clear() => state = false;
+}

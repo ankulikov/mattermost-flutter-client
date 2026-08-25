@@ -105,6 +105,16 @@ final class _ThreadApi implements MattermostApi {
   final List<PostThreadDirection> directions = <PostThreadDirection>[];
 
   @override
+  Future<MattermostUserThreadsDto> getUserThreads({
+    required String userId,
+    required String teamId,
+    int perPage = 60,
+    String? before,
+    bool extended = true,
+    bool unread = false,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostPostListDto> getPostThread({
     required String rootPostId,
     int perPage = 60,

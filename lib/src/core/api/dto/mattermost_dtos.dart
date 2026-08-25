@@ -318,6 +318,70 @@ final class MattermostGroupChannelUsersDto {
   final Map<String, List<MattermostUserDto>> usersByChannelId;
 }
 
+/// Aggregate response from the CRT followed-threads endpoint.
+final class MattermostUserThreadsDto {
+  const MattermostUserThreadsDto({
+    required this.total,
+    required this.totalUnreadThreads,
+    required this.totalUnreadMentions,
+    required this.threads,
+  });
+
+  factory MattermostUserThreadsDto.fromJson(JsonMap json) =>
+      MattermostUserThreadsDto(
+        total: _int(json, 'total'),
+        totalUnreadThreads: _int(json, 'total_unread_threads'),
+        totalUnreadMentions: _int(json, 'total_unread_mentions'),
+        threads: _dtoList(json, 'threads', MattermostUserThreadDto.fromJson),
+      );
+
+  final int total;
+  final int totalUnreadThreads;
+  final int totalUnreadMentions;
+  final List<MattermostUserThreadDto> threads;
+}
+
+final class MattermostUserThreadDto {
+  const MattermostUserThreadDto({
+    required this.id,
+    required this.replyCount,
+    required this.lastReplyAt,
+    required this.lastViewedAt,
+    required this.participants,
+    required this.post,
+    required this.unreadReplies,
+    required this.unreadMentions,
+    this.deleteAt = 0,
+  });
+
+  factory MattermostUserThreadDto.fromJson(JsonMap json) =>
+      MattermostUserThreadDto(
+        id: _string(json, 'id'),
+        replyCount: _int(json, 'reply_count'),
+        lastReplyAt: _int(json, 'last_reply_at'),
+        lastViewedAt: _int(json, 'last_viewed_at'),
+        participants: _dtoList(
+          json,
+          'participants',
+          MattermostUserDto.fromJson,
+        ),
+        post: _nested(json, 'post', MattermostPostDto.fromJson),
+        unreadReplies: _int(json, 'unread_replies'),
+        unreadMentions: _int(json, 'unread_mentions'),
+        deleteAt: _int(json, 'delete_at'),
+      );
+
+  final String id;
+  final int replyCount;
+  final int lastReplyAt;
+  final int lastViewedAt;
+  final List<MattermostUserDto> participants;
+  final MattermostPostDto? post;
+  final int unreadReplies;
+  final int unreadMentions;
+  final int deleteAt;
+}
+
 final class MattermostPostListDto {
   const MattermostPostListDto({
     required this.order,
