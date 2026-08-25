@@ -2,9 +2,9 @@
 
 ## Mission
 
-Build a production-grade, offline-first Mattermost client in Flutter for Android,
-iOS, Web, macOS, and Windows. Preserve behavior important to Mattermost users,
-but do not reproduce React Native implementation details.
+Build a production-grade Mattermost client in Flutter for Android, iOS, Web,
+macOS, and Windows. Preserve behavior important to Mattermost users, but do not
+reproduce React Native implementation details.
 
 ## Required reading
 
@@ -27,18 +27,20 @@ be used to discover behavior, not as an API contract.
 - Cross-feature dependencies go through public domain contracts. Do not import
   another feature's data or presentation internals.
 
-## Offline-first rules
+## Data freshness and state
 
-- The local Drift database is the source observed by UI. Network responses update
-  the database; they do not bypass it to update widgets.
-- Return cached data immediately and refresh in parallel. Never replace useful
-  stale content with a full-screen loader.
-- Persist remote data and sync metadata atomically.
-- User mutations must be optimistic and durable through an outbox unless the
-  operation cannot sensibly work offline.
-- Scope every tenant-owned row and cache key by account/server id.
-- Handle deletion tombstones, pagination completeness, WebSocket sequence gaps,
-  idempotency, retries, and conflict policy explicitly.
+- Use a network-first model for channels, posts, threads, sidebar data, and their
+  pagination. Keep this data in the Riverpod state of the open screen and release
+  it when the screen closes.
+- On initial request failure, show an explicit retry state. During refresh or
+  pagination, preserve useful data already shown and surface failures without
+  replacing it with a full-screen loader.
+- Do not persist messages, threads, sidebar data, or sync metadata in Drift.
+  Add durable storage only when the feature has an explicit data owner, freshness
+  policy, and reason for surviving process restarts.
+- Scope any durable tenant-owned data and cache keys by account/server id.
+- Handle pagination completeness, WebSocket sequence gaps, idempotency, retries,
+  rate limits, and deletion behavior explicitly where the feature requires them.
 
 ## Async and performance
 
@@ -88,7 +90,8 @@ For each change, as applicable:
 1. Format changed Dart files.
 2. Run `flutter analyze` with no new warnings.
 3. Run focused unit/widget tests and the full suite for cross-cutting changes.
-4. Add tests for success, cached/offline, loading-with-data, and failure states.
+4. Add tests for success, initial loading, refresh/loading-with-data, pagination,
+   and failure states relevant to the changed feature.
 5. For database changes, add a migration and migration test; never rewrite a
    released migration history.
 6. For UI changes, test compact and expanded widths plus large text scale.
@@ -96,4 +99,3 @@ For each change, as applicable:
 
 If the local environment cannot run a required command, state that clearly in
 the handoff instead of claiming verification.
-
