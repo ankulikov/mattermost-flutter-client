@@ -7,6 +7,8 @@ import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/messages/presentation/message_composer.dart';
+import 'package:mattermost_flutter/src/features/messages/presentation/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/features/messages/presentation/message_primitives.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_strings.dart';
@@ -95,6 +97,19 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
             },
           ),
         ),
+        if (viewState != null)
+          MessageComposer(
+            key: ValueKey<String>('channel-composer-${channel.id}'),
+            destinationId: channel.id,
+            placeholder: MessageComposerStrings.channelPlaceholder(
+              channel.displayName,
+            ),
+            onSubmit: (String message, String pendingPostId) async {
+              await ref
+                  .read(channelPostsProvider(channel.id).notifier)
+                  .sendText(message: message, pendingPostId: pendingPostId);
+            },
+          ),
       ],
     );
     return LayoutBuilder(
@@ -107,6 +122,9 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
           channel: channel,
           serverUrl: serverUrl,
           onSelectChannel: widget.onSelectChannel,
+          onReplySent: (ChannelPost reply) => ref
+              .read(channelPostsProvider(channel.id).notifier)
+              .recordSentReply(reply),
           onClose: () => setState(() => _selectedRootPostId = null),
         );
         if (constraints.maxWidth >= AppBreakpoints.sideThread) {

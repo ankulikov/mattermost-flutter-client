@@ -28,6 +28,12 @@ then post id. If the safety bound is hit, `isComplete` remains false.
 Deleted replies returned by the server retain their place in the conversation
 and are rendered as placeholders without message contents or reactions.
 
+Replies use the same text-only composer as channel posts. Creation goes through
+`POST /api/v4/posts` with the channel id, root post id, message, and a client
+`pending_post_id`. A successful response is merged into the open thread and its
+root summary immediately, while a failure keeps the draft available for retry.
+No WebSocket transport is involved in sending.
+
 Root and reply bodies use the same `MattermostMarkdown` widget as channel posts,
 so formatting and URL safety do not diverge between the channel and thread
 surfaces. See [`docs/MARKDOWN.md`](../../../../docs/MARKDOWN.md).

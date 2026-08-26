@@ -111,6 +111,10 @@ final class _ApiClient implements MattermostApiClient {
 
 final class _AuthApi implements MattermostApi {
   @override
+  Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post) =>
+      throw UnimplementedError();
+
+  @override
   Future<MattermostImageDto> getUserProfileImage({
     required String userId,
     int lastPictureUpdate = 0,

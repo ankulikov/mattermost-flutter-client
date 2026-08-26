@@ -13,8 +13,10 @@ import 'package:mattermost_flutter/src/features/channels/data/api_channel_sideba
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
+import 'package:mattermost_flutter/src/features/messages/data/api_message_sender.dart';
 import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
 import 'package:mattermost_flutter/src/features/posts/data/api_channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
@@ -112,6 +114,13 @@ mattermostMessageMapperProvider =
       (Ref ref) => const MattermostMessageMapper(),
     );
 
+final Provider<MessageSender> messageSenderProvider = Provider<MessageSender>(
+  (Ref ref) => ApiMessageSender(
+    api: ref.watch(activeMattermostApiProvider),
+    messageMapper: ref.watch(mattermostMessageMapperProvider),
+  ),
+);
+
 final Provider<ChannelSidebarRepository> channelSidebarRepositoryProvider =
     Provider<ChannelSidebarRepository>(
       (Ref ref) => ApiChannelSidebarRepository(
@@ -158,6 +167,7 @@ final channelPostsProvider = AsyncNotifierProvider.autoDispose
         channelId,
         authSessionProvider,
         channelPostRepositoryProvider,
+        messageSenderProvider,
       ),
     );
 
@@ -167,6 +177,7 @@ final threadProvider = AsyncNotifierProvider.autoDispose
         rootPostId,
         authSessionProvider,
         threadRepositoryProvider,
+        messageSenderProvider,
       ),
     );
 

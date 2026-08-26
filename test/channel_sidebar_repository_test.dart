@@ -40,6 +40,10 @@ void main() {
 
 final class _FakeMattermostApi implements MattermostApi {
   @override
+  Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post) =>
+      throw UnimplementedError();
+
+  @override
   Future<MattermostImageDto> getUserProfileImage({
     required String userId,
     int lastPictureUpdate = 0,

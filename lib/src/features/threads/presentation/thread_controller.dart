@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
+import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
 
@@ -31,15 +34,18 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     this.rootPostId,
     this._sessionProvider,
     this._repositoryProvider,
+    this._messageSenderProvider,
   );
 
   final String rootPostId;
   final Provider<AuthSession?> _sessionProvider;
   final Provider<ThreadRepository> _repositoryProvider;
+  final Provider<MessageSender> _messageSenderProvider;
   late RequestCancellation _cancellation;
   AuthSession? _session;
   ThreadRepository? _repository;
   bool _refreshing = false;
+  bool _sendRunning = false;
 
   @override
   Future<ThreadViewState> build() async {
@@ -91,5 +97,68 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     } finally {
       _refreshing = false;
     }
+  }
+
+  Future<ChannelPost> sendText({
+    required String channelId,
+    required String message,
+    required String pendingPostId,
+  }) async {
+    final AuthSession? session = _session;
+    if (_sendRunning) {
+      throw StateError('A thread reply is already being sent');
+    }
+    if (session == null || state.value?.thread.root == null) {
+      throw StateError('Thread is not ready');
+    }
+    _sendRunning = true;
+    try {
+      final ChannelPost sent = await _cancellation.run(
+        () => ref
+            .read(_messageSenderProvider)
+            .sendText(
+              session: session,
+              channelId: channelId,
+              message: message,
+              pendingPostId: pendingPostId,
+              rootPostId: rootPostId,
+            ),
+      );
+      final ThreadViewState? latest = state.value;
+      if (latest != null) {
+        state = AsyncData(
+          latest.copyWith(thread: _withSentReply(latest.thread, sent)),
+        );
+      }
+      return sent;
+    } finally {
+      _sendRunning = false;
+    }
+  }
+
+  static MessageThread _withSentReply(MessageThread thread, ChannelPost sent) {
+    final bool wasKnown = thread.replies.any(
+      (ChannelPost reply) => reply.id == sent.id,
+    );
+    final Map<String, ChannelPost> replies = <String, ChannelPost>{
+      for (final ChannelPost reply in thread.replies) reply.id: reply,
+      sent.id: sent,
+    };
+    final List<ChannelPost> ordered = replies.values.toList(growable: false)
+      ..sort(compareMessagesBySentAt);
+    final ChannelPost? root = thread.root;
+    final int observedCount = ordered.length;
+    final int incrementedCount = (root?.replyCount ?? 0) + (wasKnown ? 0 : 1);
+    return MessageThread(
+      rootPostId: thread.rootPostId,
+      root: root?.withThreadSummary(
+        replyCount: incrementedCount > observedCount
+            ? incrementedCount
+            : observedCount,
+        lastReplyAt: latestDateTime(root.lastReplyAt, sent.sentAt),
+      ),
+      replies: List<ChannelPost>.unmodifiable(ordered),
+      isComplete: thread.isComplete,
+    );
   }
 }

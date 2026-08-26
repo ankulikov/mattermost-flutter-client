@@ -425,6 +425,28 @@ final class MattermostPostListDto {
   final bool hasNext;
 }
 
+/// JSON body accepted by `POST /api/v4/posts`.
+final class MattermostCreatePostRequestDto {
+  const MattermostCreatePostRequestDto({
+    required this.channelId,
+    required this.message,
+    required this.pendingPostId,
+    this.rootId = '',
+  });
+
+  final String channelId;
+  final String message;
+  final String pendingPostId;
+  final String rootId;
+
+  JsonMap toJson() => <String, Object?>{
+    'channel_id': channelId,
+    'message': message,
+    'pending_post_id': pendingPostId,
+    if (rootId.isNotEmpty) 'root_id': rootId,
+  };
+}
+
 final class MattermostPostDto {
   const MattermostPostDto({
     required this.id,

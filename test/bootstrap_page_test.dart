@@ -8,6 +8,7 @@ import 'package:mattermost_flutter/src/features/bootstrap/presentation/bootstrap
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_threads_repository.dart';
@@ -173,6 +174,103 @@ void main() {
     expect(find.text('Follow-up message 2'), findsOneWidget);
     expect(find.text('👍  3'), findsOneWidget);
     expect(find.byType(CircleAvatar), findsOneWidget);
+  });
+
+  testWidgets('sends a text message in the selected channel', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _RecordingMessageSender sender = _RecordingMessageSender();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          messageSenderProvider.overrideWithValue(sender),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('message-input-town-square')),
+      'New channel message',
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('send-message-town-square')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sender.channelId, 'town-square');
+    expect(sender.rootPostId, isEmpty);
+    expect(sender.message, 'New channel message');
+    expect(sender.pendingPostId, isNotEmpty);
+    expect(find.text('New channel message'), findsOneWidget);
+  });
+
+  testWidgets('sends a text reply and updates both thread and root summary', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _RecordingMessageSender sender = _RecordingMessageSender();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
+          messageSenderProvider.overrideWithValue(sender),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('2 replies'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(
+        const ValueKey<String>('message-input-thread-town-square-post'),
+      ),
+      'New thread reply',
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>('send-message-thread-town-square-post'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sender.channelId, 'town-square');
+    expect(sender.rootPostId, 'town-square-post');
+    expect(sender.message, 'New thread reply');
+    expect(find.text('New thread reply'), findsOneWidget);
+    expect(find.textContaining('3 replies'), findsWidgets);
+
+    await tester.tap(find.byTooltip('Close thread'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('3 replies'), findsOneWidget);
   });
 
   testWidgets('shows messages on compact width with large text', (
@@ -656,6 +754,37 @@ final class _ThreadRepository implements ThreadRepository {
     required AuthSession session,
     required String rootPostId,
   }) async => _thread(rootPostId);
+}
+
+final class _RecordingMessageSender implements MessageSender {
+  String? channelId;
+  String? rootPostId;
+  String? message;
+  String? pendingPostId;
+  var _nextId = 0;
+
+  @override
+  Future<ChannelPost> sendText({
+    required AuthSession session,
+    required String channelId,
+    required String message,
+    required String pendingPostId,
+    String rootPostId = '',
+  }) async {
+    this.channelId = channelId;
+    this.rootPostId = rootPostId;
+    this.message = message;
+    this.pendingPostId = pendingPostId;
+    _nextId += 1;
+    return ChannelPost(
+      id: 'sent-$_nextId',
+      channelId: channelId,
+      author: PostAuthor(id: session.userId, displayName: session.username),
+      sentAt: DateTime(2026, 8, 25, 12, _nextId),
+      message: message,
+      rootId: rootPostId,
+    );
+  }
 }
 
 final class _AutoPagingPostRepository implements ChannelPostRepository {

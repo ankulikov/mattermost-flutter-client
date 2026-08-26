@@ -22,6 +22,12 @@ Opening a thread performs a separate authoritative thread request. An initial
 network failure shows a retry state; an older-page failure preserves the history
 already held in memory.
 
+Text posts are created with `POST /api/v4/posts`. The shared channel/thread
+composer supplies a stable `pending_post_id` for an unchanged failed draft,
+blocks concurrent submits, and keeps the draft until the REST request succeeds.
+The returned server post is merged into the open channel state immediately;
+WebSocket delivery is not required for the sender to see it.
+
 Post bodies use the shared `MattermostMarkdown` widget. Its documented syntax,
 Mattermost extensions, URL safety policy, and dependency rationale are recorded
 in [`docs/MARKDOWN.md`](../../../../docs/MARKDOWN.md).

@@ -9,6 +9,37 @@ import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 
 void main() {
+  test('creates a text post with reply and pending identifiers', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"id":"post-1","user_id":"me","channel_id":"channel-1",'
+          '"root_id":"root-1","message":"Hello","pending_post_id":"pending-1"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    final MattermostPostDto created = await api.createPost(
+      const MattermostCreatePostRequestDto(
+        channelId: 'channel-1',
+        message: 'Hello',
+        rootId: 'root-1',
+        pendingPostId: 'pending-1',
+      ),
+    );
+
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/posts');
+    expect(adapter.request?.data, <String, Object?>{
+      'channel_id': 'channel-1',
+      'message': 'Hello',
+      'pending_post_id': 'pending-1',
+      'root_id': 'root-1',
+    });
+    expect(created.id, 'post-1');
+    expect(created.rootId, 'root-1');
+  });
+
   test('downloads a versioned authenticated profile image as bytes', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       bytes: Uint8List.fromList(<int>[1, 2, 3]),

@@ -158,6 +158,17 @@ final class DioMattermostApi implements MattermostApi {
   }
 
   @override
+  Future<MattermostPostDto> createPost(
+    MattermostCreatePostRequestDto post,
+  ) async {
+    final Response<Object?> response = await _post(
+      '/posts',
+      data: post.toJson(),
+    );
+    return MattermostPostDto.fromJson(_object(response.data));
+  }
+
+  @override
   Future<MattermostPostListDto> getPostThread({
     required String rootPostId,
     int perPage = 60,

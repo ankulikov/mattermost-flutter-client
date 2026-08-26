@@ -1,19 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/messages/presentation/message_composer.dart';
+import 'package:mattermost_flutter/src/features/messages/presentation/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/features/messages/presentation/message_primitives.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_strings.dart';
 
-class ThreadPane extends ConsumerWidget {
+class ThreadPane extends ConsumerStatefulWidget {
   const ThreadPane({
     required this.rootPostId,
     required this.channel,
     required this.onClose,
     this.serverUrl,
     this.onSelectChannel,
+    this.onReplySent,
     super.key,
   });
 
@@ -22,25 +27,40 @@ class ThreadPane extends ConsumerWidget {
   final VoidCallback onClose;
   final Uri? serverUrl;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<ChannelPost>? onReplySent;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ThreadPane> createState() => _ThreadPaneState();
+}
+
+class _ThreadPaneState extends ConsumerState<ThreadPane> {
+  late final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final AsyncValue<ThreadViewState> value = ref.watch(
-      threadProvider(rootPostId),
+      threadProvider(widget.rootPostId),
     );
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _ThreadHeader(channel: channel, onClose: onClose),
+          _ThreadHeader(channel: widget.channel, onClose: widget.onClose),
           const Divider(height: 1),
           Expanded(
             child: value.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, _) => _ThreadError(
-                onRetry: () =>
-                    ref.read(threadProvider(rootPostId).notifier).retry(),
+                onRetry: () => ref
+                    .read(threadProvider(widget.rootPostId).notifier)
+                    .retry(),
               ),
               data: (ThreadViewState state) {
                 final ChannelPost? root = state.thread.root;
@@ -50,8 +70,9 @@ class ThreadPane extends ConsumerWidget {
                 if (root == null) {
                   return _ThreadError(
                     message: ThreadStrings.missingRoot,
-                    onRetry: () =>
-                        ref.read(threadProvider(rootPostId).notifier).retry(),
+                    onRetry: () => ref
+                        .read(threadProvider(widget.rootPostId).notifier)
+                        .retry(),
                   );
                 }
                 return Column(
@@ -62,7 +83,9 @@ class ThreadPane extends ConsumerWidget {
                         actions: <Widget>[
                           TextButton(
                             onPressed: () => ref
-                                .read(threadProvider(rootPostId).notifier)
+                                .read(
+                                  threadProvider(widget.rootPostId).notifier,
+                                )
                                 .retry(),
                             child: const Text(ThreadStrings.retry),
                           ),
@@ -70,12 +93,13 @@ class ThreadPane extends ConsumerWidget {
                       ),
                     Expanded(
                       child: ListView(
+                        controller: _scrollController,
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                         children: <Widget>[
                           _ThreadPost(
                             post: root,
-                            serverUrl: serverUrl,
-                            onSelectChannel: onSelectChannel,
+                            serverUrl: widget.serverUrl,
+                            onSelectChannel: widget.onSelectChannel,
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -96,12 +120,20 @@ class ThreadPane extends ConsumerWidget {
                               padding: const EdgeInsets.only(bottom: 14),
                               child: _ThreadPost(
                                 post: reply,
-                                serverUrl: serverUrl,
-                                onSelectChannel: onSelectChannel,
+                                serverUrl: widget.serverUrl,
+                                onSelectChannel: widget.onSelectChannel,
                               ),
                             ),
                         ],
                       ),
+                    ),
+                    MessageComposer(
+                      key: ValueKey<String>(
+                        'thread-composer-${widget.rootPostId}',
+                      ),
+                      destinationId: 'thread-${widget.rootPostId}',
+                      placeholder: MessageComposerStrings.replyPlaceholder,
+                      onSubmit: _sendReply,
                     ),
                   ],
                 );
@@ -111,6 +143,27 @@ class ThreadPane extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _sendReply(String message, String pendingPostId) async {
+    final ChannelPost sent = await ref
+        .read(threadProvider(widget.rootPostId).notifier)
+        .sendText(
+          channelId: widget.channel.id,
+          message: message,
+          pendingPostId: pendingPostId,
+        );
+    widget.onReplySent?.call(sent);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      unawaited(
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        ),
+      );
+    });
   }
 }
 

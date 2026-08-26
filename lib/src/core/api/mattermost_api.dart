@@ -57,6 +57,9 @@ abstract interface class MattermostApi {
     required int since,
   });
 
+  /// Creates a channel post or a threaded reply through the REST API.
+  Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post);
+
   /// Returns the root and posts belonging to its thread. Responses may be
   /// paginated; [fromPost] and [fromCreateAt] resume from the last item while
   /// [direction] selects older (`up`) or newer (`down`) replies.

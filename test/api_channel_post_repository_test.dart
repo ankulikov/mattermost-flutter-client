@@ -109,6 +109,10 @@ final class _FakePostApi implements MattermostApi {
   String? beforeId;
 
   @override
+  Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post) =>
+      throw UnimplementedError();
+
+  @override
   Future<MattermostPostListDto> getPostsForChannel({
     required String channelId,
     int page = 0,

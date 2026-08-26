@@ -3,6 +3,7 @@ import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 
 final class ChannelPostsViewState {
@@ -45,15 +46,18 @@ final class ChannelPostsController
     this.channelId,
     this._sessionProvider,
     this._repositoryProvider,
+    this._messageSenderProvider,
   );
 
   final String channelId;
   final Provider<AuthSession?> _sessionProvider;
   final Provider<ChannelPostRepository> _repositoryProvider;
+  final Provider<MessageSender> _messageSenderProvider;
   late RequestCancellation _cancellation;
   AuthSession? _session;
   ChannelPostRepository? _repository;
   bool _olderRunning = false;
+  bool _sendRunning = false;
 
   @override
   Future<ChannelPostsViewState> build() async {
@@ -149,6 +153,81 @@ final class ChannelPostsController
         }
       }
     }
+  }
+
+  Future<ChannelPost> sendText({
+    required String message,
+    required String pendingPostId,
+  }) async {
+    final AuthSession? session = _session;
+    if (_sendRunning) {
+      throw StateError('A channel message is already being sent');
+    }
+    if (session == null || state.value == null) {
+      throw StateError('Channel messages are not ready');
+    }
+    _sendRunning = true;
+    try {
+      final ChannelPost sent = await _cancellation.run(
+        () => ref
+            .read(_messageSenderProvider)
+            .sendText(
+              session: session,
+              channelId: channelId,
+              message: message,
+              pendingPostId: pendingPostId,
+            ),
+      );
+      final ChannelPostsViewState? latest = state.value;
+      if (latest != null) {
+        state = AsyncData(
+          latest.copyWith(
+            posts: _mergePosts(latest.posts, <ChannelPost>[sent]),
+          ),
+        );
+      }
+      return sent;
+    } finally {
+      _sendRunning = false;
+    }
+  }
+
+  void recordSentReply(ChannelPost reply) {
+    final ChannelPostsViewState? current = state.value;
+    if (current == null || reply.rootId.isEmpty) return;
+    final ChannelReplySummary? previous = current.replySummaries[reply.rootId];
+    final bool wasKnown = previous?.replyIds.contains(reply.id) == true;
+    final Map<String, ChannelReplySummary> summaries =
+        Map<String, ChannelReplySummary>.unmodifiable(
+          <String, ChannelReplySummary>{
+            ...current.replySummaries,
+            reply.rootId: ChannelReplySummary(
+              replyIds: Set<String>.unmodifiable(<String>{
+                ...?previous?.replyIds,
+                reply.id,
+              }),
+              lastReplyAt: latestDateTime(previous?.lastReplyAt, reply.sentAt),
+            ),
+          },
+        );
+    state = AsyncData(
+      current.copyWith(
+        posts: List<ChannelPost>.unmodifiable(
+          current.posts.map((ChannelPost post) {
+            if (post.id != reply.rootId) return post;
+            final int incrementedCount = post.replyCount + (wasKnown ? 0 : 1);
+            final int observedCount = summaries[reply.rootId]!.replyIds.length;
+            return post.withThreadSummary(
+              replyCount: incrementedCount > observedCount
+                  ? incrementedCount
+                  : observedCount,
+              lastReplyAt: latestDateTime(post.lastReplyAt, reply.sentAt),
+            );
+          }),
+        ),
+        replySummaries: summaries,
+      ),
+    );
   }
 
   Future<ChannelPostsViewState> _loadLatest(
