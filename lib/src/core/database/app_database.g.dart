@@ -62,6 +62,51 @@ class $CachedUserProfilesTable extends CachedUserProfiles
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _nicknameMeta = const VerificationMeta(
+    'nickname',
+  );
+  @override
+  late final GeneratedColumn<String> nickname = GeneratedColumn<String>(
+    'nickname',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant<String>(''),
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<String> position = GeneratedColumn<String>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant<String>(''),
+  );
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+    'email',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant<String>(''),
+  );
+  static const VerificationMeta _profileImageUpdatedAtMeta =
+      const VerificationMeta('profileImageUpdatedAt');
+  @override
+  late final GeneratedColumn<int> profileImageUpdatedAt = GeneratedColumn<int>(
+    'profile_image_updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant<int>(0),
+  );
   static const VerificationMeta _expiresAtMeta = const VerificationMeta(
     'expiresAt',
   );
@@ -80,6 +125,10 @@ class $CachedUserProfilesTable extends CachedUserProfiles
     firstName,
     lastName,
     username,
+    nickname,
+    position,
+    email,
+    profileImageUpdatedAt,
     expiresAt,
   ];
   @override
@@ -134,6 +183,33 @@ class $CachedUserProfilesTable extends CachedUserProfiles
     } else if (isInserting) {
       context.missing(_usernameMeta);
     }
+    if (data.containsKey('nickname')) {
+      context.handle(
+        _nicknameMeta,
+        nickname.isAcceptableOrUnknown(data['nickname']!, _nicknameMeta),
+      );
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    }
+    if (data.containsKey('email')) {
+      context.handle(
+        _emailMeta,
+        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
+      );
+    }
+    if (data.containsKey('profile_image_updated_at')) {
+      context.handle(
+        _profileImageUpdatedAtMeta,
+        profileImageUpdatedAt.isAcceptableOrUnknown(
+          data['profile_image_updated_at']!,
+          _profileImageUpdatedAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('expires_at')) {
       context.handle(
         _expiresAtMeta,
@@ -171,6 +247,22 @@ class $CachedUserProfilesTable extends CachedUserProfiles
         DriftSqlType.string,
         data['${effectivePrefix}username'],
       )!,
+      nickname: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}nickname'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}position'],
+      )!,
+      email: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}email'],
+      )!,
+      profileImageUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}profile_image_updated_at'],
+      )!,
       expiresAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}expires_at'],
@@ -191,6 +283,10 @@ class CachedUserProfile extends DataClass
   final String firstName;
   final String lastName;
   final String username;
+  final String nickname;
+  final String position;
+  final String email;
+  final int profileImageUpdatedAt;
   final DateTime expiresAt;
   const CachedUserProfile({
     required this.accountId,
@@ -198,6 +294,10 @@ class CachedUserProfile extends DataClass
     required this.firstName,
     required this.lastName,
     required this.username,
+    required this.nickname,
+    required this.position,
+    required this.email,
+    required this.profileImageUpdatedAt,
     required this.expiresAt,
   });
   @override
@@ -208,6 +308,10 @@ class CachedUserProfile extends DataClass
     map['first_name'] = Variable<String>(firstName);
     map['last_name'] = Variable<String>(lastName);
     map['username'] = Variable<String>(username);
+    map['nickname'] = Variable<String>(nickname);
+    map['position'] = Variable<String>(position);
+    map['email'] = Variable<String>(email);
+    map['profile_image_updated_at'] = Variable<int>(profileImageUpdatedAt);
     map['expires_at'] = Variable<DateTime>(expiresAt);
     return map;
   }
@@ -219,6 +323,10 @@ class CachedUserProfile extends DataClass
       firstName: Value(firstName),
       lastName: Value(lastName),
       username: Value(username),
+      nickname: Value(nickname),
+      position: Value(position),
+      email: Value(email),
+      profileImageUpdatedAt: Value(profileImageUpdatedAt),
       expiresAt: Value(expiresAt),
     );
   }
@@ -234,6 +342,12 @@ class CachedUserProfile extends DataClass
       firstName: serializer.fromJson<String>(json['firstName']),
       lastName: serializer.fromJson<String>(json['lastName']),
       username: serializer.fromJson<String>(json['username']),
+      nickname: serializer.fromJson<String>(json['nickname']),
+      position: serializer.fromJson<String>(json['position']),
+      email: serializer.fromJson<String>(json['email']),
+      profileImageUpdatedAt: serializer.fromJson<int>(
+        json['profileImageUpdatedAt'],
+      ),
       expiresAt: serializer.fromJson<DateTime>(json['expiresAt']),
     );
   }
@@ -246,6 +360,10 @@ class CachedUserProfile extends DataClass
       'firstName': serializer.toJson<String>(firstName),
       'lastName': serializer.toJson<String>(lastName),
       'username': serializer.toJson<String>(username),
+      'nickname': serializer.toJson<String>(nickname),
+      'position': serializer.toJson<String>(position),
+      'email': serializer.toJson<String>(email),
+      'profileImageUpdatedAt': serializer.toJson<int>(profileImageUpdatedAt),
       'expiresAt': serializer.toJson<DateTime>(expiresAt),
     };
   }
@@ -256,6 +374,10 @@ class CachedUserProfile extends DataClass
     String? firstName,
     String? lastName,
     String? username,
+    String? nickname,
+    String? position,
+    String? email,
+    int? profileImageUpdatedAt,
     DateTime? expiresAt,
   }) => CachedUserProfile(
     accountId: accountId ?? this.accountId,
@@ -263,6 +385,10 @@ class CachedUserProfile extends DataClass
     firstName: firstName ?? this.firstName,
     lastName: lastName ?? this.lastName,
     username: username ?? this.username,
+    nickname: nickname ?? this.nickname,
+    position: position ?? this.position,
+    email: email ?? this.email,
+    profileImageUpdatedAt: profileImageUpdatedAt ?? this.profileImageUpdatedAt,
     expiresAt: expiresAt ?? this.expiresAt,
   );
   CachedUserProfile copyWithCompanion(CachedUserProfilesCompanion data) {
@@ -272,6 +398,12 @@ class CachedUserProfile extends DataClass
       firstName: data.firstName.present ? data.firstName.value : this.firstName,
       lastName: data.lastName.present ? data.lastName.value : this.lastName,
       username: data.username.present ? data.username.value : this.username,
+      nickname: data.nickname.present ? data.nickname.value : this.nickname,
+      position: data.position.present ? data.position.value : this.position,
+      email: data.email.present ? data.email.value : this.email,
+      profileImageUpdatedAt: data.profileImageUpdatedAt.present
+          ? data.profileImageUpdatedAt.value
+          : this.profileImageUpdatedAt,
       expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
     );
   }
@@ -284,14 +416,28 @@ class CachedUserProfile extends DataClass
           ..write('firstName: $firstName, ')
           ..write('lastName: $lastName, ')
           ..write('username: $username, ')
+          ..write('nickname: $nickname, ')
+          ..write('position: $position, ')
+          ..write('email: $email, ')
+          ..write('profileImageUpdatedAt: $profileImageUpdatedAt, ')
           ..write('expiresAt: $expiresAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(accountId, userId, firstName, lastName, username, expiresAt);
+  int get hashCode => Object.hash(
+    accountId,
+    userId,
+    firstName,
+    lastName,
+    username,
+    nickname,
+    position,
+    email,
+    profileImageUpdatedAt,
+    expiresAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -301,6 +447,10 @@ class CachedUserProfile extends DataClass
           other.firstName == this.firstName &&
           other.lastName == this.lastName &&
           other.username == this.username &&
+          other.nickname == this.nickname &&
+          other.position == this.position &&
+          other.email == this.email &&
+          other.profileImageUpdatedAt == this.profileImageUpdatedAt &&
           other.expiresAt == this.expiresAt);
 }
 
@@ -310,6 +460,10 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
   final Value<String> firstName;
   final Value<String> lastName;
   final Value<String> username;
+  final Value<String> nickname;
+  final Value<String> position;
+  final Value<String> email;
+  final Value<int> profileImageUpdatedAt;
   final Value<DateTime> expiresAt;
   final Value<int> rowid;
   const CachedUserProfilesCompanion({
@@ -318,6 +472,10 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
     this.firstName = const Value.absent(),
     this.lastName = const Value.absent(),
     this.username = const Value.absent(),
+    this.nickname = const Value.absent(),
+    this.position = const Value.absent(),
+    this.email = const Value.absent(),
+    this.profileImageUpdatedAt = const Value.absent(),
     this.expiresAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -327,6 +485,10 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
     required String firstName,
     required String lastName,
     required String username,
+    this.nickname = const Value.absent(),
+    this.position = const Value.absent(),
+    this.email = const Value.absent(),
+    this.profileImageUpdatedAt = const Value.absent(),
     required DateTime expiresAt,
     this.rowid = const Value.absent(),
   }) : accountId = Value(accountId),
@@ -341,6 +503,10 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
     Expression<String>? firstName,
     Expression<String>? lastName,
     Expression<String>? username,
+    Expression<String>? nickname,
+    Expression<String>? position,
+    Expression<String>? email,
+    Expression<int>? profileImageUpdatedAt,
     Expression<DateTime>? expiresAt,
     Expression<int>? rowid,
   }) {
@@ -350,6 +516,11 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
       if (firstName != null) 'first_name': firstName,
       if (lastName != null) 'last_name': lastName,
       if (username != null) 'username': username,
+      if (nickname != null) 'nickname': nickname,
+      if (position != null) 'position': position,
+      if (email != null) 'email': email,
+      if (profileImageUpdatedAt != null)
+        'profile_image_updated_at': profileImageUpdatedAt,
       if (expiresAt != null) 'expires_at': expiresAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -361,6 +532,10 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
     Value<String>? firstName,
     Value<String>? lastName,
     Value<String>? username,
+    Value<String>? nickname,
+    Value<String>? position,
+    Value<String>? email,
+    Value<int>? profileImageUpdatedAt,
     Value<DateTime>? expiresAt,
     Value<int>? rowid,
   }) {
@@ -370,6 +545,11 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
       username: username ?? this.username,
+      nickname: nickname ?? this.nickname,
+      position: position ?? this.position,
+      email: email ?? this.email,
+      profileImageUpdatedAt:
+          profileImageUpdatedAt ?? this.profileImageUpdatedAt,
       expiresAt: expiresAt ?? this.expiresAt,
       rowid: rowid ?? this.rowid,
     );
@@ -393,6 +573,20 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
     if (username.present) {
       map['username'] = Variable<String>(username.value);
     }
+    if (nickname.present) {
+      map['nickname'] = Variable<String>(nickname.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<String>(position.value);
+    }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (profileImageUpdatedAt.present) {
+      map['profile_image_updated_at'] = Variable<int>(
+        profileImageUpdatedAt.value,
+      );
+    }
     if (expiresAt.present) {
       map['expires_at'] = Variable<DateTime>(expiresAt.value);
     }
@@ -410,6 +604,10 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
           ..write('firstName: $firstName, ')
           ..write('lastName: $lastName, ')
           ..write('username: $username, ')
+          ..write('nickname: $nickname, ')
+          ..write('position: $position, ')
+          ..write('email: $email, ')
+          ..write('profileImageUpdatedAt: $profileImageUpdatedAt, ')
           ..write('expiresAt: $expiresAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -436,6 +634,10 @@ typedef $$CachedUserProfilesTableCreateCompanionBuilder =
       required String firstName,
       required String lastName,
       required String username,
+      Value<String> nickname,
+      Value<String> position,
+      Value<String> email,
+      Value<int> profileImageUpdatedAt,
       required DateTime expiresAt,
       Value<int> rowid,
     });
@@ -446,6 +648,10 @@ typedef $$CachedUserProfilesTableUpdateCompanionBuilder =
       Value<String> firstName,
       Value<String> lastName,
       Value<String> username,
+      Value<String> nickname,
+      Value<String> position,
+      Value<String> email,
+      Value<int> profileImageUpdatedAt,
       Value<DateTime> expiresAt,
       Value<int> rowid,
     });
@@ -481,6 +687,26 @@ class $$CachedUserProfilesTableFilterComposer
 
   ColumnFilters<String> get username => $composableBuilder(
     column: $table.username,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nickname => $composableBuilder(
+    column: $table.nickname,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get profileImageUpdatedAt => $composableBuilder(
+    column: $table.profileImageUpdatedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -524,6 +750,26 @@ class $$CachedUserProfilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get nickname => $composableBuilder(
+    column: $table.nickname,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get profileImageUpdatedAt => $composableBuilder(
+    column: $table.profileImageUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get expiresAt => $composableBuilder(
     column: $table.expiresAt,
     builder: (column) => ColumnOrderings(column),
@@ -553,6 +799,20 @@ class $$CachedUserProfilesTableAnnotationComposer
 
   GeneratedColumn<String> get username =>
       $composableBuilder(column: $table.username, builder: (column) => column);
+
+  GeneratedColumn<String> get nickname =>
+      $composableBuilder(column: $table.nickname, builder: (column) => column);
+
+  GeneratedColumn<String> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<int> get profileImageUpdatedAt => $composableBuilder(
+    column: $table.profileImageUpdatedAt,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get expiresAt =>
       $composableBuilder(column: $table.expiresAt, builder: (column) => column);
@@ -603,6 +863,10 @@ class $$CachedUserProfilesTableTableManager
                 Value<String> firstName = const Value.absent(),
                 Value<String> lastName = const Value.absent(),
                 Value<String> username = const Value.absent(),
+                Value<String> nickname = const Value.absent(),
+                Value<String> position = const Value.absent(),
+                Value<String> email = const Value.absent(),
+                Value<int> profileImageUpdatedAt = const Value.absent(),
                 Value<DateTime> expiresAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CachedUserProfilesCompanion(
@@ -611,6 +875,10 @@ class $$CachedUserProfilesTableTableManager
                 firstName: firstName,
                 lastName: lastName,
                 username: username,
+                nickname: nickname,
+                position: position,
+                email: email,
+                profileImageUpdatedAt: profileImageUpdatedAt,
                 expiresAt: expiresAt,
                 rowid: rowid,
               ),
@@ -621,6 +889,10 @@ class $$CachedUserProfilesTableTableManager
                 required String firstName,
                 required String lastName,
                 required String username,
+                Value<String> nickname = const Value.absent(),
+                Value<String> position = const Value.absent(),
+                Value<String> email = const Value.absent(),
+                Value<int> profileImageUpdatedAt = const Value.absent(),
                 required DateTime expiresAt,
                 Value<int> rowid = const Value.absent(),
               }) => CachedUserProfilesCompanion.insert(
@@ -629,6 +901,10 @@ class $$CachedUserProfilesTableTableManager
                 firstName: firstName,
                 lastName: lastName,
                 username: username,
+                nickname: nickname,
+                position: position,
+                email: email,
+                profileImageUpdatedAt: profileImageUpdatedAt,
                 expiresAt: expiresAt,
                 rowid: rowid,
               ),

@@ -18,6 +18,7 @@ final class MattermostUserDto {
     this.firstName = '',
     this.lastName = '',
     this.nickname = '',
+    this.position = '',
     this.email = '',
     this.emailVerified = false,
     this.authService = '',
@@ -45,6 +46,7 @@ final class MattermostUserDto {
     firstName: _string(json, 'first_name'),
     lastName: _string(json, 'last_name'),
     nickname: _string(json, 'nickname'),
+    position: _string(json, 'position'),
     email: _string(json, 'email'),
     emailVerified: _bool(json, 'email_verified'),
     authService: _string(json, 'auth_service'),
@@ -71,6 +73,7 @@ final class MattermostUserDto {
   final String firstName;
   final String lastName;
   final String nickname;
+  final String position;
   final String email;
   final bool emailVerified;
   final String authService;
@@ -90,6 +93,31 @@ final class MattermostUserDto {
 
   int get profileImageUpdatedAt =>
       isBot ? botLastIconUpdate : lastPictureUpdate;
+}
+
+final class MattermostUserStatusDto {
+  const MattermostUserStatusDto({
+    required this.userId,
+    required this.status,
+    this.manual = false,
+    this.lastActivityAt = 0,
+    this.dndEndTime = 0,
+  });
+
+  factory MattermostUserStatusDto.fromJson(JsonMap json) =>
+      MattermostUserStatusDto(
+        userId: _string(json, 'user_id'),
+        status: _string(json, 'status'),
+        manual: _bool(json, 'manual'),
+        lastActivityAt: _int(json, 'last_activity_at'),
+        dndEndTime: _int(json, 'dnd_end_time'),
+      );
+
+  final String userId;
+  final String status;
+  final bool manual;
+  final int lastActivityAt;
+  final int dndEndTime;
 }
 
 /// Binary response returned by the user profile-image endpoint.

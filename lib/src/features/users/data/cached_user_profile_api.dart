@@ -65,6 +65,10 @@ final class CachedUserProfileApi implements MattermostApi {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 username: user.username,
+                nickname: user.nickname,
+                position: user.position,
+                email: user.email,
+                profileImageUpdatedAt: user.profileImageUpdatedAt,
                 expiresAt: expiresAt,
               ),
             )
@@ -90,7 +94,15 @@ final class CachedUserProfileApi implements MattermostApi {
         username: profile.username,
         firstName: profile.firstName,
         lastName: profile.lastName,
+        nickname: profile.nickname,
+        position: profile.position,
+        email: profile.email,
+        lastPictureUpdate: profile.profileImageUpdatedAt,
       );
+
+  @override
+  Future<MattermostUserStatusDto> getUserStatus(String userId) =>
+      _delegate.getUserStatus(userId);
 
   @override
   Future<MattermostUserDto> getCurrentUser() => _delegate.getCurrentUser();
@@ -126,6 +138,15 @@ final class CachedUserProfileApi implements MattermostApi {
   Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
     List<String> channelIds,
   ) => _delegate.getUsersForGroupChannels(channelIds);
+
+  @override
+  Future<MattermostChannelDto> createDirectChannel({
+    required String currentUserId,
+    required String otherUserId,
+  }) => _delegate.createDirectChannel(
+    currentUserId: currentUserId,
+    otherUserId: otherUserId,
+  );
 
   @override
   Future<MattermostPostListDto> getPostsForChannel({

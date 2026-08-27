@@ -425,7 +425,7 @@ class _PostRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           if (continuesAuthor)
-            const SizedBox(width: 38)
+            const SizedBox(width: 44)
           else
             MessageAvatar(author: post.author),
           const SizedBox(width: 10),

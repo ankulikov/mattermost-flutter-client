@@ -58,6 +58,12 @@ final class DioMattermostApi implements MattermostApi {
   }
 
   @override
+  Future<MattermostUserStatusDto> getUserStatus(String userId) async {
+    final Response<Object?> response = await _get('/users/$userId/status');
+    return MattermostUserStatusDto.fromJson(_object(response.data));
+  }
+
+  @override
   Future<MattermostImageDto> getUserProfileImage({
     required String userId,
     int lastPictureUpdate = 0,
@@ -110,6 +116,18 @@ final class DioMattermostApi implements MattermostApi {
         ),
       ),
     );
+  }
+
+  @override
+  Future<MattermostChannelDto> createDirectChannel({
+    required String currentUserId,
+    required String otherUserId,
+  }) async {
+    final Response<Object?> response = await _post(
+      '/channels/direct',
+      data: jsonEncode(<String>[currentUserId, otherUserId]),
+    );
+    return MattermostChannelDto.fromJson(_object(response.data));
   }
 
   @override

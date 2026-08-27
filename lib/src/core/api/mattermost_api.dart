@@ -23,6 +23,8 @@ abstract interface class MattermostApi {
 
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds);
 
+  Future<MattermostUserStatusDto> getUserStatus(String userId);
+
   /// Returns the authenticated user's view of [userId]'s profile image.
   ///
   /// Mattermost ignores [lastPictureUpdate] on the server; it exists solely to
@@ -35,6 +37,11 @@ abstract interface class MattermostApi {
   Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
     List<String> channelIds,
   );
+
+  Future<MattermostChannelDto> createDirectChannel({
+    required String currentUserId,
+    required String otherUserId,
+  });
 
   Future<MattermostPostListDto> getPostsForChannel({
     required String channelId,

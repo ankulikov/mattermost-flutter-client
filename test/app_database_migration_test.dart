@@ -67,4 +67,48 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test(
+    'adds complete card fields when upgrading user cache schema 8',
+    () async {
+      final Directory directory = await Directory.systemTemp.createTemp(
+        'mattermost-user-profile-fields-',
+      );
+      final File file = File('${directory.path}/cache.sqlite');
+      final sqlite.Database legacy = sqlite.sqlite3.open(file.path);
+      legacy.execute('''
+      CREATE TABLE cached_user_profiles (
+        account_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        username TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        PRIMARY KEY (account_id, user_id)
+      )
+    ''');
+      legacy.execute('PRAGMA user_version = 8');
+      legacy.close();
+
+      final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+      try {
+        final List<String> columns = await database
+            .customSelect('PRAGMA table_info(cached_user_profiles)')
+            .map((row) => row.read<String>('name'))
+            .get();
+        expect(
+          columns,
+          containsAll(<String>[
+            'nickname',
+            'position',
+            'email',
+            'profile_image_updated_at',
+          ]),
+        );
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }

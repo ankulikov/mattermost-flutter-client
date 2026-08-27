@@ -7,6 +7,10 @@ final class CachedUserProfile {
     required this.firstName,
     required this.lastName,
     required this.username,
+    this.nickname = '',
+    this.position = '',
+    this.email = '',
+    this.profileImageUpdatedAt = 0,
     required this.expiresAt,
   });
 
@@ -14,6 +18,10 @@ final class CachedUserProfile {
   final String firstName;
   final String lastName;
   final String username;
+  final String nickname;
+  final String position;
+  final String email;
+  final int profileImageUpdatedAt;
   final DateTime expiresAt;
 }
 
@@ -87,6 +95,12 @@ final class DriftUserProfileCache implements UserProfileCache {
                 firstName: Value<String>(profile.firstName),
                 lastName: Value<String>(profile.lastName),
                 username: Value<String>(profile.username),
+                nickname: Value<String>(profile.nickname),
+                position: Value<String>(profile.position),
+                email: Value<String>(profile.email),
+                profileImageUpdatedAt: Value<int>(
+                  profile.profileImageUpdatedAt,
+                ),
                 expiresAt: Value<DateTime>(profile.expiresAt),
               ),
             )
@@ -101,6 +115,10 @@ final class DriftUserProfileCache implements UserProfileCache {
         firstName: row.firstName,
         lastName: row.lastName,
         username: row.username,
+        nickname: row.nickname,
+        position: row.position,
+        email: row.email,
+        profileImageUpdatedAt: row.profileImageUpdatedAt,
         expiresAt: row.expiresAt,
       );
 }

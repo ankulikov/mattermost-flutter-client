@@ -16,6 +16,15 @@ class CachedUserProfiles extends Table {
 
   TextColumn get username => text()();
 
+  TextColumn get nickname => text().withDefault(const Constant<String>(''))();
+
+  TextColumn get position => text().withDefault(const Constant<String>(''))();
+
+  TextColumn get email => text().withDefault(const Constant<String>(''))();
+
+  IntColumn get profileImageUpdatedAt =>
+      integer().withDefault(const Constant<int>(0))();
+
   DateTimeColumn get expiresAt => dateTime()();
 
   @override
@@ -31,7 +40,7 @@ final class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -44,6 +53,21 @@ final class AppDatabase extends _$AppDatabase {
       }
       if (from < 8) {
         await migrator.createTable(cachedUserProfiles);
+      }
+      if (from >= 8 && from < 9) {
+        await migrator.addColumn(
+          cachedUserProfiles,
+          cachedUserProfiles.nickname,
+        );
+        await migrator.addColumn(
+          cachedUserProfiles,
+          cachedUserProfiles.position,
+        );
+        await migrator.addColumn(cachedUserProfiles, cachedUserProfiles.email);
+        await migrator.addColumn(
+          cachedUserProfiles,
+          cachedUserProfiles.profileImageUpdatedAt,
+        );
       }
     },
   );

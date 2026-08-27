@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/api/active_mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
+import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/database/database_provider.dart';
 import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/data/pat_auth_repository.dart';
@@ -11,9 +14,12 @@ import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
+import 'package:mattermost_flutter/src/features/channels/data/api_direct_channel_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
+import 'package:mattermost_flutter/src/features/channels/domain/direct_channel_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
+import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/features/messages/data/api_message_sender.dart';
 import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
@@ -28,11 +34,14 @@ import 'package:mattermost_flutter/src/features/threads/domain/thread_repository
 import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
 import 'package:mattermost_flutter/src/features/users/data/api_user_avatar_repository.dart';
+import 'package:mattermost_flutter/src/features/users/data/api_user_profile_repository.dart';
 import 'package:mattermost_flutter/src/features/users/data/cached_user_profile_api.dart';
 import 'package:mattermost_flutter/src/features/users/data/user_avatar_cache.dart';
 import 'package:mattermost_flutter/src/features/users/data/user_profile_cache.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_avatar_repository.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_profile.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_profile_repository.dart';
 
 final Provider<CredentialStore> credentialStoreProvider =
     Provider<CredentialStore>((Ref ref) => SecureCredentialStore());
@@ -119,6 +128,43 @@ final userAvatarProvider = FutureProvider.autoDispose
             profileImageUpdatedAt: input.profileImageUpdatedAt,
           );
     });
+
+final Provider<UserProfileRepository> userProfileRepositoryProvider =
+    Provider<UserProfileRepository>(
+      (Ref ref) =>
+          ApiUserProfileRepository(api: ref.watch(activeMattermostApiProvider)),
+    );
+
+final userProfileProvider = FutureProvider.autoDispose
+    .family<UserProfile, String>((Ref ref, String userId) {
+      final RequestCancellation cancellation = RequestCancellation();
+      ref.onDispose(cancellation.cancel);
+      return cancellation.run(
+        () => ref.watch(userProfileRepositoryProvider).getById(userId),
+      );
+    });
+
+final Provider<DirectChannelRepository> directChannelRepositoryProvider =
+    Provider<DirectChannelRepository>(
+      (Ref ref) => ApiDirectChannelRepository(
+        api: ref.watch(activeMattermostApiProvider),
+      ),
+    );
+
+Future<void> openDirectMessage(WidgetRef ref, UserProfile profile) async {
+  final AuthSession? session = ref.read(authSessionProvider);
+  if (session == null) throw StateError('No active Mattermost session');
+  final SidebarChannel channel = await ref
+      .read(directChannelRepositoryProvider)
+      .open(
+        currentUserId: session.userId,
+        otherUserId: profile.id,
+        otherUserDisplayName: profile.fullName,
+      );
+  ref.read(threadsDestinationProvider.notifier).clear();
+  ref.read(selectedChannelProvider.notifier).select(channel);
+  unawaited(ref.read(channelSidebarProvider.notifier).refresh());
+}
 
 final Provider<MessageMapper<MattermostPostDto, MattermostUserDto>>
 mattermostMessageMapperProvider =

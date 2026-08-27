@@ -9,6 +9,42 @@ import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 
 void main() {
+  test('loads user status by id', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"user_id":"ada","status":"online","manual":false}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    final MattermostUserStatusDto status = await api.getUserStatus('ada');
+
+    expect(adapter.request?.path, '/users/ada/status');
+    expect(status.userId, 'ada');
+    expect(status.status, 'online');
+  });
+
+  test('creates a direct channel for exactly two users', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"id":"dm-1","team_id":"","type":"D",'
+          '"display_name":"","name":"ada__me"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    final MattermostChannelDto channel = await api.createDirectChannel(
+      currentUserId: 'me',
+      otherUserId: 'ada',
+    );
+
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/channels/direct');
+    expect(adapter.request?.data, <String>['me', 'ada']);
+    expect(channel.id, 'dm-1');
+  });
+
   test('creates a text post with reply and pending identifiers', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:

@@ -5,6 +5,7 @@ import 'package:mattermost_flutter/src/core/ui/avatar_initials.dart';
 import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
+import 'package:mattermost_flutter/src/features/users/presentation/user_profile_card.dart';
 
 class MessageAvatar extends ConsumerWidget {
   const MessageAvatar({required this.author, this.radius = 19, super.key});
@@ -34,28 +35,45 @@ class MessageAvatar extends ConsumerWidget {
     final double diameter = radius * 2;
     final int cacheWidth = (diameter * MediaQuery.devicePixelRatioOf(context))
         .ceil();
+    final Widget image = SizedBox.square(
+      dimension: diameter,
+      child: ClipOval(
+        child: avatar.when(
+          data: (UserAvatar? value) => value == null
+              ? fallback
+              : Image.memory(
+                  value.bytes,
+                  fit: BoxFit.cover,
+                  cacheWidth: cacheWidth,
+                  gaplessPlayback: true,
+                  excludeFromSemantics: true,
+                  errorBuilder:
+                      (BuildContext context, Object _, StackTrace? _) {
+                        return fallback;
+                      },
+                ),
+          loading: () => fallback,
+          error: (Object _, StackTrace _) => fallback,
+        ),
+      ),
+    );
+    final double tapTarget = diameter < 44 ? 44 : diameter;
     return Semantics(
+      button: true,
       image: true,
       label: author.displayName,
       child: SizedBox.square(
-        dimension: diameter,
-        child: ClipOval(
-          child: avatar.when(
-            data: (UserAvatar? value) => value == null
-                ? fallback
-                : Image.memory(
-                    value.bytes,
-                    fit: BoxFit.cover,
-                    cacheWidth: cacheWidth,
-                    gaplessPlayback: true,
-                    excludeFromSemantics: true,
-                    errorBuilder:
-                        (BuildContext context, Object _, StackTrace? _) {
-                          return fallback;
-                        },
-                  ),
-            loading: () => fallback,
-            error: (Object _, StackTrace _) => fallback,
+        dimension: tapTarget,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showUserProfileCard(
+              context,
+              userId: author.id,
+              onMessage: (profile) => openDirectMessage(ref, profile),
+            ),
+            child: Center(child: image),
           ),
         ),
       ),
@@ -74,7 +92,7 @@ class MessageAvatar extends ConsumerWidget {
   }
 }
 
-class MessageAuthorLine extends StatelessWidget {
+class MessageAuthorLine extends ConsumerWidget {
   const MessageAuthorLine({
     required this.author,
     required this.sentAt,
@@ -85,7 +103,7 @@ class MessageAuthorLine extends StatelessWidget {
   final DateTime sentAt;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ThemeData theme = Theme.of(context);
     final String time = MaterialLocalizations.of(
       context,
@@ -95,10 +113,27 @@ class MessageAuthorLine extends StatelessWidget {
       spacing: 8,
       runSpacing: 2,
       children: <Widget>[
-        Text(
-          author.displayName,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
+        Semantics(
+          button: true,
+          child: InkWell(
+            onTap: () => showUserProfileCard(
+              context,
+              userId: author.id,
+              onMessage: (profile) => openDirectMessage(ref, profile),
+            ),
+            borderRadius: BorderRadius.circular(4),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  author.displayName,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
         Text(

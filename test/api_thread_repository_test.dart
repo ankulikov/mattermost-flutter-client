@@ -178,6 +178,16 @@ final class _ThreadApi implements MattermostApi {
   _ThreadApi({this.deletedOnly = false});
 
   @override
+  Future<MattermostChannelDto> createDirectChannel({
+    required String currentUserId,
+    required String otherUserId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<MattermostUserStatusDto> getUserStatus(String userId) =>
+      throw UnimplementedError();
+
+  @override
   Future<MattermostImageDto> getUserProfileImage({
     required String userId,
     int lastPictureUpdate = 0,

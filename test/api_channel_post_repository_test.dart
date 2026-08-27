@@ -89,6 +89,16 @@ final class _FakePostApi implements MattermostApi {
   _FakePostApi({this.hasReplyOnlyLatest = false});
 
   @override
+  Future<MattermostChannelDto> createDirectChannel({
+    required String currentUserId,
+    required String otherUserId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<MattermostUserStatusDto> getUserStatus(String userId) =>
+      throw UnimplementedError();
+
+  @override
   Future<void> updateThreadRead({
     required String userId,
     required String teamId,

@@ -27,6 +27,9 @@ void main() {
           username: 'ada.login',
           firstName: 'Ada',
           lastName: 'Lovelace',
+          nickname: 'Enchantress of Numbers',
+          position: 'Mathematician',
+          email: 'ada@example.com',
           lastPictureUpdate: 42,
         ),
         'grace': const MattermostUserDto(
@@ -60,7 +63,10 @@ void main() {
       expect(second.first.username, 'ada.login');
       expect(second.first.firstName, 'Ada');
       expect(second.first.lastName, 'Lovelace');
-      expect(second.first.lastPictureUpdate, 0);
+      expect(second.first.nickname, 'Enchantress of Numbers');
+      expect(second.first.position, 'Mathematician');
+      expect(second.first.email, 'ada@example.com');
+      expect(second.first.lastPictureUpdate, 42);
       final List<CachedUserProfile> stored = await cache.getByIds(
         accountId: 'https://chat.example.com',
         userIds: <String>['ada', 'grace'],
