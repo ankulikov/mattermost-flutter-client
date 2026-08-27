@@ -10,4 +10,7 @@ final class AuthSession {
   final String username;
 
   String get accountId => serverUrl.toString();
+
+  /// Separates durable tenant data for different signed-in users on one server.
+  String get durableDataScopeId => '${serverUrl.toString()}|user:$userId';
 }

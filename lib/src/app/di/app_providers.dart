@@ -3,6 +3,7 @@ import 'package:mattermost_flutter/src/core/api/active_mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
+import 'package:mattermost_flutter/src/core/database/database_provider.dart';
 import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/data/pat_auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
@@ -27,7 +28,9 @@ import 'package:mattermost_flutter/src/features/threads/domain/thread_repository
 import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
 import 'package:mattermost_flutter/src/features/users/data/api_user_avatar_repository.dart';
+import 'package:mattermost_flutter/src/features/users/data/cached_user_profile_api.dart';
 import 'package:mattermost_flutter/src/features/users/data/user_avatar_cache.dart';
+import 'package:mattermost_flutter/src/features/users/data/user_profile_cache.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_avatar_repository.dart';
 
@@ -70,6 +73,11 @@ final Provider<AuthSession?> authSessionProvider = Provider<AuthSession?>((
   );
 });
 
+final Provider<UserProfileCache> userProfileCacheProvider =
+    Provider<UserProfileCache>(
+      (Ref ref) => DriftUserProfileCache(ref.watch(appDatabaseProvider)),
+    );
+
 final Provider<MattermostApi> activeMattermostApiProvider =
     Provider<MattermostApi>((Ref ref) {
       final AuthSession? session = ref.watch(authSessionProvider);
@@ -79,7 +87,11 @@ final Provider<MattermostApi> activeMattermostApiProvider =
       if (session == null || api == null) {
         throw StateError('No API client for the active Mattermost account');
       }
-      return api;
+      return CachedUserProfileApi(
+        delegate: api,
+        cache: ref.watch(userProfileCacheProvider),
+        accountId: session.durableDataScopeId,
+      );
     });
 
 final Provider<UserAvatarCache> userAvatarCacheProvider =

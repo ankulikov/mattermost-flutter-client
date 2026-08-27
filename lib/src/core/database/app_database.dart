@@ -3,25 +3,47 @@ import 'package:mattermost_flutter/src/core/database/open_database.dart';
 
 part 'app_database.g.dart';
 
-/// Drift remains the persistence boundary for future durable data such as user
-/// profiles. Channel navigation, posts, threads, and paging state are volatile
-/// and deliberately do not have database tables.
-@DriftDatabase(tables: <Type>[])
+/// A tenant-scoped, expiring projection of the user fields needed to render
+/// names. Avatar bytes and avatar version metadata deliberately live elsewhere.
+class CachedUserProfiles extends Table {
+  TextColumn get accountId => text()();
+
+  TextColumn get userId => text()();
+
+  TextColumn get firstName => text()();
+
+  TextColumn get lastName => text()();
+
+  TextColumn get username => text()();
+
+  DateTimeColumn get expiresAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, userId};
+}
+
+/// Drift persists only explicitly owned durable data. Channel navigation,
+/// posts, threads, and paging state remain volatile.
+@DriftDatabase(tables: <Type>[CachedUserProfiles])
 final class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (Migrator migrator) => migrator.createAll(),
     onUpgrade: (Migrator migrator, int from, int to) async {
-      if (from >= 7) return;
-      for (final String table in _removedVolatileTables) {
-        await customStatement('DROP TABLE IF EXISTS $table');
+      if (from < 7) {
+        for (final String table in _removedVolatileTables) {
+          await customStatement('DROP TABLE IF EXISTS $table');
+        }
+      }
+      if (from < 8) {
+        await migrator.createTable(cachedUserProfiles);
       }
     },
   );

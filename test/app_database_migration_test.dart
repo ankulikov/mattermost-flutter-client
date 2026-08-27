@@ -39,6 +39,29 @@ void main() {
           .get();
       expect(remaining, isNot(containsAll(obsoleteTables)));
       expect(remaining.where(obsoleteTables.contains), isEmpty);
+      expect(remaining, contains('cached_user_profiles'));
+    } finally {
+      await database.close();
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('creates the user profile cache when upgrading schema 7', () async {
+    final Directory directory = await Directory.systemTemp.createTemp(
+      'mattermost-user-profiles-',
+    );
+    final File file = File('${directory.path}/cache.sqlite');
+    sqlite.sqlite3.open(file.path)
+      ..execute('PRAGMA user_version = 7')
+      ..close();
+
+    final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+    try {
+      final List<String> tables = await database
+          .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(tables, contains('cached_user_profiles'));
     } finally {
       await database.close();
       await directory.delete(recursive: true);

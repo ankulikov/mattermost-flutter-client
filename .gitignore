@@ -9,7 +9,6 @@
 build/
 coverage/
 *.iml
-*.g.dart
 *.freezed.dart
 android/local.properties
 ios/Flutter/ephemeral/

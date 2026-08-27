@@ -1,5 +1,15 @@
 # User profiles and avatars
 
+User details requested by ID are cached independently in Drift. The
+`cached_user_profiles` table contains an account/server scope (server URL plus
+the signed-in user ID), requested user ID, first name, last name, username, and
+expiration timestamp. Reads are DB-first; missing or expired IDs are fetched
+together with `POST /users/ids` and upserted with a seven-day TTL. Expired values
+are not served when refresh fails.
+
+This profile cache does not store avatar bytes or picture-update metadata and
+does not participate in avatar cache keys.
+
 User profile responses do not contain an image URL. They expose
 `last_picture_update`; bot accounts expose `is_bot` and
 `bot_last_icon_update`. Profile image bytes come from authenticated
