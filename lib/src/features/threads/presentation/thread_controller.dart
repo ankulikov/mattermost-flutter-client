@@ -12,20 +12,28 @@ final class ThreadViewState {
     required this.thread,
     this.isRefreshing = false,
     this.refreshFailed = false,
+    this.isMarkingRead = false,
+    this.markReadFailed = false,
   });
 
   final MessageThread thread;
   final bool isRefreshing;
   final bool refreshFailed;
+  final bool isMarkingRead;
+  final bool markReadFailed;
 
   ThreadViewState copyWith({
     MessageThread? thread,
     bool? isRefreshing,
     bool? refreshFailed,
+    bool? isMarkingRead,
+    bool? markReadFailed,
   }) => ThreadViewState(
     thread: thread ?? this.thread,
     isRefreshing: isRefreshing ?? this.isRefreshing,
     refreshFailed: refreshFailed ?? this.refreshFailed,
+    isMarkingRead: isMarkingRead ?? this.isMarkingRead,
+    markReadFailed: markReadFailed ?? this.markReadFailed,
   );
 }
 
@@ -46,6 +54,8 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
   ThreadRepository? _repository;
   bool _refreshing = false;
   bool _sendRunning = false;
+  bool _markReadRunning = false;
+  DateTime? _markedLoadedAt;
 
   @override
   Future<ThreadViewState> build() async {
@@ -136,6 +146,55 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     }
   }
 
+  Future<bool> markRead({required String teamId}) async {
+    final AuthSession? session = _session;
+    final ThreadRepository? repository = _repository;
+    final ThreadViewState? current = state.value;
+    final DateTime? loadedAt = current?.thread.loadedAt;
+    if (_markReadRunning ||
+        session == null ||
+        repository == null ||
+        current == null ||
+        !current.thread.isComplete ||
+        loadedAt == null) {
+      return false;
+    }
+    if (_markedLoadedAt == loadedAt) return true;
+    _markReadRunning = true;
+    state = AsyncData(
+      current.copyWith(isMarkingRead: true, markReadFailed: false),
+    );
+    try {
+      await _cancellation.run(
+        () => repository.markRead(
+          session: session,
+          teamId: teamId,
+          rootPostId: rootPostId,
+          timestamp: loadedAt,
+        ),
+      );
+      _markedLoadedAt = loadedAt;
+      final ThreadViewState? latest = state.value;
+      if (latest != null) {
+        state = AsyncData(
+          latest.copyWith(isMarkingRead: false, markReadFailed: false),
+        );
+      }
+      return true;
+    } on Object {
+      if (_cancellation.isCancelled) return false;
+      final ThreadViewState? latest = state.value;
+      if (latest != null) {
+        state = AsyncData(
+          latest.copyWith(isMarkingRead: false, markReadFailed: true),
+        );
+      }
+      return false;
+    } finally {
+      _markReadRunning = false;
+    }
+  }
+
   static MessageThread _withSentReply(MessageThread thread, ChannelPost sent) {
     final bool wasKnown = thread.replies.any(
       (ChannelPost reply) => reply.id == sent.id,
@@ -159,6 +218,7 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
       ),
       replies: List<ChannelPost>.unmodifiable(ordered),
       isComplete: thread.isComplete,
+      loadedAt: thread.loadedAt,
     );
   }
 }

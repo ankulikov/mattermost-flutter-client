@@ -60,7 +60,7 @@ void main() {
     expect(find.text('Ada Lovelace'), findsOneWidget);
   });
 
-  testWidgets('shows followed threads with mention count or unread dot', (
+  testWidgets('shows the unread reply count for followed threads', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -88,13 +88,59 @@ void main() {
     expect(find.text('Mentioned root'), findsOneWidget);
     expect(find.text('Unread root'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('thread-mention-count-root-mention')),
+      find.byKey(const ValueKey<String>('thread-unread-count-root-mention')),
       findsOneWidget,
     );
-    expect(find.text('2'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('thread-unread-dot-root-unread')),
+      find.byKey(const ValueKey<String>('thread-unread-count-root-unread')),
       findsOneWidget,
+    );
+    expect(find.text('1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('positions a followed thread at unread replies then marks read', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _ReadRecordingThreadRepository threads =
+        _ReadRecordingThreadRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          followedThreadsRepositoryProvider.overrideWithValue(
+            const _FollowedThreadsRepository(),
+          ),
+          threadRepositoryProvider.overrideWithValue(threads),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.forum_outlined));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unread root'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('unread messages'), findsOneWidget);
+    expect(
+      tester.getBottomLeft(find.text('unread messages')).dy,
+      lessThan(tester.getTopLeft(find.text('This message was deleted')).dy),
+    );
+    expect(threads.markReadCalls, 1);
+    expect(threads.teamId, 'team-1');
+    expect(threads.rootPostId, 'root-unread');
+    expect(threads.timestamp, DateTime.fromMillisecondsSinceEpoch(123456));
+    expect(
+      find.byKey(const ValueKey<String>('thread-unread-count-root-unread')),
+      findsNothing,
     );
     expect(tester.takeException(), isNull);
   });
@@ -348,6 +394,46 @@ void main() {
           .width,
       380,
     );
+  });
+
+  testWidgets('opens a thread without unread replies at the end', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelSidebarRepositoryProvider.overrideWithValue(
+            _SidebarRepository(),
+          ),
+          channelPostRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('2 replies'));
+    await tester.pumpAndSettle();
+
+    final ListView messages = tester.widget<ListView>(
+      find.byKey(
+        const ValueKey<String>('thread-message-list-town-square-post'),
+      ),
+    );
+    expect(messages.controller?.position.pixels, greaterThan(0));
+    expect(
+      messages.controller?.position.pixels,
+      messages.controller?.position.maxScrollExtent,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('opens a thread over the channel on compact width', (
@@ -747,6 +833,7 @@ final class _ThreadRepository implements ThreadRepository {
       ),
     ],
     isComplete: true,
+    loadedAt: DateTime.fromMillisecondsSinceEpoch(123456),
   );
 
   @override
@@ -754,6 +841,41 @@ final class _ThreadRepository implements ThreadRepository {
     required AuthSession session,
     required String rootPostId,
   }) async => _thread(rootPostId);
+
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required String teamId,
+    required String rootPostId,
+    required DateTime timestamp,
+  }) async {}
+}
+
+final class _ReadRecordingThreadRepository implements ThreadRepository {
+  int markReadCalls = 0;
+  String? teamId;
+  String? rootPostId;
+  DateTime? timestamp;
+
+  @override
+  Future<MessageThread> load({
+    required AuthSession session,
+    required String rootPostId,
+  }) =>
+      const _ThreadRepository().load(session: session, rootPostId: rootPostId);
+
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required String teamId,
+    required String rootPostId,
+    required DateTime timestamp,
+  }) async {
+    markReadCalls += 1;
+    this.teamId = teamId;
+    this.rootPostId = rootPostId;
+    this.timestamp = timestamp;
+  }
 }
 
 final class _RecordingMessageSender implements MessageSender {

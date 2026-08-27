@@ -40,6 +40,14 @@ void main() {
 
 final class _FakeMattermostApi implements MattermostApi {
   @override
+  Future<void> updateThreadRead({
+    required String userId,
+    required String teamId,
+    required String threadId,
+    required int timestamp,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post) =>
       throw UnimplementedError();
 

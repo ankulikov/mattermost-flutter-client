@@ -209,6 +209,18 @@ final class DioMattermostApi implements MattermostApi {
     return MattermostUserThreadsDto.fromJson(_object(response.data));
   }
 
+  @override
+  Future<void> updateThreadRead({
+    required String userId,
+    required String teamId,
+    required String threadId,
+    required int timestamp,
+  }) async {
+    await _put(
+      '/users/$userId/teams/$teamId/threads/$threadId/read/$timestamp',
+    );
+  }
+
   static Map<String, String>? _conditionalHeaders(String? etag) =>
       etag == null ? null : <String, String>{'If-None-Match': etag};
 
@@ -229,6 +241,12 @@ final class DioMattermostApi implements MattermostApi {
       _withCancellation(
         (CancelToken? cancelToken) =>
             _dio.post<Object?>(path, data: data, cancelToken: cancelToken),
+      );
+
+  Future<Response<Object?>> _put(String path, {Object? data}) =>
+      _withCancellation(
+        (CancelToken? cancelToken) =>
+            _dio.put<Object?>(path, data: data, cancelToken: cancelToken),
       );
 
   Future<Response<T>> _withCancellation<T>(

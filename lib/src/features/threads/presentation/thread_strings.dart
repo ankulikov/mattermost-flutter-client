@@ -7,6 +7,8 @@ abstract final class ThreadStrings {
   static const String deletedMessage = 'This message was deleted';
   static const String retry = 'Retry';
   static const String replies = 'Replies';
+  static const String unreadMessages = 'unread messages';
+  static const String markReadFailed = 'Could not mark this thread as read';
 
   static String replyCount(int count) =>
       count == 1 ? '1 reply' : '$count replies';

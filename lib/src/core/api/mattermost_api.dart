@@ -84,4 +84,13 @@ abstract interface class MattermostApi {
     bool extended = true,
     bool unread = false,
   });
+
+  /// Advances the followed thread's read state to [timestamp], expressed as
+  /// Unix milliseconds.
+  Future<void> updateThreadRead({
+    required String userId,
+    required String teamId,
+    required String threadId,
+    required int timestamp,
+  });
 }

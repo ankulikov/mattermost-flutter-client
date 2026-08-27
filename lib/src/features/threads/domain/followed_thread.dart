@@ -22,6 +22,20 @@ final class FollowedThread {
   String get id => root.id;
   String get channelId => root.channelId;
   bool get isUnread => unreadReplies > 0;
+
+  FollowedThread copyWith({
+    DateTime? lastViewedAt,
+    int? unreadReplies,
+    int? unreadMentions,
+  }) => FollowedThread(
+    root: root,
+    replyCount: replyCount,
+    lastReplyAt: lastReplyAt,
+    lastViewedAt: lastViewedAt ?? this.lastViewedAt,
+    unreadReplies: unreadReplies ?? this.unreadReplies,
+    unreadMentions: unreadMentions ?? this.unreadMentions,
+    participants: participants,
+  );
 }
 
 final class FollowedThreadsPage {

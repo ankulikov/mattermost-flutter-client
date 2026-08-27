@@ -7,29 +7,32 @@ import 'package:mattermost_flutter/src/features/threads/domain/message_thread.da
 import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
 
 final class ApiThreadRepository implements ThreadRepository {
-  const ApiThreadRepository({
+  ApiThreadRepository({
     required MattermostApi api,
     required MessageMapper<MattermostPostDto, MattermostUserDto> messageMapper,
+    DateTime Function()? now,
   }) : _api = api,
-       _messageMapper = messageMapper;
+       _messageMapper = messageMapper,
+       _now = now ?? DateTime.now;
 
   static const int pageSize = 60;
-  static const int maxPagesPerLoad = 20;
 
   final MattermostApi _api;
   final MessageMapper<MattermostPostDto, MattermostUserDto> _messageMapper;
+  final DateTime Function() _now;
 
   @override
   Future<MessageThread> load({
     required AuthSession session,
     required String rootPostId,
   }) async {
+    final DateTime loadedAt = _now();
     final Map<String, MattermostPostDto> posts = <String, MattermostPostDto>{};
     String? fromPost;
     int? fromCreateAt;
+    final Set<String> visitedCursors = <String>{};
     var hasNext = true;
-    var page = 0;
-    while (hasNext && page < maxPagesPerLoad) {
+    while (hasNext) {
       final MattermostPostListDto response = await _api.getPostThread(
         rootPostId: rootPostId,
         perPage: pageSize,
@@ -39,13 +42,21 @@ final class ApiThreadRepository implements ThreadRepository {
       );
       posts.addAll(response.posts);
       hasNext = response.hasNext;
-      if (!hasNext || response.order.isEmpty) break;
-      final String lastId = response.order.last;
-      final MattermostPostDto? last = response.posts[lastId];
-      if (last == null || lastId == fromPost) break;
-      fromPost = lastId;
-      fromCreateAt = last.createAt;
-      page += 1;
+      if (!hasNext) break;
+      if (response.order.isEmpty) {
+        throw const FormatException(
+          'Thread response has_next without a pagination cursor',
+        );
+      }
+      final String nextId = response.nextPostId.isNotEmpty
+          ? response.nextPostId
+          : response.order.last;
+      final MattermostPostDto? next = response.posts[nextId];
+      if (next == null || !visitedCursors.add(nextId)) {
+        throw const FormatException('Thread pagination cursor did not advance');
+      }
+      fromPost = nextId;
+      fromCreateAt = next.createAt;
     }
     final Set<String> userIds = posts.values
         .map((MattermostPostDto post) => post.userId)
@@ -73,6 +84,20 @@ final class ApiThreadRepository implements ThreadRepository {
       root: root,
       replies: List<ChannelPost>.unmodifiable(replies),
       isComplete: !hasNext,
+      loadedAt: loadedAt,
     );
   }
+
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required String teamId,
+    required String rootPostId,
+    required DateTime timestamp,
+  }) => _api.updateThreadRead(
+    userId: session.userId,
+    teamId: teamId,
+    threadId: rootPostId,
+    timestamp: timestamp.millisecondsSinceEpoch,
+  );
 }

@@ -155,6 +155,40 @@ final class FollowedThreadsController
     }
   }
 
+  void recordThreadRead({
+    required String rootPostId,
+    required DateTime timestamp,
+  }) {
+    final FollowedThreadsViewState? current = state.value;
+    if (current == null) return;
+    final FollowedThread? readThread = current.items
+        .where((FollowedThread item) => item.id == rootPostId)
+        .firstOrNull;
+    if (readThread == null || !readThread.isUnread) return;
+    state = AsyncData(
+      current.copyWith(
+        items: List<FollowedThread>.unmodifiable(
+          current.items.map(
+            (FollowedThread item) => item.id == rootPostId
+                ? item.copyWith(
+                    lastViewedAt: timestamp,
+                    unreadReplies: 0,
+                    unreadMentions: 0,
+                  )
+                : item,
+          ),
+        ),
+        totalUnreadThreads: current.totalUnreadThreads > 0
+            ? current.totalUnreadThreads - 1
+            : 0,
+        totalUnreadMentions:
+            current.totalUnreadMentions - readThread.unreadMentions > 0
+            ? current.totalUnreadMentions - readThread.unreadMentions
+            : 0,
+      ),
+    );
+  }
+
   static FollowedThreadsViewState _stateFromPage(FollowedThreadsPage page) =>
       FollowedThreadsViewState(
         items: page.items,

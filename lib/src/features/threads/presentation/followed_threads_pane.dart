@@ -90,7 +90,12 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
           rootPostId: selected.id,
           channel: channel,
           serverUrl: serverUrl,
+          teamId: widget.team.id,
+          unreadReplies: selected.unreadReplies,
           onSelectChannel: widget.onSelectChannel,
+          onThreadRead: (DateTime timestamp) => ref
+              .read(followedThreadsProvider(widget.team.id).notifier)
+              .recordThreadRead(rootPostId: selected.id, timestamp: timestamp),
           onClose: () => setState(() => _selectedThreadId = null),
         );
         if (constraints.maxWidth >= AppBreakpoints.sideThread) {
@@ -319,9 +324,9 @@ class _UnreadIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color color = Theme.of(context).colorScheme.primary;
-    if (thread.unreadMentions > 0) {
+    if (thread.unreadReplies > 0) {
       return Container(
-        key: ValueKey<String>('thread-mention-count-${thread.id}'),
+        key: ValueKey<String>('thread-unread-count-${thread.id}'),
         constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
         padding: const EdgeInsets.symmetric(horizontal: 6),
         alignment: Alignment.center,
@@ -330,21 +335,13 @@ class _UnreadIndicator extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
-          '${thread.unreadMentions}',
+          '${thread.unreadReplies}',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
         ),
-      );
-    }
-    if (thread.isUnread) {
-      return Container(
-        key: ValueKey<String>('thread-unread-dot-${thread.id}'),
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       );
     }
     return const SizedBox(width: 8, height: 8);

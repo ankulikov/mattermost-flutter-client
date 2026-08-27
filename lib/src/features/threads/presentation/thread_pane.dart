@@ -17,8 +17,11 @@ class ThreadPane extends ConsumerStatefulWidget {
     required this.channel,
     required this.onClose,
     this.serverUrl,
+    this.teamId,
+    this.unreadReplies = 0,
     this.onSelectChannel,
     this.onReplySent,
+    this.onThreadRead,
     super.key,
   });
 
@@ -26,8 +29,11 @@ class ThreadPane extends ConsumerStatefulWidget {
   final SidebarChannel channel;
   final VoidCallback onClose;
   final Uri? serverUrl;
+  final String? teamId;
+  final int unreadReplies;
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<ChannelPost>? onReplySent;
+  final ValueChanged<DateTime>? onThreadRead;
 
   @override
   ConsumerState<ThreadPane> createState() => _ThreadPaneState();
@@ -35,6 +41,9 @@ class ThreadPane extends ConsumerStatefulWidget {
 
 class _ThreadPaneState extends ConsumerState<ThreadPane> {
   late final ScrollController _scrollController = ScrollController();
+  late final int _initialUnreadReplies = widget.unreadReplies;
+  final GlobalKey _unreadDividerKey = GlobalKey();
+  DateTime? _scheduledLoadedAt;
 
   @override
   void dispose() {
@@ -75,6 +84,13 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                         .retry(),
                   );
                 }
+                _scheduleInitialPosition(state);
+                final int unreadReplies =
+                    _initialUnreadReplies < state.thread.replies.length
+                    ? _initialUnreadReplies
+                    : state.thread.replies.length;
+                final int firstUnreadIndex =
+                    state.thread.replies.length - unreadReplies;
                 return Column(
                   children: <Widget>[
                     if (state.refreshFailed)
@@ -91,8 +107,21 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                           ),
                         ],
                       ),
+                    if (state.markReadFailed)
+                      MaterialBanner(
+                        content: const Text(ThreadStrings.markReadFailed),
+                        actions: <Widget>[
+                          TextButton(
+                            onPressed: () => unawaited(_markRead(state)),
+                            child: const Text(ThreadStrings.retry),
+                          ),
+                        ],
+                      ),
                     Expanded(
                       child: ListView(
+                        key: ValueKey<String>(
+                          'thread-message-list-${widget.rootPostId}',
+                        ),
                         controller: _scrollController,
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                         children: <Widget>[
@@ -115,15 +144,22 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                               ],
                             ),
                           ),
-                          for (final ChannelPost reply in state.thread.replies)
+                          for (
+                            var index = 0;
+                            index < state.thread.replies.length;
+                            index += 1
+                          ) ...<Widget>[
+                            if (unreadReplies > 0 && index == firstUnreadIndex)
+                              _UnreadMessagesDivider(key: _unreadDividerKey),
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),
                               child: _ThreadPost(
-                                post: reply,
+                                post: state.thread.replies[index],
                                 serverUrl: widget.serverUrl,
                                 onSelectChannel: widget.onSelectChannel,
                               ),
                             ),
+                          ],
                         ],
                       ),
                     ),
@@ -145,6 +181,40 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
     );
   }
 
+  void _scheduleInitialPosition(ThreadViewState state) {
+    final DateTime? loadedAt = state.thread.loadedAt;
+    if (!state.thread.isComplete ||
+        loadedAt == null ||
+        _scheduledLoadedAt == loadedAt) {
+      return;
+    }
+    _scheduledLoadedAt = loadedAt;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_initialUnreadReplies > 0) {
+        final BuildContext? dividerContext = _unreadDividerKey.currentContext;
+        if (dividerContext != null) {
+          unawaited(Scrollable.ensureVisible(dividerContext, alignment: 0));
+        }
+        if (widget.teamId != null) unawaited(_markRead(state));
+        return;
+      }
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
+  Future<void> _markRead(ThreadViewState state) async {
+    final String? teamId = widget.teamId;
+    final DateTime? loadedAt = state.thread.loadedAt;
+    if (teamId == null || loadedAt == null) return;
+    final bool marked = await ref
+        .read(threadProvider(widget.rootPostId).notifier)
+        .markRead(teamId: teamId);
+    if (mounted && marked) widget.onThreadRead?.call(loadedAt);
+  }
+
   Future<void> _sendReply(String message, String pendingPostId) async {
     final ChannelPost sent = await ref
         .read(threadProvider(widget.rootPostId).notifier)
@@ -164,6 +234,36 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
         ),
       );
     });
+  }
+}
+
+class _UnreadMessagesDivider extends StatelessWidget {
+  const _UnreadMessagesDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = Theme.of(context).colorScheme.primary;
+    return Semantics(
+      label: ThreadStrings.unreadMessages,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Row(
+          children: <Widget>[
+            Expanded(child: Divider(color: color)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(
+                ThreadStrings.unreadMessages,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium?.copyWith(color: color),
+              ),
+            ),
+            Expanded(child: Divider(color: color)),
+          ],
+        ),
+      ),
+    );
   }
 }
 

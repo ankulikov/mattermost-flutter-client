@@ -109,6 +109,26 @@ void main() {
     });
   });
 
+  test('marks a followed thread read at the supplied timestamp', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter();
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    await api.updateThreadRead(
+      userId: 'me',
+      teamId: 'team-1',
+      threadId: 'root-1',
+      timestamp: 123456,
+    );
+
+    expect(adapter.request?.method, 'PUT');
+    expect(
+      adapter.request?.path,
+      '/users/me/teams/team-1/threads/root-1/read/123456',
+    );
+  });
+
   test(
     'cancels an in-flight Dio request from its presentation scope',
     () async {

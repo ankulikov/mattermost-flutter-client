@@ -111,6 +111,14 @@ final class _ApiClient implements MattermostApiClient {
 
 final class _AuthApi implements MattermostApi {
   @override
+  Future<void> updateThreadRead({
+    required String userId,
+    required String teamId,
+    required String threadId,
+    required int timestamp,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post) =>
       throw UnimplementedError();
 

@@ -20,6 +20,7 @@ void main() {
       final ApiThreadRepository repository = ApiThreadRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
+        now: () => DateTime.fromMillisecondsSinceEpoch(9999),
       );
 
       final MessageThread thread = await repository.load(
@@ -40,6 +41,7 @@ void main() {
       expect(thread.replies.first.id, 'reply-0');
       expect(thread.replies.last.id, 'reply-60');
       expect(thread.isComplete, isTrue);
+      expect(thread.loadedAt?.millisecondsSinceEpoch, 9999);
     },
   );
 
@@ -67,6 +69,109 @@ void main() {
     expect(thread.replies.single.message, isEmpty);
     expect(thread.replies.single.reactions, isEmpty);
   });
+
+  test('marks the thread read at the supplied load timestamp', () async {
+    final _ThreadApi api = _ThreadApi();
+    final ApiThreadRepository repository = ApiThreadRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+    );
+    final AuthSession session = AuthSession(
+      serverUrl: Uri.parse('https://chat.example.com'),
+      userId: 'me',
+      username: 'current',
+    );
+
+    await repository.markRead(
+      session: session,
+      teamId: 'team-1',
+      rootPostId: 'root-1',
+      timestamp: DateTime.fromMillisecondsSinceEpoch(123456),
+    );
+
+    expect(api.markReadUserId, 'me');
+    expect(api.markReadTeamId, 'team-1');
+    expect(api.markReadThreadId, 'root-1');
+    expect(api.markReadTimestamp, 123456);
+  });
+
+  test(
+    'loads every page for a thread longer than the former safety cap',
+    () async {
+      final _LongThreadApi api = _LongThreadApi(pageCount: 22);
+      final ApiThreadRepository repository = ApiThreadRepository(
+        api: api,
+        messageMapper: const MattermostMessageMapper(),
+      );
+
+      final MessageThread thread = await repository.load(
+        session: AuthSession(
+          serverUrl: Uri.parse('https://chat.example.com'),
+          userId: 'me',
+          username: 'current',
+        ),
+        rootPostId: 'root-1',
+      );
+
+      expect(api.calls, 22);
+      expect(thread.replies, hasLength(22));
+      expect(thread.isComplete, isTrue);
+    },
+  );
+}
+
+final class _LongThreadApi extends Fake implements MattermostApi {
+  _LongThreadApi({required this.pageCount});
+
+  final int pageCount;
+  int calls = 0;
+
+  @override
+  Future<MattermostPostListDto> getPostThread({
+    required String rootPostId,
+    int perPage = 60,
+    String? fromPost,
+    int? fromCreateAt,
+    PostThreadDirection direction = PostThreadDirection.up,
+  }) async {
+    final int index = calls;
+    calls += 1;
+    final String replyId = 'reply-$index';
+    final bool hasNext = calls < pageCount;
+    return MattermostPostListDto(
+      order: <String>[if (index == 0) rootPostId, replyId],
+      posts: <String, MattermostPostDto>{
+        if (index == 0)
+          rootPostId: MattermostPostDto(
+            id: rootPostId,
+            userId: 'ada',
+            channelId: 'channel-1',
+            message: 'root',
+            createAt: 1000,
+            updateAt: 1000,
+            replyCount: pageCount,
+          ),
+        replyId: MattermostPostDto(
+          id: replyId,
+          userId: 'ada',
+          channelId: 'channel-1',
+          message: replyId,
+          createAt: 2000 + index,
+          updateAt: 2000 + index,
+          rootId: rootPostId,
+        ),
+      },
+      nextPostId: hasNext ? replyId : '',
+      previousPostId: '',
+      hasNext: hasNext,
+    );
+  }
+
+  @override
+  Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async =>
+      const <MattermostUserDto>[
+        MattermostUserDto(id: 'ada', username: 'ada', firstName: 'Ada'),
+      ];
 }
 
 final class _ThreadApi implements MattermostApi {
@@ -83,6 +188,23 @@ final class _ThreadApi implements MattermostApi {
   String? secondFromPost;
   int? secondFromCreateAt;
   final List<PostThreadDirection> directions = <PostThreadDirection>[];
+  String? markReadUserId;
+  String? markReadTeamId;
+  String? markReadThreadId;
+  int? markReadTimestamp;
+
+  @override
+  Future<void> updateThreadRead({
+    required String userId,
+    required String teamId,
+    required String threadId,
+    required int timestamp,
+  }) async {
+    markReadUserId = userId;
+    markReadTeamId = teamId;
+    markReadThreadId = threadId;
+    markReadTimestamp = timestamp;
+  }
 
   @override
   Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post) =>

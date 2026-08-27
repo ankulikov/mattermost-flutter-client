@@ -6,4 +6,11 @@ abstract interface class ThreadRepository {
     required AuthSession session,
     required String rootPostId,
   });
+
+  Future<void> markRead({
+    required AuthSession session,
+    required String teamId,
+    required String rootPostId,
+    required DateTime timestamp,
+  });
 }

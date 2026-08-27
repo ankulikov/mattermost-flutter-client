@@ -89,6 +89,14 @@ final class _FakePostApi implements MattermostApi {
   _FakePostApi({this.hasReplyOnlyLatest = false});
 
   @override
+  Future<void> updateThreadRead({
+    required String userId,
+    required String teamId,
+    required String threadId,
+    required int timestamp,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostImageDto> getUserProfileImage({
     required String userId,
     int lastPictureUpdate = 0,

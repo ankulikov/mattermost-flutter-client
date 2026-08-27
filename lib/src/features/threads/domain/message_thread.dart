@@ -6,10 +6,12 @@ final class MessageThread {
     this.root,
     this.replies = const <ChannelPost>[],
     this.isComplete = false,
+    this.loadedAt,
   });
 
   final String rootPostId;
   final ChannelPost? root;
   final List<ChannelPost> replies;
   final bool isComplete;
+  final DateTime? loadedAt;
 }
