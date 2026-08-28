@@ -129,6 +129,8 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                             post: root,
                             serverUrl: widget.serverUrl,
                             onSelectChannel: widget.onSelectChannel,
+                            onToggleReaction: (PostReaction reaction) =>
+                                _toggleReaction(root, reaction),
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -157,6 +159,11 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                 post: state.thread.replies[index],
                                 serverUrl: widget.serverUrl,
                                 onSelectChannel: widget.onSelectChannel,
+                                onToggleReaction: (PostReaction reaction) =>
+                                    _toggleReaction(
+                                      state.thread.replies[index],
+                                      reaction,
+                                    ),
                               ),
                             ),
                           ],
@@ -235,6 +242,17 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
       );
     });
   }
+
+  Future<void> _toggleReaction(ChannelPost post, PostReaction reaction) async {
+    final bool succeeded = await ref
+        .read(threadProvider(widget.rootPostId).notifier)
+        .toggleReaction(postId: post.id, emojiName: reaction.emojiName);
+    if (!succeeded && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(ThreadStrings.reactionFailed)),
+      );
+    }
+  }
 }
 
 class _UnreadMessagesDivider extends StatelessWidget {
@@ -312,11 +330,13 @@ class _ThreadPost extends StatelessWidget {
     required this.post,
     required this.serverUrl,
     required this.onSelectChannel,
+    required this.onToggleReaction,
   });
 
   final ChannelPost post;
   final Uri? serverUrl;
   final ValueChanged<String>? onSelectChannel;
+  final Future<void> Function(PostReaction reaction) onToggleReaction;
 
   @override
   Widget build(BuildContext context) {
@@ -337,6 +357,14 @@ class _ThreadPost extends StatelessWidget {
                 onSelectChannel: onSelectChannel,
                 deletedMessage: ThreadStrings.deletedMessage,
               ),
+              if (post.reactions.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 8),
+                MessageReactions(
+                  post: post,
+                  semanticsLabel: ThreadStrings.reactions,
+                  onToggle: onToggleReaction,
+                ),
+              ],
             ],
           ),
         ),

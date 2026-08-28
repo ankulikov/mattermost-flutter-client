@@ -223,6 +223,35 @@ final class DioMattermostApi implements MattermostApi {
   }
 
   @override
+  Future<void> saveReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) async {
+    await _post(
+      '/reactions',
+      data: <String, Object?>{
+        'user_id': userId,
+        'post_id': postId,
+        'emoji_name': emojiName,
+      },
+    );
+  }
+
+  @override
+  Future<void> deleteReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) async {
+    await _delete(
+      '/users/${Uri.encodeComponent(userId)}'
+      '/posts/${Uri.encodeComponent(postId)}'
+      '/reactions/${Uri.encodeComponent(emojiName)}',
+    );
+  }
+
+  @override
   Future<MattermostPostListDto> getPostThread({
     required String rootPostId,
     int perPage = 60,
@@ -302,6 +331,11 @@ final class DioMattermostApi implements MattermostApi {
         (CancelToken? cancelToken) =>
             _dio.put<Object?>(path, data: data, cancelToken: cancelToken),
       );
+
+  Future<Response<Object?>> _delete(String path) => _withCancellation(
+    (CancelToken? cancelToken) =>
+        _dio.delete<Object?>(path, cancelToken: cancelToken),
+  );
 
   Future<Response<T>> _withCancellation<T>(
     Future<Response<T>> Function(CancelToken? cancelToken) request,

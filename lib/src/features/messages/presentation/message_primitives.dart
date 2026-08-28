@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -196,6 +198,185 @@ class MessageBody extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class MessageReactions extends StatelessWidget {
+  const MessageReactions({
+    required this.post,
+    required this.semanticsLabel,
+    required this.onToggle,
+    super.key,
+  });
+
+  final ChannelPost post;
+  final String semanticsLabel;
+  final Future<void> Function(PostReaction reaction) onToggle;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: semanticsLabel,
+    child: Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: post.reactions
+          .map(
+            (PostReaction reaction) => _ReactionButton(
+              reaction: reaction,
+              customEmoji: _customEmojiFor(post, reaction),
+              onPressed: () => unawaited(onToggle(reaction)),
+            ),
+          )
+          .toList(growable: false),
+    ),
+  );
+
+  static CustomEmojiReference? _customEmojiFor(
+    ChannelPost post,
+    PostReaction reaction,
+  ) {
+    for (final CustomEmojiReference emoji in post.customEmojis) {
+      if (emoji.name == reaction.emojiName) return emoji;
+    }
+    final String label = reaction.emoji;
+    if (label.length > 2 && label.startsWith(':') && label.endsWith(':')) {
+      return CustomEmojiReference(name: reaction.emojiName);
+    }
+    return null;
+  }
+}
+
+class _ReactionButton extends StatelessWidget {
+  const _ReactionButton({
+    required this.reaction,
+    required this.customEmoji,
+    required this.onPressed,
+  });
+
+  final PostReaction reaction;
+  final CustomEmojiReference? customEmoji;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final Color background = reaction.reactedByCurrentUser
+        ? colors.primary.withValues(alpha: 0.1)
+        : colors.surfaceContainerHighest.withValues(alpha: 0.72);
+    final Color border = reaction.reactedByCurrentUser
+        ? colors.primary
+        : colors.outlineVariant;
+    return Semantics(
+      button: true,
+      selected: reaction.reactedByCurrentUser,
+      label: '${reaction.emoji}: ${reaction.count}',
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            key: ValueKey<String>('reaction-${reaction.emojiName}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onPressed,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: DecoratedBox(
+                key: ValueKey<String>('reaction-chip-${reaction.emojiName}'),
+                decoration: BoxDecoration(
+                  color: background,
+                  border: Border.all(
+                    color: border,
+                    width: reaction.reactedByCurrentUser ? 1.5 : 1,
+                  ),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      if (customEmoji case final CustomEmojiReference emoji)
+                        _CustomEmojiReaction(reference: emoji)
+                      else
+                        _ReactionEmojiGlyph(
+                          emoji: reaction.emoji,
+                          emojiName: reaction.emojiName,
+                        ),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${reaction.count}',
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReactionEmojiGlyph extends StatelessWidget {
+  const _ReactionEmojiGlyph({required this.emoji, required this.emojiName});
+
+  final String emoji;
+  final String emojiName;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    key: ValueKey<String>('reaction-icon-$emojiName'),
+    dimension: _reactionEmojiSize,
+    child: FittedBox(
+      fit: BoxFit.contain,
+      child: Text(
+        emoji,
+        style: const TextStyle(fontSize: _reactionEmojiSize, height: 1),
+      ),
+    ),
+  );
+}
+
+const double _reactionEmojiSize = 20;
+
+class _CustomEmojiReaction extends ConsumerWidget {
+  const _CustomEmojiReaction({required this.reference});
+
+  final CustomEmojiReference reference;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<CustomEmojiContent> content = ref.watch(
+      customEmojiProvider(reference),
+    );
+    final int cacheSize =
+        (_reactionEmojiSize * MediaQuery.devicePixelRatioOf(context)).ceil();
+    const Widget fallback = Icon(
+      Icons.emoji_emotions_outlined,
+      size: _reactionEmojiSize,
+    );
+    return SizedBox.square(
+      key: ValueKey<String>('reaction-icon-${reference.name}'),
+      dimension: _reactionEmojiSize,
+      child: content.when(
+        data: (CustomEmojiContent emoji) => Image.memory(
+          emoji.bytes,
+          fit: BoxFit.contain,
+          cacheWidth: cacheSize,
+          gaplessPlayback: true,
+          excludeFromSemantics: true,
+          errorBuilder: (_, _, _) => fallback,
+        ),
+        loading: () => fallback,
+        error: (_, _) => fallback,
+      ),
     );
   }
 }

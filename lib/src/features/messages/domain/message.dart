@@ -18,12 +18,26 @@ final class PostReaction {
   const PostReaction({
     required this.emoji,
     required this.count,
+    String? emojiName,
     this.reactedByCurrentUser = false,
-  }) : assert(count > 0, 'A visible reaction must have a positive count.');
+  }) : emojiName = emojiName ?? emoji,
+       assert(count > 0, 'A visible reaction must have a positive count.');
 
+  /// Human-readable label, such as `👍` or `:party_parrot:`.
   final String emoji;
+
+  /// Mattermost's canonical name used by the reactions API.
+  final String emojiName;
   final int count;
   final bool reactedByCurrentUser;
+
+  PostReaction copyWith({int? count, bool? reactedByCurrentUser}) =>
+      PostReaction(
+        emoji: emoji,
+        emojiName: emojiName,
+        count: count ?? this.count,
+        reactedByCurrentUser: reactedByCurrentUser ?? this.reactedByCurrentUser,
+      );
 }
 
 /// Shared message entity used by channel, thread, and followed-thread slices.
@@ -72,6 +86,56 @@ final class ChannelPost {
     lastReplyAt: lastReplyAt,
     isDeleted: isDeleted,
   );
+
+  ChannelPost withReactions(List<PostReaction> reactions) => ChannelPost(
+    id: id,
+    channelId: channelId,
+    author: author,
+    sentAt: sentAt,
+    message: message,
+    customEmojis: customEmojis,
+    reactions: List<PostReaction>.unmodifiable(reactions),
+    rootId: rootId,
+    replyCount: replyCount,
+    lastReplyAt: lastReplyAt,
+    isDeleted: isDeleted,
+  );
+}
+
+ChannelPost toggleCurrentUserReaction(ChannelPost post, String emojiName) {
+  final int index = post.reactions.indexWhere(
+    (PostReaction reaction) => reaction.emojiName == emojiName,
+  );
+  if (index < 0) {
+    return post.withReactions(<PostReaction>[
+      ...post.reactions,
+      PostReaction(
+        emoji: ':$emojiName:',
+        emojiName: emojiName,
+        count: 1,
+        reactedByCurrentUser: true,
+      ),
+    ]);
+  }
+
+  final PostReaction reaction = post.reactions[index];
+  final List<PostReaction> reactions = List<PostReaction>.of(post.reactions);
+  if (reaction.reactedByCurrentUser) {
+    if (reaction.count == 1) {
+      reactions.removeAt(index);
+    } else {
+      reactions[index] = reaction.copyWith(
+        count: reaction.count - 1,
+        reactedByCurrentUser: false,
+      );
+    }
+  } else {
+    reactions[index] = reaction.copyWith(
+      count: reaction.count + 1,
+      reactedByCurrentUser: true,
+    );
+  }
+  return post.withReactions(reactions);
 }
 
 int compareMessagesBySentAt(ChannelPost first, ChannelPost second) {

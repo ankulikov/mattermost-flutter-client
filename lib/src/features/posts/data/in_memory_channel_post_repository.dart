@@ -81,16 +81,21 @@ final class InMemoryChannelPostRepository implements ChannelPostRepository {
       reactions.add(
         PostReaction(
           emoji: '👍',
+          emojiName: 'thumbsup',
           count: seed % 4 + 1,
           reactedByCurrentUser: seed % 3 == 0,
         ),
       );
     }
     if (seed % 3 == 0) {
-      reactions.add(PostReaction(emoji: '🎉', count: seed % 3 + 1));
+      reactions.add(
+        PostReaction(emoji: '🎉', emojiName: 'tada', count: seed % 3 + 1),
+      );
     }
     if (seed % 5 == 0) {
-      reactions.add(PostReaction(emoji: '❤️', count: seed % 5 + 1));
+      reactions.add(
+        PostReaction(emoji: '❤️', emojiName: 'heart', count: seed % 5 + 1),
+      );
     }
     return List<PostReaction>.unmodifiable(reactions);
   }

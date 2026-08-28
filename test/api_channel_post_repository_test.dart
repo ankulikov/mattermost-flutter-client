@@ -89,6 +89,20 @@ final class _FakePostApi implements MattermostApi {
   _FakePostApi({this.hasReplyOnlyLatest = false});
 
   @override
+  Future<void> saveReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> deleteReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostChannelDto> createDirectChannel({
     required String currentUserId,
     required String otherUserId,

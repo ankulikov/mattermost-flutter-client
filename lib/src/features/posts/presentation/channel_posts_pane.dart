@@ -92,6 +92,8 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                 onOpenThread: (ChannelPost post) {
                   setState(() => _selectedRootPostId = post.id);
                 },
+                onToggleReaction: (ChannelPost post, PostReaction reaction) =>
+                    _toggleReaction(context, post, reaction),
                 onSelectChannel: widget.onSelectChannel,
               );
             },
@@ -144,6 +146,21 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
         );
       },
     );
+  }
+
+  Future<void> _toggleReaction(
+    BuildContext context,
+    ChannelPost post,
+    PostReaction reaction,
+  ) async {
+    final bool succeeded = await ref
+        .read(channelPostsProvider(widget.channel.id).notifier)
+        .toggleReaction(postId: post.id, emojiName: reaction.emojiName);
+    if (!succeeded && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(ChannelPostsStrings.reactionFailed)),
+      );
+    }
   }
 }
 
@@ -241,6 +258,7 @@ class _PostList extends StatefulWidget {
     required this.autoLoadOlder,
     required this.onLoadOlder,
     required this.onOpenThread,
+    required this.onToggleReaction,
     required this.onSelectChannel,
   });
 
@@ -252,6 +270,7 @@ class _PostList extends StatefulWidget {
   final bool autoLoadOlder;
   final Future<void> Function() onLoadOlder;
   final ValueChanged<ChannelPost> onOpenThread;
+  final Future<void> Function(ChannelPost, PostReaction) onToggleReaction;
   final ValueChanged<String>? onSelectChannel;
 
   @override
@@ -390,6 +409,7 @@ class _PostListState extends State<_PostList> {
             serverUrl: widget.serverUrl,
             continuesAuthor: continuesAuthor,
             onOpenThread: widget.onOpenThread,
+            onToggleReaction: widget.onToggleReaction,
             onSelectChannel: widget.onSelectChannel,
           );
         },
@@ -404,6 +424,7 @@ class _PostRow extends StatelessWidget {
     required this.serverUrl,
     required this.continuesAuthor,
     required this.onOpenThread,
+    required this.onToggleReaction,
     required this.onSelectChannel,
     super.key,
   });
@@ -412,6 +433,7 @@ class _PostRow extends StatelessWidget {
   final Uri? serverUrl;
   final bool continuesAuthor;
   final ValueChanged<ChannelPost> onOpenThread;
+  final Future<void> Function(ChannelPost, PostReaction) onToggleReaction;
   final ValueChanged<String>? onSelectChannel;
 
   @override
@@ -444,18 +466,11 @@ class _PostRow extends StatelessWidget {
                 ),
                 if (post.reactions.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 8),
-                  Semantics(
-                    label: ChannelPostsStrings.reactions,
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: post.reactions
-                          .map(
-                            (PostReaction reaction) =>
-                                _ReactionChip(reaction: reaction),
-                          )
-                          .toList(growable: false),
-                    ),
+                  MessageReactions(
+                    post: post,
+                    semanticsLabel: ChannelPostsStrings.reactions,
+                    onToggle: (PostReaction reaction) =>
+                        onToggleReaction(post, reaction),
                   ),
                 ],
                 if (post.replyCount > 0) ...<Widget>[
@@ -490,37 +505,5 @@ class _PostRow extends StatelessWidget {
       context,
     ).formatTimeOfDay(TimeOfDay.fromDateTime(lastReplyAt));
     return '$count · ${ThreadStrings.lastReply(time)}';
-  }
-}
-
-class _ReactionChip extends StatelessWidget {
-  const _ReactionChip({required this.reaction});
-
-  final PostReaction reaction;
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final Color background = reaction.reactedByCurrentUser
-        ? colors.primaryContainer
-        : colors.surfaceContainerHighest;
-    final Color border = reaction.reactedByCurrentUser
-        ? colors.primary
-        : colors.outlineVariant;
-    return Semantics(
-      label: '${reaction.emoji}: ${reaction.count}',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: background,
-          border: Border.all(color: border),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          '${reaction.emoji}  ${reaction.count}',
-          style: Theme.of(context).textTheme.labelMedium,
-        ),
-      ),
-    );
   }
 }

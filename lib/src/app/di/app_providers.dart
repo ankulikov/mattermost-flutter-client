@@ -25,9 +25,11 @@ import 'package:mattermost_flutter/src/features/emojis/data/custom_emoji_cache.d
 import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
 import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji_repository.dart';
 import 'package:mattermost_flutter/src/features/messages/data/api_message_sender.dart';
+import 'package:mattermost_flutter/src/features/messages/data/api_reaction_repository.dart';
 import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/reaction_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/data/api_channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
@@ -213,6 +215,12 @@ final Provider<MessageSender> messageSenderProvider = Provider<MessageSender>(
   ),
 );
 
+final Provider<ReactionRepository> reactionRepositoryProvider =
+    Provider<ReactionRepository>(
+      (Ref ref) =>
+          ApiReactionRepository(api: ref.watch(activeMattermostApiProvider)),
+    );
+
 final Provider<ChannelSidebarRepository> channelSidebarRepositoryProvider =
     Provider<ChannelSidebarRepository>(
       (Ref ref) => ApiChannelSidebarRepository(
@@ -260,6 +268,7 @@ final channelPostsProvider = AsyncNotifierProvider.autoDispose
         authSessionProvider,
         channelPostRepositoryProvider,
         messageSenderProvider,
+        reactionRepositoryProvider,
       ),
     );
 
@@ -270,6 +279,7 @@ final threadProvider = AsyncNotifierProvider.autoDispose
         authSessionProvider,
         threadRepositoryProvider,
         messageSenderProvider,
+        reactionRepositoryProvider,
       ),
     );
 

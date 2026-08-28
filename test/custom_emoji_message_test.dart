@@ -74,6 +74,85 @@ void main() {
     expect(find.text(':party_parrot:'), findsOneWidget);
     expect(find.byType(Image), findsNothing);
   });
+
+  testWidgets('renders a cached custom emoji in a tappable reaction', (
+    WidgetTester tester,
+  ) async {
+    final CustomEmojiContent content = CustomEmojiContent(
+      bytes: base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
+        'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      ),
+      contentType: 'image/png',
+    );
+    PostReaction? toggled;
+    final ChannelPost post = ChannelPost(
+      id: 'post-1',
+      channelId: 'channel-1',
+      author: const PostAuthor(id: 'ada', displayName: 'Ada'),
+      sentAt: DateTime.fromMillisecondsSinceEpoch(1),
+      message: 'Hello',
+      customEmojis: const <CustomEmojiReference>[reference],
+      reactions: const <PostReaction>[
+        PostReaction(
+          emoji: ':party_parrot:',
+          emojiName: 'party_parrot',
+          count: 2,
+        ),
+        PostReaction(emoji: '👍', emojiName: 'thumbsup', count: 3),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          customEmojiProvider(
+            reference,
+          ).overrideWithValue(AsyncValue<CustomEmojiContent>.data(content)),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: MessageReactions(
+              post: post,
+              semanticsLabel: 'Reactions',
+              onToggle: (PostReaction reaction) async => toggled = reaction,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    final Finder customIcon = find.byKey(
+      const ValueKey<String>('reaction-icon-party_parrot'),
+    );
+    final Finder builtInIcon = find.byKey(
+      const ValueKey<String>('reaction-icon-thumbsup'),
+    );
+    expect(tester.getSize(customIcon), const Size.square(20));
+    expect(tester.getSize(builtInIcon), const Size.square(20));
+    final Finder customChip = find.byKey(
+      const ValueKey<String>('reaction-chip-party_parrot'),
+    );
+    final Finder builtInChip = find.byKey(
+      const ValueKey<String>('reaction-chip-thumbsup'),
+    );
+    expect(tester.getSize(customChip).height, lessThan(44));
+    expect(
+      tester.getSize(customChip).height,
+      tester.getSize(builtInChip).height,
+    );
+    final BoxDecoration decoration =
+        tester.widget<DecoratedBox>(customChip).decoration as BoxDecoration;
+    expect(decoration.borderRadius, BorderRadius.circular(6));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('reaction-party_parrot')),
+    );
+    await tester.pump();
+    expect(toggled?.emojiName, 'party_parrot');
+  });
 }
 
 Widget _message(CustomEmojiReference reference) => MessageBody(

@@ -188,6 +188,13 @@ Bytes живут во временном account-scoped cache на 5000 объе
 cache/API выполняются, shortcode остается текстом, поэтому Markdown получает
 первый layout без ожидания сети.
 
+Кнопки custom emoji в списке реакций используют тот же provider и тот же cache,
+что inline emoji. Нажатие оптимистично обновляет volatile снимок открытого канала
+или треда, затем вызывает `POST /reactions`; повторное нажатие вызывает
+`DELETE /users/{user_id}/posts/{post_id}/reactions/{emoji_name}`. При ошибке
+REST-запроса локальное изменение откатывается, а уже показанный контент остается
+на экране.
+
 `MattermostMarkdown` принимает декларативные inline replacements. Emoji — первый
 consumer этого API; будущие замены наподобие `@username` добавляются через тот
 же parser/builder boundary, не связывая общий Markdown renderer с feature data

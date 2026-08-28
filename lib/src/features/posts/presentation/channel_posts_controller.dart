@@ -4,6 +4,7 @@ import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/reaction_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
 
 final class ChannelPostsViewState {
@@ -47,17 +48,20 @@ final class ChannelPostsController
     this._sessionProvider,
     this._repositoryProvider,
     this._messageSenderProvider,
+    this._reactionRepositoryProvider,
   );
 
   final String channelId;
   final Provider<AuthSession?> _sessionProvider;
   final Provider<ChannelPostRepository> _repositoryProvider;
   final Provider<MessageSender> _messageSenderProvider;
+  final Provider<ReactionRepository> _reactionRepositoryProvider;
   late RequestCancellation _cancellation;
   AuthSession? _session;
   ChannelPostRepository? _repository;
   bool _olderRunning = false;
   bool _sendRunning = false;
+  final Set<String> _reactionRequests = <String>{};
 
   @override
   Future<ChannelPostsViewState> build() async {
@@ -190,6 +194,83 @@ final class ChannelPostsController
     } finally {
       _sendRunning = false;
     }
+  }
+
+  Future<bool> toggleReaction({
+    required String postId,
+    required String emojiName,
+  }) async {
+    final AuthSession? session = _session;
+    final ChannelPostsViewState? current = state.value;
+    final String requestKey = '$postId\u0000$emojiName';
+    if (session == null ||
+        current == null ||
+        !_reactionRequests.add(requestKey)) {
+      return false;
+    }
+    final int postIndex = current.posts.indexWhere(
+      (ChannelPost post) => post.id == postId,
+    );
+    if (postIndex < 0) {
+      _reactionRequests.remove(requestKey);
+      return false;
+    }
+    final ChannelPost original = current.posts[postIndex];
+    final bool remove = original.reactions.any(
+      (PostReaction reaction) =>
+          reaction.emojiName == emojiName && reaction.reactedByCurrentUser,
+    );
+    _replacePost(toggleCurrentUserReaction(original, emojiName));
+    try {
+      final ReactionRepository repository = ref.read(
+        _reactionRepositoryProvider,
+      );
+      if (remove) {
+        await _cancellation.run(
+          () => repository.remove(
+            session: session,
+            postId: postId,
+            emojiName: emojiName,
+          ),
+        );
+      } else {
+        await _cancellation.run(
+          () => repository.add(
+            session: session,
+            postId: postId,
+            emojiName: emojiName,
+          ),
+        );
+      }
+      return true;
+    } on Object {
+      if (!_cancellation.isCancelled) {
+        final ChannelPost? latest = state.value?.posts
+            .where((ChannelPost post) => post.id == postId)
+            .firstOrNull;
+        if (latest != null) {
+          _replacePost(latest.withReactions(original.reactions));
+        }
+      }
+      return false;
+    } finally {
+      _reactionRequests.remove(requestKey);
+    }
+  }
+
+  void _replacePost(ChannelPost replacement) {
+    final ChannelPostsViewState? current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        posts: List<ChannelPost>.unmodifiable(
+          current.posts.map(
+            (ChannelPost post) =>
+                post.id == replacement.id ? replacement : post,
+          ),
+        ),
+      ),
+    );
   }
 
   void recordSentReply(ChannelPost reply) {

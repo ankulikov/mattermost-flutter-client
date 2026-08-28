@@ -218,7 +218,7 @@ void main() {
     expect(find.text('Message for town-square'), findsOneWidget);
     expect(find.text('Follow-up message 1'), findsOneWidget);
     expect(find.text('Follow-up message 2'), findsOneWidget);
-    expect(find.text('👍  3'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('reaction-👍')), findsOneWidget);
     expect(find.byType(CircleAvatar), findsOneWidget);
   });
 

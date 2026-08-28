@@ -4,6 +4,7 @@ import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
+import 'package:mattermost_flutter/src/features/messages/domain/reaction_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
 
@@ -43,12 +44,14 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     this._sessionProvider,
     this._repositoryProvider,
     this._messageSenderProvider,
+    this._reactionRepositoryProvider,
   );
 
   final String rootPostId;
   final Provider<AuthSession?> _sessionProvider;
   final Provider<ThreadRepository> _repositoryProvider;
   final Provider<MessageSender> _messageSenderProvider;
+  final Provider<ReactionRepository> _reactionRepositoryProvider;
   late RequestCancellation _cancellation;
   AuthSession? _session;
   ThreadRepository? _repository;
@@ -56,6 +59,7 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
   bool _sendRunning = false;
   bool _markReadRunning = false;
   DateTime? _markedLoadedAt;
+  final Set<String> _reactionRequests = <String>{};
 
   @override
   Future<ThreadViewState> build() async {
@@ -193,6 +197,95 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     } finally {
       _markReadRunning = false;
     }
+  }
+
+  Future<bool> toggleReaction({
+    required String postId,
+    required String emojiName,
+  }) async {
+    final AuthSession? session = _session;
+    final ThreadViewState? current = state.value;
+    final String requestKey = '$postId\u0000$emojiName';
+    if (session == null ||
+        current == null ||
+        !_reactionRequests.add(requestKey)) {
+      return false;
+    }
+    final ChannelPost? original = _findPost(current.thread, postId);
+    if (original == null) {
+      _reactionRequests.remove(requestKey);
+      return false;
+    }
+    final bool remove = original.reactions.any(
+      (PostReaction reaction) =>
+          reaction.emojiName == emojiName && reaction.reactedByCurrentUser,
+    );
+    _replacePost(toggleCurrentUserReaction(original, emojiName));
+    try {
+      final ReactionRepository repository = ref.read(
+        _reactionRepositoryProvider,
+      );
+      if (remove) {
+        await _cancellation.run(
+          () => repository.remove(
+            session: session,
+            postId: postId,
+            emojiName: emojiName,
+          ),
+        );
+      } else {
+        await _cancellation.run(
+          () => repository.add(
+            session: session,
+            postId: postId,
+            emojiName: emojiName,
+          ),
+        );
+      }
+      return true;
+    } on Object {
+      if (!_cancellation.isCancelled) {
+        final ChannelPost? latest = state.value == null
+            ? null
+            : _findPost(state.value!.thread, postId);
+        if (latest != null) {
+          _replacePost(latest.withReactions(original.reactions));
+        }
+      }
+      return false;
+    } finally {
+      _reactionRequests.remove(requestKey);
+    }
+  }
+
+  static ChannelPost? _findPost(MessageThread thread, String postId) {
+    if (thread.root?.id == postId) return thread.root;
+    for (final ChannelPost reply in thread.replies) {
+      if (reply.id == postId) return reply;
+    }
+    return null;
+  }
+
+  void _replacePost(ChannelPost replacement) {
+    final ThreadViewState? current = state.value;
+    if (current == null) return;
+    final MessageThread thread = current.thread;
+    state = AsyncData(
+      current.copyWith(
+        thread: MessageThread(
+          rootPostId: thread.rootPostId,
+          root: thread.root?.id == replacement.id ? replacement : thread.root,
+          replies: List<ChannelPost>.unmodifiable(
+            thread.replies.map(
+              (ChannelPost post) =>
+                  post.id == replacement.id ? replacement : post,
+            ),
+          ),
+          isComplete: thread.isComplete,
+          loadedAt: thread.loadedAt,
+        ),
+      ),
+    );
   }
 
   static MessageThread _withSentReply(MessageThread thread, ChannelPost sent) {

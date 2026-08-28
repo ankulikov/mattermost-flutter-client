@@ -1,3 +1,4 @@
+import 'package:markdown/markdown.dart' as md;
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
@@ -84,6 +85,7 @@ List<PostReaction> _mapReactions(MattermostPostDto post, String currentUserId) {
       .map(
         (MapEntry<String, List<MattermostReactionDto>> entry) => PostReaction(
           emoji: _emojiLabel(entry.key),
+          emojiName: entry.key,
           count: entry.value.length,
           reactedByCurrentUser: entry.value.any(
             (MattermostReactionDto reaction) =>
@@ -94,9 +96,4 @@ List<PostReaction> _mapReactions(MattermostPostDto post, String currentUserId) {
       .toList(growable: false);
 }
 
-String _emojiLabel(String name) => switch (name) {
-  '+1' || 'thumbsup' => '👍',
-  'heart' => '❤️',
-  'tada' => '🎉',
-  _ => ':$name:',
-};
+String _emojiLabel(String name) => md.emojis[name] ?? ':$name:';

@@ -178,6 +178,20 @@ final class _ThreadApi implements MattermostApi {
   _ThreadApi({this.deletedOnly = false});
 
   @override
+  Future<void> saveReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> deleteReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostChannelDto> createDirectChannel({
     required String currentUserId,
     required String otherUserId,

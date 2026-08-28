@@ -33,3 +33,9 @@ Mattermost extensions, URL safety policy, and dependency rationale are recorded
 in [`docs/MARKDOWN.md`](../../../../docs/MARKDOWN.md).
 
 See the official [post endpoint specification](https://github.com/mattermost/mattermost/blob/master/api/v4/source/posts.yaml).
+
+Existing reaction buttons are optimistic toggles. They update the current
+user marker and count in volatile screen state, persist through the Mattermost
+reactions API, and roll back without discarding the loaded post list if the
+request fails. Custom reaction images reuse the account-scoped custom emoji
+cache used by Markdown.

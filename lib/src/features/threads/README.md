@@ -48,4 +48,8 @@ Root and reply bodies use the same `MattermostMarkdown` widget as channel posts,
 so formatting and URL safety do not diverge between the channel and thread
 surfaces. See [`docs/MARKDOWN.md`](../../../../docs/MARKDOWN.md).
 
+Root and reply reactions use the same optimistic toggle and custom emoji cache
+as channel posts. Failed reaction requests roll back only the affected reaction
+while preserving the loaded thread.
+
 See the official [post endpoint specification](https://github.com/mattermost/mattermost/blob/master/api/v4/source/posts.yaml).

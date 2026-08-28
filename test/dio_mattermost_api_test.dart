@@ -94,6 +94,39 @@ void main() {
     expect(created.rootId, 'root-1');
   });
 
+  test('creates and removes an encoded emoji reaction', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(body: '{}');
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    await api.saveReaction(
+      userId: 'me',
+      postId: 'post-1',
+      emojiName: 'party+parrot',
+    );
+
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/reactions');
+    expect(adapter.request?.data, <String, Object?>{
+      'user_id': 'me',
+      'post_id': 'post-1',
+      'emoji_name': 'party+parrot',
+    });
+
+    await api.deleteReaction(
+      userId: 'me',
+      postId: 'post-1',
+      emojiName: 'party+parrot',
+    );
+
+    expect(adapter.request?.method, 'DELETE');
+    expect(
+      adapter.request?.path,
+      '/users/me/posts/post-1/reactions/party%2Bparrot',
+    );
+  });
+
   test('downloads a versioned authenticated profile image as bytes', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       bytes: Uint8List.fromList(<int>[1, 2, 3]),

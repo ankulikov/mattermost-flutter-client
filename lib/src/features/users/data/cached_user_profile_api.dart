@@ -197,6 +197,28 @@ final class CachedUserProfileApi implements MattermostApi {
       _delegate.createPost(post);
 
   @override
+  Future<void> saveReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) => _delegate.saveReaction(
+    userId: userId,
+    postId: postId,
+    emojiName: emojiName,
+  );
+
+  @override
+  Future<void> deleteReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) => _delegate.deleteReaction(
+    userId: userId,
+    postId: postId,
+    emojiName: emojiName,
+  );
+
+  @override
   Future<MattermostPostListDto> getPostThread({
     required String rootPostId,
     int perPage = 60,

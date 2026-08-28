@@ -16,3 +16,9 @@ The API also exposes paged listing (`GET /emoji`), search
 maximum 100), and batch lookup (`POST /emoji/names`, maximum 200, Mattermost
 9.2+). Those endpoints are intended for pickers and bulk discovery; message
 rendering avoids them because post metadata is both cheaper and exact.
+
+Custom emoji reaction buttons resolve their image through the same repository,
+provider, and account-scoped byte cache as inline emoji. Reaction state itself
+remains in the open channel or thread controller: a tap optimistically toggles
+the current user and count, then rolls back if the Mattermost reactions API
+request fails.

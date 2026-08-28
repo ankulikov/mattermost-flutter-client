@@ -40,6 +40,20 @@ void main() {
 
 final class _FakeMattermostApi implements MattermostApi {
   @override
+  Future<void> saveReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> deleteReaction({
+    required String userId,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
+
+  @override
   Future<MattermostChannelDto> createDirectChannel({
     required String currentUserId,
     required String otherUserId,

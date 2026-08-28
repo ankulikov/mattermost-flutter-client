@@ -5,6 +5,8 @@ abstract final class ThreadStrings {
   static const String loadFailed = 'Could not refresh this thread';
   static const String missingRoot = 'The original message is unavailable';
   static const String deletedMessage = 'This message was deleted';
+  static const String reactions = 'Reactions';
+  static const String reactionFailed = 'Could not update the reaction.';
   static const String retry = 'Retry';
   static const String replies = 'Replies';
   static const String unreadMessages = 'unread messages';
