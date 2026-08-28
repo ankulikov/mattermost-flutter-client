@@ -188,6 +188,10 @@ final class _ThreadApi implements MattermostApi {
       throw UnimplementedError();
 
   @override
+  Future<MattermostUserDto> getUserById(String userId) =>
+      throw UnimplementedError();
+
+  @override
   Future<MattermostImageDto> getUserProfileImage({
     required String userId,
     int lastPictureUpdate = 0,

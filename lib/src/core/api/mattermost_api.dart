@@ -23,6 +23,9 @@ abstract interface class MattermostApi {
 
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds);
 
+  /// Returns a fresh user projection without the batch profile cache.
+  Future<MattermostUserDto> getUserById(String userId);
+
   Future<MattermostUserStatusDto> getUserStatus(String userId);
 
   /// Returns the authenticated user's view of [userId]'s profile image.

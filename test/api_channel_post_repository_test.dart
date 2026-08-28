@@ -99,6 +99,10 @@ final class _FakePostApi implements MattermostApi {
       throw UnimplementedError();
 
   @override
+  Future<MattermostUserDto> getUserById(String userId) =>
+      throw UnimplementedError();
+
+  @override
   Future<void> updateThreadRead({
     required String userId,
     required String teamId,

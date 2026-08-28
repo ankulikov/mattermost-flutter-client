@@ -9,6 +9,24 @@ import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 
 void main() {
+  test('loads a fresh complete user profile by id', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"id":"ada","username":"ada","position":"Engineer",'
+          '"email":"ada@example.com"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    final MattermostUserDto user = await api.getUserById('ada');
+
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/users/ada');
+    expect(user.position, 'Engineer');
+    expect(user.email, 'ada@example.com');
+  });
+
   test('loads user status by id', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body: '{"user_id":"ada","status":"online","manual":false}',
@@ -41,7 +59,7 @@ void main() {
 
     expect(adapter.request?.method, 'POST');
     expect(adapter.request?.path, '/channels/direct');
-    expect(adapter.request?.data, <String>['me', 'ada']);
+    expect(adapter.request?.data, '["me","ada"]');
     expect(channel.id, 'dm-1');
   });
 

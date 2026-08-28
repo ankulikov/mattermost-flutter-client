@@ -12,10 +12,12 @@ This profile cache does not store avatar bytes. Its picture-update timestamp is
 passed to the avatar repository and participates in the versioned avatar key.
 
 Clicking a message author name or avatar opens an auto-disposed profile card.
-The card combines the cached profile lookup with a live
-`GET /users/{user_id}/status` request and exposes explicit loading, retry, and
-direct-message action states. The direct-message action is implemented by the
-channels domain contract and `POST /channels/direct`, not by the widget.
+The card combines a fresh, cache-bypassing `GET /users/{user_id}` lookup with a
+live `GET /users/{user_id}/status` request and exposes explicit loading, retry,
+and direct-message action states. The batch cache remains an optimization for
+author and dialog-name resolution only. The direct-message action is
+implemented by the channels domain contract and `POST /channels/direct`, not by
+the widget.
 
 User profile responses do not contain an image URL. They expose
 `last_picture_update`; bot accounts expose `is_bot` and

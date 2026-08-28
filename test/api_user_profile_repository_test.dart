@@ -13,7 +13,7 @@ void main() {
       api: api,
     ).getById('ada');
 
-    expect(api.requestedUserIds, <String>['ada']);
+    expect(api.requestedUserId, 'ada');
     expect(api.statusUserId, 'ada');
     expect(profile.fullName, 'Ada Lovelace');
     expect(profile.handle, 'ada-nickname');
@@ -40,25 +40,23 @@ void main() {
 }
 
 final class _ProfileApi implements MattermostApi {
-  List<String>? requestedUserIds;
+  String? requestedUserId;
   String? statusUserId;
   (String, String)? directUsers;
 
   @override
-  Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async {
-    requestedUserIds = userIds;
-    return const <MattermostUserDto>[
-      MattermostUserDto(
-        id: 'ada',
-        username: 'ada',
-        firstName: 'Ada',
-        lastName: 'Lovelace',
-        nickname: 'ada-nickname',
-        position: 'Mathematician',
-        email: 'ada@example.com',
-        lastPictureUpdate: 42,
-      ),
-    ];
+  Future<MattermostUserDto> getUserById(String userId) async {
+    requestedUserId = userId;
+    return const MattermostUserDto(
+      id: 'ada',
+      username: 'ada',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      nickname: 'ada-nickname',
+      position: 'Mathematician',
+      email: 'ada@example.com',
+      lastPictureUpdate: 42,
+    );
   }
 
   @override

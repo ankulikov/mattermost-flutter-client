@@ -150,9 +150,12 @@ URL сервера и ID вошедшего пользователя,
 передается avatar repository и участвует в его versioned cache key.
 
 Карточка пользователя открывается по нажатию на имя или аватар автора. Ее
-auto-disposed provider параллельно получает профиль через `POST /users/ids` и
-актуальный presence через `GET /users/{user_id}/status`. Ошибка первой загрузки
-показывает retry-state. Кнопка Message вызывает `POST /channels/direct` с ID
+auto-disposed provider параллельно получает свежий профиль напрямую через
+`GET /users/{user_id}` и актуальный presence через
+`GET /users/{user_id}/status`. Одиночный запрос карточки всегда обходит batch
+cache, чтобы не показывать устаревшие или добавленные миграцией пустые поля.
+Ошибка первой загрузки показывает retry-state. Кнопка Message вызывает
+`POST /channels/direct` с ID
 текущего и выбранного пользователей, затем выбирает полученный direct-канал и
 обновляет сайдбар.
 

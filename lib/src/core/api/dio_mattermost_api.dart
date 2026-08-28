@@ -58,6 +58,12 @@ final class DioMattermostApi implements MattermostApi {
   }
 
   @override
+  Future<MattermostUserDto> getUserById(String userId) async {
+    final Response<Object?> response = await _get('/users/$userId');
+    return MattermostUserDto.fromJson(_object(response.data));
+  }
+
+  @override
   Future<MattermostUserStatusDto> getUserStatus(String userId) async {
     final Response<Object?> response = await _get('/users/$userId/status');
     return MattermostUserStatusDto.fromJson(_object(response.data));

@@ -101,6 +101,10 @@ final class CachedUserProfileApi implements MattermostApi {
       );
 
   @override
+  Future<MattermostUserDto> getUserById(String userId) =>
+      _delegate.getUserById(userId);
+
+  @override
   Future<MattermostUserStatusDto> getUserStatus(String userId) =>
       _delegate.getUserStatus(userId);
 

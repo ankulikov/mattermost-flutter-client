@@ -11,9 +11,7 @@ final class ApiUserProfileRepository implements UserProfileRepository {
   @override
   Future<UserProfile> getById(String userId) async {
     if (userId.isEmpty) throw ArgumentError.value(userId, 'userId');
-    final Future<List<MattermostUserDto>> userFuture = _api.getUsersByIds(
-      <String>[userId],
-    );
+    final Future<MattermostUserDto> userFuture = _api.getUserById(userId);
     final Future<MattermostUserStatusDto> statusFuture = _api.getUserStatus(
       userId,
     );
@@ -21,13 +19,12 @@ final class ApiUserProfileRepository implements UserProfileRepository {
       userFuture,
       statusFuture,
     ]);
-    final List<MattermostUserDto> users = result[0] as List<MattermostUserDto>;
+    final MattermostUserDto user = result[0] as MattermostUserDto;
     final MattermostUserStatusDto status = result[1] as MattermostUserStatusDto;
-    final MattermostUserDto? user = users
-        .where((MattermostUserDto item) => item.id == userId)
-        .firstOrNull;
-    if (user == null) {
-      throw StateError('Mattermost returned no profile for user $userId');
+    if (user.id != userId) {
+      throw FormatException(
+        'Mattermost returned profile ${user.id} when $userId was requested',
+      );
     }
     return UserProfile(
       id: user.id,

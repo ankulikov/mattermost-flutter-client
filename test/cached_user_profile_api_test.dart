@@ -177,6 +177,42 @@ void main() {
       expect(api.requests.single, <String>['ada']);
     },
   );
+
+  test('single profile lookup always bypasses the batch cache', () async {
+    await cache.upsertAll(
+      accountId: 'server-a',
+      profiles: <CachedUserProfile>[
+        CachedUserProfile(
+          userId: 'ada',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          username: 'ada',
+          expiresAt: now.add(const Duration(days: 7)),
+        ),
+      ],
+    );
+    final _UsersApi api = _UsersApi(<String, MattermostUserDto>{
+      'ada': const MattermostUserDto(
+        id: 'ada',
+        username: 'ada',
+        position: 'Fresh position',
+        email: 'fresh@example.com',
+      ),
+    });
+    final CachedUserProfileApi cachedApi = CachedUserProfileApi(
+      delegate: api,
+      cache: cache,
+      accountId: 'server-a',
+      now: () => now,
+    );
+
+    final MattermostUserDto user = await cachedApi.getUserById('ada');
+
+    expect(api.singleRequests, <String>['ada']);
+    expect(api.requests, isEmpty);
+    expect(user.position, 'Fresh position');
+    expect(user.email, 'fresh@example.com');
+  });
 }
 
 final class _UsersApi implements MattermostApi {
@@ -184,6 +220,7 @@ final class _UsersApi implements MattermostApi {
 
   final Map<String, MattermostUserDto> users;
   final List<List<String>> requests = <List<String>>[];
+  final List<String> singleRequests = <String>[];
   Object? error;
 
   @override
@@ -194,6 +231,15 @@ final class _UsersApi implements MattermostApi {
         .map((String id) => users[id])
         .whereType<MattermostUserDto>()
         .toList(growable: false);
+  }
+
+  @override
+  Future<MattermostUserDto> getUserById(String userId) async {
+    singleRequests.add(userId);
+    if (error case final Object error) throw error;
+    final MattermostUserDto? user = users[userId];
+    if (user == null) throw StateError('missing user');
+    return user;
   }
 
   @override
