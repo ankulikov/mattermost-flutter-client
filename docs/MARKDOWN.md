@@ -27,6 +27,7 @@ guide.
 | Inline `$LaTeX$` | Yes | `flutter_markdown_plus_latex` |
 | Fenced `latex` formulas | Yes | Custom block syntax plus `flutter_markdown_plus_latex` |
 | Unicode emoji and standard `:shortcode:` emoji | Yes | Unicode plus Dart Markdown `EmojiSyntax` |
+| Custom `:emoji_name:` emoji | Yes | Post metadata plus authenticated, account-scoped image cache |
 
 The Mattermost documentation explicitly says that HTML line breaks in table
 cells are unsupported. `flutter_markdown_plus` does not render inline HTML,
@@ -46,6 +47,9 @@ avoids passing server-provided HTML through to a platform renderer.
   non-scrolling `SelectionArea` around the rendered body.
 - Soft line breaks are preserved because Mattermost users create message line
   breaks with Shift+Enter.
+- Custom emoji keep their shortcode as an immediate loading/error fallback.
+  Image bytes are cached separately from Markdown parsing and capped at 5000
+  account-scoped objects.
 
 ## Dependencies
 

@@ -37,6 +37,12 @@ abstract interface class MattermostApi {
     int lastPictureUpdate = 0,
   });
 
+  /// Resolves custom emoji metadata by its exact shortcode name.
+  Future<MattermostEmojiDto> getCustomEmojiByName(String name);
+
+  /// Returns the authenticated user's view of a custom emoji image.
+  Future<MattermostImageDto> getCustomEmojiImage(String emojiId);
+
   Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
     List<String> channelIds,
   );

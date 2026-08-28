@@ -72,6 +72,14 @@ final class _FakeMattermostApi implements MattermostApi {
   }) => throw UnimplementedError();
 
   @override
+  Future<MattermostEmojiDto> getCustomEmojiByName(String name) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MattermostImageDto> getCustomEmojiImage(String emojiId) =>
+      throw UnimplementedError();
+
+  @override
   Future<MattermostUserThreadsDto> getUserThreads({
     required String userId,
     required String teamId,

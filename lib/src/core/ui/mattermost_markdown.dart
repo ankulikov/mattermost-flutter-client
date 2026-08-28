@@ -10,6 +10,33 @@ import 'package:mattermost_flutter/src/core/ui/mattermost_markdown_strings.dart'
 import 'package:url_launcher/url_launcher.dart';
 
 typedef MattermostLinkLauncher = Future<bool> Function(Uri uri);
+typedef MattermostInlineReplacementBuilder =
+    Widget Function(BuildContext context, String value, TextStyle textStyle);
+
+/// Declarative hook for replacing inline message tokens with widgets.
+///
+/// Emoji are the first consumer. Future enrichments such as `@username` can
+/// use the same parser/builder boundary without adding feature dependencies to
+/// the shared Markdown renderer.
+final class MattermostInlineReplacement {
+  const MattermostInlineReplacement({
+    required this.elementName,
+    required this.pattern,
+    required this.builder,
+    this.valueGroup = 1,
+    this.startCharacter,
+    this.shouldReplace,
+    this.fallbackText,
+  });
+
+  final String elementName;
+  final String pattern;
+  final int valueGroup;
+  final int? startCharacter;
+  final bool Function(String value)? shouldReplace;
+  final String? Function(String value)? fallbackText;
+  final MattermostInlineReplacementBuilder builder;
+}
 
 /// Renders the Markdown dialect documented for Mattermost messages.
 ///
@@ -23,6 +50,7 @@ class MattermostMarkdown extends StatefulWidget {
     this.onTapChannel,
     this.linkLauncher,
     this.textStyle,
+    this.inlineReplacements = const <MattermostInlineReplacement>[],
     super.key,
   });
 
@@ -31,22 +59,22 @@ class MattermostMarkdown extends StatefulWidget {
   final ValueChanged<String>? onTapChannel;
   final MattermostLinkLauncher? linkLauncher;
   final TextStyle? textStyle;
+  final List<MattermostInlineReplacement> inlineReplacements;
 
   @override
   State<MattermostMarkdown> createState() => _MattermostMarkdownState();
 
-  static final md.ExtensionSet _mattermostExtensions = md.ExtensionSet(
-    <md.BlockSyntax>[
-      const _MattermostLatexFenceSyntax(),
-      ...md.ExtensionSet.gitHubFlavored.blockSyntaxes,
-    ],
-    <md.InlineSyntax>[
-      _MattermostChannelLinkSyntax(),
-      _MattermostInlineLatexSyntax(),
-      md.EmojiSyntax(),
-      ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
-    ],
-  );
+  static final List<md.BlockSyntax> _mattermostBlockSyntaxes = <md.BlockSyntax>[
+    const _MattermostLatexFenceSyntax(),
+    ...md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+  ];
+  static final List<md.InlineSyntax> _mattermostInlineSyntaxes =
+      <md.InlineSyntax>[
+        _MattermostChannelLinkSyntax(),
+        _MattermostInlineLatexSyntax(),
+        md.EmojiSyntax(),
+        ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
+      ];
 }
 
 class _MattermostMarkdownState extends State<MattermostMarkdown> {
@@ -55,11 +83,13 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
   TextStyle? _cachedBodyStyle;
   MarkdownStyleSheet? _cachedStyleSheet;
   Map<String, MarkdownElementBuilder>? _cachedBuilders;
+  late md.ExtensionSet _extensionSet;
 
   @override
   void initState() {
     super.initState();
     _preparedData = prepareMattermostMarkdown(widget.data);
+    _extensionSet = _buildExtensionSet(widget.inlineReplacements);
   }
 
   @override
@@ -67,6 +97,10 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
     super.didUpdateWidget(oldWidget);
     if (widget.data != oldWidget.data) {
       _preparedData = prepareMattermostMarkdown(widget.data);
+    }
+    if (!identical(widget.inlineReplacements, oldWidget.inlineReplacements)) {
+      _extensionSet = _buildExtensionSet(widget.inlineReplacements);
+      _cachedTheme = null;
     }
     if (widget.textStyle != oldWidget.textStyle ||
         widget.serverUrl != oldWidget.serverUrl) {
@@ -114,6 +148,12 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
       _cachedBuilders = <String, MarkdownElementBuilder>{
         'latex': _MattermostLatexBuilder(textStyle: bodyStyle),
         'pre': _MattermostCodeBlockBuilder(theme: theme),
+        for (final MattermostInlineReplacement replacement
+            in widget.inlineReplacements)
+          replacement.elementName: _MattermostInlineReplacementBuilder(
+            replacement: replacement,
+            textStyle: bodyStyle,
+          ),
       };
     }
 
@@ -121,7 +161,7 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
       child: MarkdownBody(
         data: _preparedData,
         softLineBreak: true,
-        extensionSet: MattermostMarkdown._mattermostExtensions,
+        extensionSet: _extensionSet,
         styleSheet: _cachedStyleSheet,
         imageBuilder: _buildImage,
         builders: _cachedBuilders!,
@@ -139,6 +179,16 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
       ),
     );
   }
+
+  md.ExtensionSet _buildExtensionSet(
+    List<MattermostInlineReplacement> replacements,
+  ) => md.ExtensionSet(
+    MattermostMarkdown._mattermostBlockSyntaxes,
+    <md.InlineSyntax>[
+      ...replacements.map(_MattermostInlineReplacementSyntax.new),
+      ...MattermostMarkdown._mattermostInlineSyntaxes,
+    ],
+  );
 
   Widget _buildImage(Uri source, String? title, String? alt) {
     final String? encodedSize = source.queryParameters[_imageSizeParameter];
@@ -223,6 +273,63 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
       const SnackBar(content: Text(MattermostMarkdownStrings.openLinkFailed)),
     );
   }
+}
+
+final class _MattermostInlineReplacementSyntax extends md.InlineSyntax {
+  _MattermostInlineReplacementSyntax(this.replacement)
+    : super(replacement.pattern, startCharacter: replacement.startCharacter);
+
+  final MattermostInlineReplacement replacement;
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final String value = match[replacement.valueGroup]!;
+    if (replacement.shouldReplace?.call(value) == false) {
+      final String? fallback = replacement.fallbackText?.call(value);
+      if (fallback != null) {
+        parser.addNode(md.Text(fallback));
+        return true;
+      }
+      parser.advanceBy(1);
+      return false;
+    }
+    final md.Element element = md.Element.empty(replacement.elementName);
+    element.attributes['value'] = value;
+    parser.addNode(element);
+    return true;
+  }
+}
+
+final class _MattermostInlineReplacementBuilder extends MarkdownElementBuilder {
+  _MattermostInlineReplacementBuilder({
+    required this.replacement,
+    required this.textStyle,
+  });
+
+  final MattermostInlineReplacement replacement;
+  final TextStyle textStyle;
+
+  @override
+  Widget visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) => Text.rich(
+    TextSpan(
+      children: <InlineSpan>[
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: replacement.builder(
+            context,
+            element.attributes['value'] ?? '',
+            preferredStyle ?? parentStyle ?? textStyle,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ImageError extends StatelessWidget {

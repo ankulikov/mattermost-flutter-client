@@ -98,6 +98,36 @@ final class DioMattermostApi implements MattermostApi {
   }
 
   @override
+  Future<MattermostEmojiDto> getCustomEmojiByName(String name) async {
+    final Response<Object?> response = await _get(
+      '/emoji/name/${Uri.encodeComponent(name)}',
+    );
+    return MattermostEmojiDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<MattermostImageDto> getCustomEmojiImage(String emojiId) async {
+    final Response<List<int>> response = await _withCancellation(
+      (CancelToken? cancelToken) => _dio.get<List<int>>(
+        '/emoji/${Uri.encodeComponent(emojiId)}/image',
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: const <String, String>{'Accept': 'image/*'},
+        ),
+        cancelToken: cancelToken,
+      ),
+    );
+    final List<int>? data = response.data;
+    if (data == null) {
+      throw const FormatException('Expected a binary image response');
+    }
+    return MattermostImageDto(
+      bytes: data is Uint8List ? data : Uint8List.fromList(data),
+      contentType: response.headers.value(Headers.contentTypeHeader),
+    );
+  }
+
+  @override
   Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
     List<String> channelIds,
   ) async {

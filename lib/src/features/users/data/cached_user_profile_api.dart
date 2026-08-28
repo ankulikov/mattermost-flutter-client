@@ -139,6 +139,14 @@ final class CachedUserProfileApi implements MattermostApi {
   );
 
   @override
+  Future<MattermostEmojiDto> getCustomEmojiByName(String name) =>
+      _delegate.getCustomEmojiByName(name);
+
+  @override
+  Future<MattermostImageDto> getCustomEmojiImage(String emojiId) =>
+      _delegate.getCustomEmojiImage(emojiId);
+
+  @override
   Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
     List<String> channelIds,
   ) => _delegate.getUsersForGroupChannels(channelIds);

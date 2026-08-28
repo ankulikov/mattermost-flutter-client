@@ -197,6 +197,14 @@ final class _ThreadApi implements MattermostApi {
     int lastPictureUpdate = 0,
   }) => throw UnimplementedError();
 
+  @override
+  Future<MattermostEmojiDto> getCustomEmojiByName(String name) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MattermostImageDto> getCustomEmojiImage(String emojiId) =>
+      throw UnimplementedError();
+
   final bool deletedOnly;
   int threadCalls = 0;
   String? secondFromPost;

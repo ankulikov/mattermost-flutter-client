@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/core/ui/avatar_initials.dart';
 import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
+import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
 import 'package:mattermost_flutter/src/features/users/presentation/user_profile_card.dart';
@@ -170,11 +172,70 @@ class MessageBody extends StatelessWidget {
         style: bodyStyle?.copyWith(fontStyle: FontStyle.italic),
       );
     }
+    final Map<String, CustomEmojiReference> customEmojiByName =
+        <String, CustomEmojiReference>{
+          for (final CustomEmojiReference emoji in post.customEmojis)
+            emoji.name: emoji,
+        };
     return MattermostMarkdown(
       data: post.message,
       serverUrl: serverUrl,
       onTapChannel: onSelectChannel,
       textStyle: bodyStyle,
+      inlineReplacements: <MattermostInlineReplacement>[
+        MattermostInlineReplacement(
+          elementName: 'custom-emoji',
+          pattern: r':([a-z0-9_+-]+):',
+          startCharacter: 0x3a,
+          shouldReplace: (String name) => !md.emojis.containsKey(name),
+          fallbackText: (String name) => md.emojis[name],
+          builder: (BuildContext context, String name, TextStyle style) {
+            final CustomEmojiReference reference =
+                customEmojiByName[name] ?? CustomEmojiReference(name: name);
+            return _CustomEmojiInline(reference: reference, textStyle: style);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _CustomEmojiInline extends ConsumerWidget {
+  const _CustomEmojiInline({required this.reference, required this.textStyle});
+
+  final CustomEmojiReference reference;
+  final TextStyle textStyle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<CustomEmojiContent> content = ref.watch(
+      customEmojiProvider(reference),
+    );
+    final String shortcode = ':${reference.name}:';
+    final Widget fallback = Text(shortcode, style: textStyle);
+    final double logicalSize = MediaQuery.textScalerOf(
+      context,
+    ).scale(textStyle.fontSize ?? 14);
+    final int cacheSize = (logicalSize * MediaQuery.devicePixelRatioOf(context))
+        .ceil();
+    return Semantics(
+      image: content.hasValue,
+      label: shortcode,
+      child: content.when(
+        data: (CustomEmojiContent emoji) => SizedBox.square(
+          dimension: logicalSize,
+          child: Image.memory(
+            emoji.bytes,
+            fit: BoxFit.cover,
+            cacheWidth: cacheSize,
+            gaplessPlayback: true,
+            excludeFromSemantics: true,
+            errorBuilder: (_, _, _) => fallback,
+          ),
+        ),
+        loading: () => fallback,
+        error: (_, _) => fallback,
+      ),
     );
   }
 }

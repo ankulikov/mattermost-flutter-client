@@ -1,3 +1,5 @@
+import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
+
 final class PostAuthor {
   const PostAuthor({
     required this.id,
@@ -32,6 +34,7 @@ final class ChannelPost {
     required this.author,
     required this.sentAt,
     required this.message,
+    this.customEmojis = const <CustomEmojiReference>[],
     this.reactions = const <PostReaction>[],
     this.rootId = '',
     this.replyCount = 0,
@@ -44,6 +47,7 @@ final class ChannelPost {
   final PostAuthor author;
   final DateTime sentAt;
   final String message;
+  final List<CustomEmojiReference> customEmojis;
   final List<PostReaction> reactions;
   final String rootId;
   final int replyCount;
@@ -61,6 +65,7 @@ final class ChannelPost {
     author: author,
     sentAt: sentAt,
     message: message,
+    customEmojis: customEmojis,
     reactions: reactions,
     rootId: rootId,
     replyCount: replyCount,

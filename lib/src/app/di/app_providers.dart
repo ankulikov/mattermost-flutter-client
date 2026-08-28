@@ -20,6 +20,10 @@ import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_
 import 'package:mattermost_flutter/src/features/channels/domain/direct_channel_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
+import 'package:mattermost_flutter/src/features/emojis/data/api_custom_emoji_repository.dart';
+import 'package:mattermost_flutter/src/features/emojis/data/custom_emoji_cache.dart';
+import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
+import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji_repository.dart';
 import 'package:mattermost_flutter/src/features/messages/data/api_message_sender.dart';
 import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
@@ -126,6 +130,36 @@ final userAvatarProvider = FutureProvider.autoDispose
             accountId: session.accountId,
             userId: input.userId,
             profileImageUpdatedAt: input.profileImageUpdatedAt,
+          );
+    });
+
+final Provider<CustomEmojiCache> customEmojiCacheProvider =
+    Provider<CustomEmojiCache>((Ref ref) => FlutterCustomEmojiCache());
+
+final Provider<CustomEmojiRepository> customEmojiRepositoryProvider =
+    Provider<CustomEmojiRepository>(
+      (Ref ref) => ApiCustomEmojiRepository(
+        api: ref.watch(activeMattermostApiProvider),
+        cache: ref.watch(customEmojiCacheProvider),
+      ),
+    );
+
+final customEmojiProvider = FutureProvider.autoDispose
+    .family<CustomEmojiContent, CustomEmojiReference>((
+      Ref ref,
+      CustomEmojiReference emoji,
+    ) {
+      final AuthSession? session = ref.watch(authSessionProvider);
+      if (session == null) {
+        throw StateError('No active Mattermost session');
+      }
+      return ref
+          .watch(customEmojiRepositoryProvider)
+          .getByName(
+            accountId: session.durableDataScopeId,
+            name: emoji.name,
+            emojiId: emoji.id,
+            updatedAt: emoji.updatedAt,
           );
     });
 

@@ -176,6 +176,23 @@ Cache ограничен 500 объектами и очищается по не�
 инициалами. После загрузки Flutter асинхронно декодирует уменьшенное под размер
 виджета изображение и заменяет fallback без блокирующей операции в `build`.
 
+## Custom emoji и расширение текста
+
+Custom emoji из `PostMetadata.emojis` переносятся в domain-снимок сообщения.
+Поэтому обычный путь отображения `:emoji_name:` не делает metadata lookup:
+авторизованно загружается только `GET /emoji/{emoji_id}/image`. Если сервер не
+прислал metadata, используется fallback `GET /emoji/name/{emoji_name}`.
+
+Bytes живут во временном account-scoped cache на 5000 объектов; ключ включает
+имя, id и `update_at`, а параллельные misses одного имени объединяются. Пока
+cache/API выполняются, shortcode остается текстом, поэтому Markdown получает
+первый layout без ожидания сети.
+
+`MattermostMarkdown` принимает декларативные inline replacements. Emoji — первый
+consumer этого API; будущие замены наподобие `@username` добавляются через тот
+же parser/builder boundary, не связывая общий Markdown renderer с feature data
+или Riverpod.
+
 ## База данных
 
 Schema version 7 удаляет прежние 11 таблиц сайдбара, постов, реакций, порядка и

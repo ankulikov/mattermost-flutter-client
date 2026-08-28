@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/core/ui/mattermost_markdown_strings.dart';
 
@@ -278,6 +279,40 @@ X_k = \sum_{n=0}^{N} x_n
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('supports reusable inline replacements after standard emoji', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MattermostMarkdown(
+            data: ':smile: :party_parrot:',
+            inlineReplacements: <MattermostInlineReplacement>[
+              MattermostInlineReplacement(
+                elementName: 'test-emoji',
+                pattern: r':([a-z0-9_+-]+):',
+                startCharacter: 0x3a,
+                shouldReplace: (String name) => !md.emojis.containsKey(name),
+                fallbackText: (String name) => md.emojis[name],
+                builder: (_, String name, _) => Text('custom=$name'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final Finder inlineText = find.byWidgetPredicate((Widget widget) {
+      if (widget case Text(textSpan: final InlineSpan span?)) {
+        return span.toPlainText().contains('😄') && _containsWidgetSpan(span);
+      }
+      return false;
+    });
+
+    expect(inlineText, findsOneWidget);
+    expect(find.text('custom=party_parrot'), findsOneWidget);
+  });
+
   testWidgets('blocks unsafe links and image schemes', (
     WidgetTester tester,
   ) async {
@@ -374,6 +409,13 @@ const greeting = 'hello';
     );
     expect(tester.takeException(), isNull);
   });
+}
+
+bool _containsWidgetSpan(InlineSpan span) {
+  if (span is WidgetSpan) {
+    return true;
+  }
+  return span is TextSpan && span.children?.any(_containsWidgetSpan) == true;
 }
 
 void _tapTextSpan(WidgetTester tester, String text) {

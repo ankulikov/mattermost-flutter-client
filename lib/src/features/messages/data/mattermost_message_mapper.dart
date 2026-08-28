@@ -1,4 +1,5 @@
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_display_name.dart';
@@ -26,6 +27,21 @@ final class MattermostMessageMapper
             author: _mapAuthor(post.userId, authors[post.userId]),
             sentAt: DateTime.fromMillisecondsSinceEpoch(post.createAt),
             message: post.deleteAt == 0 ? post.message : '',
+            customEmojis: post.deleteAt == 0
+                ? (post.metadata?.emojis ?? const <MattermostEmojiDto>[])
+                      .where(
+                        (MattermostEmojiDto emoji) =>
+                            emoji.name.isNotEmpty && emoji.deleteAt == 0,
+                      )
+                      .map(
+                        (MattermostEmojiDto emoji) => CustomEmojiReference(
+                          name: emoji.name,
+                          id: emoji.id,
+                          updatedAt: emoji.updateAt,
+                        ),
+                      )
+                      .toList(growable: false)
+                : const <CustomEmojiReference>[],
             rootId: post.rootId,
             replyCount: post.replyCount,
             isDeleted: post.deleteAt != 0,

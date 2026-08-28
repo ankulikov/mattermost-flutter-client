@@ -116,6 +116,43 @@ void main() {
     expect(image.contentType, 'image/png');
   });
 
+  test('resolves custom emoji metadata by encoded name', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"id":"emoji-1","creator_id":"ada","name":"party+parrot",'
+          '"create_at":1,"update_at":2,"delete_at":0}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final MattermostEmojiDto emoji = await DioMattermostApi(
+      dio: dio,
+    ).getCustomEmojiByName('party+parrot');
+
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/emoji/name/party%2Bparrot');
+    expect(emoji.id, 'emoji-1');
+  });
+
+  test('downloads an authenticated custom emoji image', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      bytes: Uint8List.fromList(<int>[4, 5, 6]),
+      contentType: 'image/gif',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final MattermostImageDto image = await DioMattermostApi(
+      dio: dio,
+    ).getCustomEmojiImage('emoji-1');
+
+    expect(adapter.request?.path, '/emoji/emoji-1/image');
+    expect(adapter.request?.headers['Accept'], 'image/*');
+    expect(adapter.request?.responseType, ResponseType.bytes);
+    expect(image.bytes, <int>[4, 5, 6]);
+    expect(image.contentType, 'image/gif');
+  });
+
   test('sends the complete cursor for upward thread pagination', () async {
     final _RecordingAdapter adapter = _RecordingAdapter();
     final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
