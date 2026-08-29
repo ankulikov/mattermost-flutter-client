@@ -8,6 +8,29 @@ import 'dart:typed_data';
 
 typedef JsonMap = Map<String, Object?>;
 
+/// The public subset of `GET /config/client?format=old` needed before login.
+final class MattermostClientConfigDto {
+  const MattermostClientConfigDto({
+    required this.enableSaml,
+    required this.samlLoginButtonText,
+    required this.enableSignUpWithOpenId,
+    required this.openIdButtonText,
+  });
+
+  factory MattermostClientConfigDto.fromJson(JsonMap json) =>
+      MattermostClientConfigDto(
+        enableSaml: _bool(json, 'EnableSaml'),
+        samlLoginButtonText: _string(json, 'SamlLoginButtonText'),
+        enableSignUpWithOpenId: _bool(json, 'EnableSignUpWithOpenId'),
+        openIdButtonText: _string(json, 'OpenIdButtonText'),
+      );
+
+  final bool enableSaml;
+  final String samlLoginButtonText;
+  final bool enableSignUpWithOpenId;
+  final String openIdButtonText;
+}
+
 final class MattermostUserDto {
   const MattermostUserDto({
     required this.id,

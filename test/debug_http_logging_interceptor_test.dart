@@ -91,6 +91,37 @@ void main() {
     expect(logs.last, contains('response-9'));
     expect(logs.last, isNot(contains('response-10')));
   });
+
+  test('redacts SSO callback query values', () async {
+    final List<String> logs = <String>[];
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com'))
+      ..httpClientAdapter = _JsonAdapter(
+        statusCode: 200,
+        body: const <String, Object?>{},
+      )
+      ..interceptors.add(DebugHttpLoggingInterceptor(logWriter: logs.add));
+
+    await dio.get<Object?>(
+      '/login/callback',
+      queryParameters: const <String, String>{
+        'client_data': 'encoded-client-data',
+        'code': 'one-time-code',
+        'execution': 'execution-id',
+        'session_code': 'session-code',
+        'state': 'csrf-state',
+        'SAMLResponse': 'saml-payload',
+        'page': 'home',
+      },
+    );
+
+    expect(logs.first, contains('page=home'));
+    expect(logs.first, isNot(contains('one-time-code')));
+    expect(logs.first, isNot(contains('csrf-state')));
+    expect(logs.first, isNot(contains('saml-payload')));
+    expect(logs.first, isNot(contains('encoded-client-data')));
+    expect(logs.first, isNot(contains('execution-id')));
+    expect(logs.first, isNot(contains('session-code')));
+  });
 }
 
 final class _JsonAdapter implements HttpClientAdapter {

@@ -1,7 +1,11 @@
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 
 abstract interface class AuthRepository {
-  Future<AuthSession> authenticateWithPersonalAccessToken({
+  /// Validates a transient Mattermost session token and persists it only after
+  /// the server has accepted it.
+  ///
+  /// The token must not be retained in presentation state or domain entities.
+  Future<AuthSession> authenticateWithSessionToken({
     required Uri serverUrl,
     required String token,
   });

@@ -5,3 +5,9 @@ abstract interface class CredentialStore {
 
   Future<void> clear();
 }
+
+/// Thrown when secure storage contains only part of a credential pair or an
+/// unusable server URL. It intentionally carries no credential values.
+final class CredentialStoreCorruptionException implements Exception {
+  const CredentialStoreCorruptionException();
+}

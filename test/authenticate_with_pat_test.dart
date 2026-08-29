@@ -2,18 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/authenticate_with_pat.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/authenticate_with_session_token.dart';
 
 void main() {
   test('normalizes input and delegates valid credentials', () async {
     final _FakeAuthRepository repository = _FakeAuthRepository();
 
-    await AuthenticateWithPat(repository)(
-      serverUrl: '  https://chat.example.com/  ',
+    await AuthenticateWithSessionToken(repository)(
+      serverUrl: '  HTTPS://chat.example.com/mattermost/  ',
       token: '  secret  ',
     );
 
-    expect(repository.serverUrl, Uri.parse('https://chat.example.com'));
+    expect(
+      repository.serverUrl,
+      Uri.parse('https://chat.example.com/mattermost'),
+    );
     expect(repository.token, 'secret');
   });
 
@@ -21,7 +24,7 @@ void main() {
     final _FakeAuthRepository repository = _FakeAuthRepository();
 
     expect(
-      () => AuthenticateWithPat(repository)(
+      () => AuthenticateWithSessionToken(repository)(
         serverUrl: 'http://chat.example.com',
         token: 'secret',
       ),
@@ -29,7 +32,7 @@ void main() {
         isA<AuthFailure>().having(
           (AuthFailure error) => error.kind,
           'kind',
-          AuthFailureKind.invalidResponse,
+          AuthFailureKind.invalidServer,
         ),
       ),
     );
@@ -42,7 +45,7 @@ final class _FakeAuthRepository implements AuthRepository {
   String? token;
 
   @override
-  Future<AuthSession> authenticateWithPersonalAccessToken({
+  Future<AuthSession> authenticateWithSessionToken({
     required Uri serverUrl,
     required String token,
   }) async {

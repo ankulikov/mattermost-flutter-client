@@ -1,21 +1,35 @@
 abstract final class AuthStrings {
   static const String title = 'Подключение к Mattermost';
   static const String description =
-      'Укажите адрес сервера и персональный токен. Получить токен можно в '
-      'Mattermost: Профиль → Безопасность → Персональные токены доступа.';
+      'Укажите адрес Mattermost-сервера, чтобы выбрать доступный способ входа.';
   static const String serverLabel = 'Адрес сервера';
   static const String serverHint = 'https://mattermost.example.com';
-  static const String tokenLabel = 'Персональный токен';
-  static const String showToken = 'Показать токен';
-  static const String hideToken = 'Скрыть токен';
-  static const String connect = 'Подключиться';
+  static const String continueLabel = 'Продолжить';
+  static const String chooseMethod = 'Выберите способ входа';
+  static const String loadingMethods = 'Проверяем сервер и способы входа…';
+  static const String openingBrowser = 'Открываем защищённое окно входа…';
+  static const String validatingSession = 'Проверяем сессию…';
   static const String cancel = 'Отмена';
+  static const String retry = 'Повторить';
+  static const String changeServer = 'Другой сервер';
   static const String signOut = 'Выйти';
   static const String connected = 'Подключено';
-  static const String invalidCredentials = 'Токен недействителен или отозван.';
+  static const String invalidCredentials =
+      'Сессия недействительна или была отозвана. Войдите снова.';
   static const String networkError =
       'Не удалось связаться с сервером. Проверьте адрес и подключение.';
-  static const String invalidInput =
-      'Укажите корректный HTTPS-адрес сервера и непустой токен.';
-  static const String storageError = 'Не удалось безопасно сохранить токен.';
+  static const String invalidInput = 'Укажите корректный HTTPS-адрес сервера.';
+  static const String storageError = 'Не удалось безопасно сохранить сессию.';
+  static const String ssoUnavailable =
+      'На этом сервере не включены поддерживаемые способы единого входа.';
+  static const String browserUnavailable =
+      'Защищённое окно входа недоступно на этой платформе.';
+  static const String ssoFailed =
+      'Не удалось завершить единый вход. Попробуйте ещё раз.';
+  static const String tokenMissing =
+      'Сервер не завершил вход. Попробуйте ещё раз.';
+  static const String sessionExpired =
+      'Сохранённая сессия истекла. Войдите снова.';
+  static const String restoreFailed =
+      'Не удалось проверить сохранённую сессию. Повторите попытку позже.';
 }

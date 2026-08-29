@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_strings.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/pat_login_dialog.dart';
+import 'package:mattermost_flutter/src/features/auth/presentation/sso_login_dialog.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
@@ -160,18 +161,63 @@ class _MainContent extends StatelessWidget {
         ),
       );
     }
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: FilledButton.icon(
-          onPressed: () => showDialog<void>(
-            context: context,
-            builder: (BuildContext context) => const PatLoginDialog(),
-          ),
-          icon: const Icon(Icons.key),
-          label: const Text(AuthStrings.title),
-        ),
-      ),
-    );
+    return _SignedOutContent(auth: auth);
   }
+}
+
+class _SignedOutContent extends ConsumerWidget {
+  const _SignedOutContent({required this.auth});
+
+  final AuthState auth;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (auth.failure != null) ...<Widget>[
+            Text(
+              _failureMessage(auth.failure!),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 16),
+          ],
+          FilledButton.icon(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (BuildContext context) => const SsoLoginDialog(),
+            ),
+            icon: const Icon(Icons.login),
+            label: const Text(AuthStrings.title),
+          ),
+          if (auth.failure == AuthFailureKind.network) ...<Widget>[
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => unawaited(
+                ref.read(authControllerProvider.notifier).restore(),
+              ),
+              child: const Text(AuthStrings.retry),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+
+  String _failureMessage(AuthFailureKind failure) => switch (failure) {
+    AuthFailureKind.invalidCredentials ||
+    AuthFailureKind.sessionExpired => AuthStrings.sessionExpired,
+    AuthFailureKind.network => AuthStrings.restoreFailed,
+    AuthFailureKind.storage => AuthStrings.storageError,
+    AuthFailureKind.invalidServer => AuthStrings.invalidInput,
+    AuthFailureKind.ssoUnavailable => AuthStrings.ssoUnavailable,
+    AuthFailureKind.browserUnavailable => AuthStrings.browserUnavailable,
+    AuthFailureKind.cancelled => '',
+    AuthFailureKind.ssoFailed ||
+    AuthFailureKind.tokenMissing ||
+    AuthFailureKind.invalidResponse => AuthStrings.ssoFailed,
+  };
 }

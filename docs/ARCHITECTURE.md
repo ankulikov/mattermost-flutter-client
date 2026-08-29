@@ -240,6 +240,15 @@ sync metadata. Schema version 8 добавляет `cached_user_profiles`, вл�
 - Все user-facing строки локализуются вне widgets; поддерживаются keyboard,
   semantics, scalable text и light/dark themes.
 - Токены хранятся только в secure storage и не попадают в Drift или логи.
+- Интерактивный SSO проходит через domain-контракт `SsoBrowserGateway`.
+  Нативный browser adapter принимает только `MMAUTHTOKEN`, прочитанный native
+  Cookie Manager после возврата на выбранный Mattermost origin; UI не получает
+  cookies. Перед и после попытки очищаются только относящиеся к этому серверу
+  `MMAUTHTOKEN`, `MMUSERID` и `MMCSRF`. Flutter Web явно возвращает
+  недоступность embedded SSO, а не читает cross-origin HttpOnly cookies через
+  JavaScript. WebView и Cookie Manager используют одно platform-default cookie
+  store: Apple non-persistent store недоступен Cookie Manager этого плагина, а
+  Android incognito очищает глобальные cookies вместо изоляции одной попытки.
 - Большой JSON parsing переносится с UI isolate; запросы и пагинация имеют
   ограниченную конкуренцию и обязаны учитывать rate limits.
 - Auto-disposed контроллер создает framework-neutral request scope. Его

@@ -49,10 +49,22 @@ final class DebugHttpLoggingInterceptor extends Interceptor {
   };
 
   static const Set<String> _sensitiveQueryKeys = <String>{
+    'client_data',
+    'client_id',
     'email',
+    'code',
+    'execution',
+    'iss',
     'q',
     'query',
+    'redirect_uri',
+    'relaystate',
+    'samlresponse',
     'search',
+    'session_code',
+    'session_state',
+    'state',
+    'tab_id',
     'term',
     'token',
     'username',

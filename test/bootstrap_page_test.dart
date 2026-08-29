@@ -737,7 +737,7 @@ void main() {
 
 final class _SignedOutRepository implements AuthRepository {
   @override
-  Future<AuthSession> authenticateWithPersonalAccessToken({
+  Future<AuthSession> authenticateWithSessionToken({
     required Uri serverUrl,
     required String token,
   }) => throw UnimplementedError();
@@ -994,7 +994,7 @@ final class _AutoPagingPostRepository implements ChannelPostRepository {
 
 final class _SignedInRepository implements AuthRepository {
   @override
-  Future<AuthSession> authenticateWithPersonalAccessToken({
+  Future<AuthSession> authenticateWithSessionToken({
     required Uri serverUrl,
     required String token,
   }) => throw UnimplementedError();

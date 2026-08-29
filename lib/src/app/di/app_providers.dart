@@ -10,11 +10,15 @@ import 'package:mattermost_flutter/src/core/database/database_provider.dart';
 import 'package:mattermost_flutter/src/features/attachments/data/api_attachment_repository.dart';
 import 'package:mattermost_flutter/src/features/attachments/data/system_attachment_file_saver.dart';
 import 'package:mattermost_flutter/src/features/attachments/domain/attachment_repository.dart';
+import 'package:mattermost_flutter/src/features/auth/data/api_server_sso_discovery.dart';
 import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
-import 'package:mattermost_flutter/src/features/auth/data/pat_auth_repository.dart';
+import 'package:mattermost_flutter/src/features/auth/data/in_app_webview_sso_browser_gateway.dart';
+import 'package:mattermost_flutter/src/features/auth/data/mattermost_auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/server_sso_discovery.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/sso_browser_gateway.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_direct_channel_repository.dart';
@@ -63,9 +67,9 @@ final Provider<MattermostApiClientFactory> mattermostApiClientFactoryProvider =
       (Ref ref) => const MattermostClientFactory(),
     );
 
-final Provider<PatAuthRepository> patAuthRepositoryProvider =
-    Provider<PatAuthRepository>((Ref ref) {
-      final PatAuthRepository repository = PatAuthRepository(
+final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
+    Provider<MattermostAuthRepository>((Ref ref) {
+      final MattermostAuthRepository repository = MattermostAuthRepository(
         credentialStore: ref.watch(credentialStoreProvider),
         clientFactory: ref.watch(mattermostApiClientFactoryProvider),
       );
@@ -74,16 +78,28 @@ final Provider<PatAuthRepository> patAuthRepositoryProvider =
     });
 
 final Provider<AuthRepository> authRepositoryProvider =
-    Provider<AuthRepository>((Ref ref) => ref.watch(patAuthRepositoryProvider));
+    Provider<AuthRepository>(
+      (Ref ref) => ref.watch(mattermostAuthRepositoryProvider),
+    );
+
+final Provider<ServerSsoDiscovery> serverSsoDiscoveryProvider =
+    Provider<ServerSsoDiscovery>((Ref ref) => ApiServerSsoDiscovery());
+
+final Provider<SsoBrowserGateway> ssoBrowserGatewayProvider =
+    Provider<SsoBrowserGateway>((Ref ref) => InAppWebViewSsoBrowserGateway());
 
 final Provider<ActiveMattermostApi> activeMattermostApiSourceProvider =
     Provider<ActiveMattermostApi>(
-      (Ref ref) => ref.watch(patAuthRepositoryProvider),
+      (Ref ref) => ref.watch(mattermostAuthRepositoryProvider),
     );
 
 final NotifierProvider<AuthController, AuthState> authControllerProvider =
     NotifierProvider<AuthController, AuthState>(
-      () => AuthController(authRepositoryProvider),
+      () => AuthController(
+        authRepositoryProvider,
+        serverSsoDiscoveryProvider,
+        ssoBrowserGatewayProvider,
+      ),
     );
 
 final Provider<AuthSession?> authSessionProvider = Provider<AuthSession?>((

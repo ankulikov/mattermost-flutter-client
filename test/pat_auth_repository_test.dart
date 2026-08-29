@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
 import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
-import 'package:mattermost_flutter/src/features/auth/data/pat_auth_repository.dart';
+import 'package:mattermost_flutter/src/features/auth/data/mattermost_auth_repository.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 
 void main() {
@@ -15,7 +17,7 @@ void main() {
         credentials: (serverUrl: serverUrl, token: 'secret'),
       );
       final _ClientFactory factory = _ClientFactory();
-      final PatAuthRepository repository = PatAuthRepository(
+      final MattermostAuthRepository repository = MattermostAuthRepository(
         credentialStore: store,
         clientFactory: factory,
       );
@@ -39,19 +41,19 @@ void main() {
   test('closes the previous transport after switching servers', () async {
     final _CredentialStore store = _CredentialStore();
     final _ClientFactory factory = _ClientFactory();
-    final PatAuthRepository repository = PatAuthRepository(
+    final MattermostAuthRepository repository = MattermostAuthRepository(
       credentialStore: store,
       clientFactory: factory,
     );
 
-    await repository.authenticateWithPersonalAccessToken(
+    await repository.authenticateWithSessionToken(
       serverUrl: Uri.parse('https://one.example.com'),
       token: 'one',
     );
     final _ApiClient first = factory.clients.single;
     expect(first.closed, isFalse);
 
-    await repository.authenticateWithPersonalAccessToken(
+    await repository.authenticateWithSessionToken(
       serverUrl: Uri.parse('https://two.example.com'),
       token: 'two',
     );
@@ -60,6 +62,70 @@ void main() {
     expect(first.closed, isTrue);
     expect(repository.api, same(factory.clients.last.api));
     expect(factory.clients.last.closed, isFalse);
+  });
+
+  test(
+    'clears expired credentials after a 401 and leaves no active client',
+    () async {
+      final _CredentialStore store = _CredentialStore(
+        credentials: (
+          serverUrl: Uri.parse('https://chat.example.com'),
+          token: 'x',
+        ),
+      );
+      final _ClientFactory factory = _ClientFactory(
+        api: _ThrowingAuthApi(statusCode: 401),
+      );
+      final MattermostAuthRepository repository = MattermostAuthRepository(
+        credentialStore: store,
+        clientFactory: factory,
+      );
+
+      await expectLater(
+        repository.restoreSession(),
+        throwsA(
+          isA<AuthFailure>().having(
+            (AuthFailure failure) => failure.kind,
+            'kind',
+            AuthFailureKind.sessionExpired,
+          ),
+        ),
+      );
+
+      expect(store.clearCount, 1);
+      expect(store.credentials, isNull);
+      expect(factory.clients.single.closed, isTrue);
+      expect(repository.api, isNull);
+    },
+  );
+
+  test('preserves credentials after a network error while restoring', () async {
+    final ({Uri serverUrl, String token}) credentials = (
+      serverUrl: Uri.parse('https://chat.example.com'),
+      token: 'x',
+    );
+    final _CredentialStore store = _CredentialStore(credentials: credentials);
+    final _ClientFactory factory = _ClientFactory(api: _ThrowingAuthApi());
+    final MattermostAuthRepository repository = MattermostAuthRepository(
+      credentialStore: store,
+      clientFactory: factory,
+    );
+
+    await expectLater(
+      repository.restoreSession(),
+      throwsA(
+        isA<AuthFailure>().having(
+          (AuthFailure failure) => failure.kind,
+          'kind',
+          AuthFailureKind.network,
+        ),
+      ),
+    );
+
+    expect(store.clearCount, 0);
+    expect(store.credentials, credentials);
+    expect(factory.clients.single.closed, isTrue);
+    expect(repository.api, isNull);
   });
 }
 
@@ -89,19 +155,24 @@ final class _CredentialStore implements CredentialStore {
 }
 
 final class _ClientFactory implements MattermostApiClientFactory {
+  _ClientFactory({MattermostApi? api}) : _api = api ?? _AuthApi();
+
   final List<_ApiClient> clients = <_ApiClient>[];
+  final MattermostApi _api;
 
   @override
   MattermostApiClient create({required Uri serverUrl, required String token}) {
-    final _ApiClient client = _ApiClient();
+    final _ApiClient client = _ApiClient(_api);
     clients.add(client);
     return client;
   }
 }
 
 final class _ApiClient implements MattermostApiClient {
+  _ApiClient(this.api);
+
   @override
-  final MattermostApi api = _AuthApi();
+  final MattermostApi api;
 
   bool closed = false;
 
@@ -131,6 +202,28 @@ final class _AuthApi implements MattermostApi {
   @override
   Future<MattermostUserDto> getCurrentUser() async =>
       const MattermostUserDto(id: 'user-1', username: 'ada');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _ThrowingAuthApi implements MattermostApi {
+  _ThrowingAuthApi({this.statusCode});
+
+  final int? statusCode;
+
+  @override
+  Future<MattermostUserDto> getCurrentUser() async {
+    throw DioException(
+      requestOptions: RequestOptions(path: '/users/me'),
+      response: statusCode == null
+          ? null
+          : Response<void>(
+              requestOptions: RequestOptions(path: '/users/me'),
+              statusCode: statusCode,
+            ),
+    );
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
