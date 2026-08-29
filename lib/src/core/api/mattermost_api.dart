@@ -43,6 +43,15 @@ abstract interface class MattermostApi {
   /// Returns the authenticated user's view of a custom emoji image.
   Future<MattermostImageDto> getCustomEmojiImage(String emojiId);
 
+  /// Returns an authenticated original file attachment.
+  Future<MattermostFileContentDto> getFile(String fileId);
+
+  /// Returns an authenticated, small image representation for a file.
+  Future<MattermostFileContentDto> getFileThumbnail(String fileId);
+
+  /// Returns an authenticated, screen-sized image representation for a file.
+  Future<MattermostFileContentDto> getFilePreview(String fileId);
+
   Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
     List<String> channelIds,
   );

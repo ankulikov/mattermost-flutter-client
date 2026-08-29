@@ -7,6 +7,9 @@ import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/database/database_provider.dart';
+import 'package:mattermost_flutter/src/features/attachments/data/api_attachment_repository.dart';
+import 'package:mattermost_flutter/src/features/attachments/data/system_attachment_file_saver.dart';
+import 'package:mattermost_flutter/src/features/attachments/domain/attachment_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/data/pat_auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/data/secure_credential_store.dart';
@@ -119,6 +122,35 @@ final Provider<UserAvatarRepository> userAvatarRepositoryProvider =
         cache: ref.watch(userAvatarCacheProvider),
       ),
     );
+
+final Provider<AttachmentFileSaver> attachmentFileSaverProvider =
+    Provider<AttachmentFileSaver>(
+      (Ref ref) => const SystemAttachmentFileSaver(),
+    );
+
+final Provider<AttachmentRepository> attachmentRepositoryProvider =
+    Provider<AttachmentRepository>(
+      (Ref ref) => ApiAttachmentRepository(
+        api: ref.watch(activeMattermostApiProvider),
+        fileSaver: ref.watch(attachmentFileSaverProvider),
+      ),
+    );
+
+typedef AttachmentContentRequest = ({String fileId, AttachmentVariant variant});
+
+final attachmentContentProvider = FutureProvider.autoDispose
+    .family<AttachmentContent, AttachmentContentRequest>((
+      Ref ref,
+      AttachmentContentRequest request,
+    ) {
+      final RequestCancellation cancellation = RequestCancellation();
+      ref.onDispose(cancellation.cancel);
+      return cancellation.run(
+        () => ref
+            .watch(attachmentRepositoryProvider)
+            .load(fileId: request.fileId, variant: request.variant),
+      );
+    });
 
 typedef UserAvatarRequest = ({String userId, int profileImageUpdatedAt});
 

@@ -128,6 +128,13 @@ final class MattermostImageDto {
   final String? contentType;
 }
 
+final class MattermostFileContentDto {
+  const MattermostFileContentDto({required this.bytes, this.contentType});
+
+  final Uint8List bytes;
+  final String? contentType;
+}
+
 final class UserNotifyPropsDto {
   const UserNotifyPropsDto({
     this.email = '',

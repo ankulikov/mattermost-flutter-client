@@ -139,6 +139,18 @@ final class _FakePostApi implements MattermostApi {
       throw UnimplementedError();
 
   @override
+  Future<MattermostFileContentDto> getFile(String fileId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MattermostFileContentDto> getFilePreview(String fileId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MattermostFileContentDto> getFileThumbnail(String fileId) =>
+      throw UnimplementedError();
+
+  @override
   Future<MattermostUserThreadsDto> getUserThreads({
     required String userId,
     required String teamId,

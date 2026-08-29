@@ -40,6 +40,31 @@ final class PostReaction {
       );
 }
 
+final class PostAttachment {
+  const PostAttachment({
+    required this.id,
+    required this.name,
+    required this.size,
+    required this.mimeType,
+    this.extension = '',
+    this.width = 0,
+    this.height = 0,
+    this.hasPreviewImage = false,
+  });
+
+  final String id;
+  final String name;
+  final int size;
+  final String mimeType;
+  final String extension;
+  final int width;
+  final int height;
+  final bool hasPreviewImage;
+
+  bool get isImage =>
+      mimeType.toLowerCase().startsWith('image/') || (width > 0 && height > 0);
+}
+
 /// Shared message entity used by channel, thread, and followed-thread slices.
 final class ChannelPost {
   const ChannelPost({
@@ -49,6 +74,7 @@ final class ChannelPost {
     required this.sentAt,
     required this.message,
     this.customEmojis = const <CustomEmojiReference>[],
+    this.attachments = const <PostAttachment>[],
     this.reactions = const <PostReaction>[],
     this.rootId = '',
     this.replyCount = 0,
@@ -62,6 +88,7 @@ final class ChannelPost {
   final DateTime sentAt;
   final String message;
   final List<CustomEmojiReference> customEmojis;
+  final List<PostAttachment> attachments;
   final List<PostReaction> reactions;
   final String rootId;
   final int replyCount;
@@ -80,6 +107,7 @@ final class ChannelPost {
     sentAt: sentAt,
     message: message,
     customEmojis: customEmojis,
+    attachments: attachments,
     reactions: reactions,
     rootId: rootId,
     replyCount: replyCount,
@@ -94,6 +122,7 @@ final class ChannelPost {
     sentAt: sentAt,
     message: message,
     customEmojis: customEmojis,
+    attachments: attachments,
     reactions: List<PostReaction>.unmodifiable(reactions),
     rootId: rootId,
     replyCount: replyCount,

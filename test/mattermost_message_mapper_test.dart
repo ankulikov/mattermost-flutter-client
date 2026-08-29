@@ -47,4 +47,70 @@ void main() {
     expect(mapped.customEmojis.single.id, 'emoji-1');
     expect(mapped.customEmojis.single.updatedAt, 42);
   });
+
+  test('carries active file metadata into the message snapshot', () {
+    const MattermostPostDto post = MattermostPostDto(
+      id: 'post-1',
+      userId: 'ada',
+      channelId: 'channel-1',
+      message: 'See attachment',
+      metadata: MattermostPostMetadataDto(
+        files: <MattermostFileInfoDto>[
+          MattermostFileInfoDto(
+            id: 'image-1',
+            userId: 'ada',
+            postId: 'post-1',
+            createAt: 1,
+            updateAt: 1,
+            deleteAt: 0,
+            name: 'photo.png',
+            extension: 'png',
+            size: 2048,
+            mimeType: 'image/png',
+            width: 800,
+            height: 600,
+            hasPreviewImage: true,
+            miniPreview: null,
+            content: '',
+            remoteId: '',
+            archived: false,
+          ),
+          MattermostFileInfoDto(
+            id: 'deleted-file',
+            userId: 'ada',
+            postId: 'post-1',
+            createAt: 1,
+            updateAt: 2,
+            deleteAt: 3,
+            name: 'old.txt',
+            extension: 'txt',
+            size: 10,
+            mimeType: 'text/plain',
+            width: 0,
+            height: 0,
+            hasPreviewImage: false,
+            miniPreview: null,
+            content: '',
+            remoteId: '',
+            archived: false,
+          ),
+        ],
+      ),
+    );
+
+    final ChannelPost mapped = const MattermostMessageMapper()
+        .map(
+          posts: const <MattermostPostDto>[post],
+          users: const <MattermostUserDto>[
+            MattermostUserDto(id: 'ada', username: 'ada'),
+          ],
+          currentUserId: 'ada',
+        )
+        .single;
+
+    expect(mapped.attachments, hasLength(1));
+    expect(mapped.attachments.single.name, 'photo.png');
+    expect(mapped.attachments.single.isImage, isTrue);
+    expect(mapped.attachments.single.size, 2048);
+  });
 }

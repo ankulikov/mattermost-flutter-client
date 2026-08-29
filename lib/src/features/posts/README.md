@@ -32,6 +32,13 @@ Post bodies use the shared `MattermostMarkdown` widget. Its documented syntax,
 Mattermost extensions, URL safety policy, and dependency rationale are recorded
 in [`docs/MARKDOWN.md`](../../../../docs/MARKDOWN.md).
 
+File metadata from `PostMetadata.files` is mapped into the shared message
+snapshot. A single image uses the authenticated preview endpoint; multiple
+files use attachment cards and image thumbnails. The full-screen viewer loads
+authenticated originals and pages only through images attached to that post.
+Non-image cards download the original through the attachment repository and a
+cross-platform system file saver; presentation never receives credentials.
+
 See the official [post endpoint specification](https://github.com/mattermost/mattermost/blob/master/api/v4/source/posts.yaml).
 
 Existing reaction buttons are optimistic toggles. They update the current

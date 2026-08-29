@@ -43,6 +43,26 @@ final class MattermostMessageMapper
                       )
                       .toList(growable: false)
                 : const <CustomEmojiReference>[],
+            attachments: post.deleteAt == 0
+                ? (post.metadata?.files ?? const <MattermostFileInfoDto>[])
+                      .where(
+                        (MattermostFileInfoDto file) =>
+                            file.id.isNotEmpty && file.deleteAt == 0,
+                      )
+                      .map(
+                        (MattermostFileInfoDto file) => PostAttachment(
+                          id: file.id,
+                          name: file.name,
+                          size: file.size,
+                          mimeType: file.mimeType,
+                          extension: file.extension,
+                          width: file.width,
+                          height: file.height,
+                          hasPreviewImage: file.hasPreviewImage,
+                        ),
+                      )
+                      .toList(growable: false)
+                : const <PostAttachment>[],
             rootId: post.rootId,
             replyCount: post.replyCount,
             isDeleted: post.deleteAt != 0,

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/app/di/app_providers.dart';
+import 'package:mattermost_flutter/src/features/attachments/presentation/message_attachments.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/messages/presentation/message_composer.dart';
@@ -357,6 +358,10 @@ class _ThreadPost extends StatelessWidget {
                 onSelectChannel: onSelectChannel,
                 deletedMessage: ThreadStrings.deletedMessage,
               ),
+              if (post.attachments.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 8),
+                MessageAttachments(attachments: post.attachments),
+              ],
               if (post.reactions.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 8),
                 MessageReactions(

@@ -147,6 +147,18 @@ final class CachedUserProfileApi implements MattermostApi {
       _delegate.getCustomEmojiImage(emojiId);
 
   @override
+  Future<MattermostFileContentDto> getFile(String fileId) =>
+      _delegate.getFile(fileId);
+
+  @override
+  Future<MattermostFileContentDto> getFileThumbnail(String fileId) =>
+      _delegate.getFileThumbnail(fileId);
+
+  @override
+  Future<MattermostFileContentDto> getFilePreview(String fileId) =>
+      _delegate.getFilePreview(fileId);
+
+  @override
   Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
     List<String> channelIds,
   ) => _delegate.getUsersForGroupChannels(channelIds);

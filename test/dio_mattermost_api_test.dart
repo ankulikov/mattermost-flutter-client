@@ -186,6 +186,30 @@ void main() {
     expect(image.contentType, 'image/gif');
   });
 
+  test('downloads authenticated file variants as bytes', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      bytes: Uint8List.fromList(<int>[7, 8, 9]),
+      contentType: 'image/png',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    final MattermostFileContentDto thumbnail = await api.getFileThumbnail(
+      'file+1',
+    );
+    expect(adapter.request?.path, '/files/file%2B1/thumbnail');
+    expect(adapter.request?.responseType, ResponseType.bytes);
+    expect(thumbnail.bytes, <int>[7, 8, 9]);
+
+    await api.getFilePreview('file+1');
+    expect(adapter.request?.path, '/files/file%2B1/preview');
+
+    final MattermostFileContentDto original = await api.getFile('file+1');
+    expect(adapter.request?.path, '/files/file%2B1');
+    expect(original.contentType, 'image/png');
+  });
+
   test('sends the complete cursor for upward thread pagination', () async {
     final _RecordingAdapter adapter = _RecordingAdapter();
     final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))

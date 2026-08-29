@@ -128,6 +128,36 @@ final class DioMattermostApi implements MattermostApi {
   }
 
   @override
+  Future<MattermostFileContentDto> getFile(String fileId) =>
+      _getFileContent('/files/${Uri.encodeComponent(fileId)}');
+
+  @override
+  Future<MattermostFileContentDto> getFileThumbnail(String fileId) =>
+      _getFileContent('/files/${Uri.encodeComponent(fileId)}/thumbnail');
+
+  @override
+  Future<MattermostFileContentDto> getFilePreview(String fileId) =>
+      _getFileContent('/files/${Uri.encodeComponent(fileId)}/preview');
+
+  Future<MattermostFileContentDto> _getFileContent(String path) async {
+    final Response<List<int>> response = await _withCancellation(
+      (CancelToken? cancelToken) => _dio.get<List<int>>(
+        path,
+        options: Options(responseType: ResponseType.bytes),
+        cancelToken: cancelToken,
+      ),
+    );
+    final List<int>? data = response.data;
+    if (data == null) {
+      throw const FormatException('Expected a binary file response');
+    }
+    return MattermostFileContentDto(
+      bytes: data is Uint8List ? data : Uint8List.fromList(data),
+      contentType: response.headers.value(Headers.contentTypeHeader),
+    );
+  }
+
+  @override
   Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
     List<String> channelIds,
   ) async {
