@@ -5,6 +5,10 @@ part 'app_database.g.dart';
 
 /// A tenant-scoped, expiring projection of the user fields needed to render
 /// names. Avatar bytes and avatar version metadata deliberately live elsewhere.
+@TableIndex.sql(
+  'CREATE INDEX cached_user_profiles_account_username_idx '
+  'ON cached_user_profiles (account_id, username COLLATE NOCASE)',
+)
 class CachedUserProfiles extends Table {
   TextColumn get accountId => text()();
 
@@ -40,7 +44,7 @@ final class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -67,6 +71,13 @@ final class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           cachedUserProfiles,
           cachedUserProfiles.profileImageUpdatedAt,
+        );
+      }
+      if (from < 10) {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS '
+          'cached_user_profiles_account_username_idx '
+          'ON cached_user_profiles (account_id, username COLLATE NOCASE)',
         );
       }
     },

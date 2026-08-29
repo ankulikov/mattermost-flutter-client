@@ -8,6 +8,12 @@ timestamp. Reads are DB-first; missing or expired IDs are fetched
 together with `POST /users/ids` and upserted with a seven-day TTL. Expired values
 are not served when refresh fails.
 
+Post mentions use the same account-scoped profile cache. Username lookup uses
+the `(account_id, username COLLATE NOCASE)` index. A fresh row is returned
+locally, a stale known row is refreshed by its user ID, and a username absent
+from the cache is resolved with one batched `POST /users/usernames` request.
+Unknown usernames and lookup failures remain unchanged in message text.
+
 This profile cache does not store avatar bytes. Its picture-update timestamp is
 passed to the avatar repository and participates in the versioned avatar key.
 

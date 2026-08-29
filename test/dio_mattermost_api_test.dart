@@ -9,6 +9,24 @@ import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 
 void main() {
+  test('loads users by exact usernames in one request', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '[{"id":"ada-id","username":"ada"}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    final List<MattermostUserDto> users = await api.getUsersByUsernames(
+      <String>['ada'],
+    );
+
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/users/usernames');
+    expect(adapter.request?.data, '["ada"]');
+    expect(users.single.id, 'ada-id');
+  });
+
   test('loads a fresh complete user profile by id', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:

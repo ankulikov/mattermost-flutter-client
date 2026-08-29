@@ -43,12 +43,15 @@ import 'package:mattermost_flutter/src/features/threads/domain/thread_repository
 import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
 import 'package:mattermost_flutter/src/features/users/data/api_user_avatar_repository.dart';
+import 'package:mattermost_flutter/src/features/users/data/api_user_mention_repository.dart';
 import 'package:mattermost_flutter/src/features/users/data/api_user_profile_repository.dart';
 import 'package:mattermost_flutter/src/features/users/data/cached_user_profile_api.dart';
 import 'package:mattermost_flutter/src/features/users/data/user_avatar_cache.dart';
 import 'package:mattermost_flutter/src/features/users/data/user_profile_cache.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_avatar_repository.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_mention.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_mention_repository.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_profile.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_profile_repository.dart';
 
@@ -202,6 +205,27 @@ final Provider<UserProfileRepository> userProfileRepositoryProvider =
       (Ref ref) =>
           ApiUserProfileRepository(api: ref.watch(activeMattermostApiProvider)),
     );
+
+final Provider<UserMentionRepository> userMentionRepositoryProvider =
+    Provider<UserMentionRepository>(
+      (Ref ref) =>
+          ApiUserMentionRepository(api: ref.watch(activeMattermostApiProvider)),
+    );
+
+final userMentionsProvider = FutureProvider.autoDispose
+    .family<List<UserMention>, String>((Ref ref, String lookupKey) {
+      final List<String> usernames = lookupKey.isEmpty
+          ? const <String>[]
+          : lookupKey.split(',');
+      if (usernames.isEmpty) return const <UserMention>[];
+      final RequestCancellation cancellation = RequestCancellation();
+      ref.onDispose(cancellation.cancel);
+      return cancellation.run(
+        () => ref
+            .watch(userMentionRepositoryProvider)
+            .resolveUsernames(usernames),
+      );
+    });
 
 final userProfileProvider = FutureProvider.autoDispose
     .family<UserProfile, String>((Ref ref, String userId) {

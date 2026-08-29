@@ -47,6 +47,8 @@ No WebSocket transport is involved in sending.
 Root and reply bodies use the same `MattermostMarkdown` widget as channel posts,
 so formatting and URL safety do not diverge between the channel and thread
 surfaces. See [`docs/MARKDOWN.md`](../../../../docs/MARKDOWN.md).
+The same cached username resolver turns existing user mentions into links to
+the shared profile card; unresolved names remain plain text.
 
 Root and reply reactions use the same optimistic toggle and custom emoji cache
 as channel posts. Failed reaction requests roll back only the affected reaction

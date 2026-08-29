@@ -88,6 +88,110 @@ final class CachedUserProfileApi implements MattermostApi {
         .toList(growable: false);
   }
 
+  @override
+  Future<List<MattermostUserDto>> getUsersByUsernames(
+    List<String> usernames,
+  ) async {
+    final List<String> requested = usernames
+        .where((String username) => username.isNotEmpty)
+        .map((String username) => username.toLowerCase())
+        .toSet()
+        .toList(growable: false);
+    if (requested.isEmpty) return const <MattermostUserDto>[];
+
+    final DateTime checkedAt = _now().toUtc();
+    final List<CachedUserProfile> cached = await _cache.getByUsernames(
+      accountId: _accountId,
+      usernames: requested,
+    );
+    final Map<String, MattermostUserDto> usersByUsername =
+        <String, MattermostUserDto>{
+          for (final CachedUserProfile profile in cached)
+            if (profile.expiresAt.toUtc().isAfter(checkedAt))
+              profile.username.toLowerCase(): _fromCache(profile),
+        };
+
+    final List<CachedUserProfile> stale = cached
+        .where(
+          (CachedUserProfile profile) =>
+              !profile.expiresAt.toUtc().isAfter(checkedAt),
+        )
+        .toList(growable: false);
+    final Set<String> staleIds = stale
+        .map((CachedUserProfile profile) => profile.userId)
+        .toSet();
+    final List<MattermostUserDto> refreshedResponse = stale.isEmpty
+        ? const <MattermostUserDto>[]
+        : await _delegate.getUsersByIds(staleIds.toList(growable: false));
+    final List<MattermostUserDto> refreshed = refreshedResponse
+        .where((MattermostUserDto user) => staleIds.contains(user.id))
+        .toList(growable: false);
+    usersByUsername.addEntries(
+      refreshed.map(
+        (MattermostUserDto user) => MapEntry<String, MattermostUserDto>(
+          user.username.toLowerCase(),
+          user,
+        ),
+      ),
+    );
+
+    final Set<String> knownCachedNames = cached
+        .map((CachedUserProfile profile) => profile.username.toLowerCase())
+        .toSet();
+    final List<String> missingNames = requested
+        .where((String username) => !knownCachedNames.contains(username))
+        .toList(growable: false);
+    final List<MattermostUserDto> loadedResponse = missingNames.isEmpty
+        ? const <MattermostUserDto>[]
+        : await _delegate.getUsersByUsernames(missingNames);
+    final Set<String> missingNameSet = missingNames.toSet();
+    final List<MattermostUserDto> loaded = loadedResponse
+        .where(
+          (MattermostUserDto user) =>
+              user.id.isNotEmpty &&
+              missingNameSet.contains(user.username.toLowerCase()),
+        )
+        .toList(growable: false);
+    usersByUsername.addEntries(
+      loaded.map(
+        (MattermostUserDto user) => MapEntry<String, MattermostUserDto>(
+          user.username.toLowerCase(),
+          user,
+        ),
+      ),
+    );
+
+    await _cacheUsers(<MattermostUserDto>[...refreshed, ...loaded]);
+    return requested
+        .map((String username) => usersByUsername[username])
+        .whereType<MattermostUserDto>()
+        .toList(growable: false);
+  }
+
+  Future<void> _cacheUsers(List<MattermostUserDto> users) async {
+    if (users.isEmpty) return;
+    final DateTime expiresAt = _now().toUtc().add(cacheLifetime);
+    await _cache.upsertAll(
+      accountId: _accountId,
+      profiles: users
+          .where((MattermostUserDto user) => user.id.isNotEmpty)
+          .map(
+            (MattermostUserDto user) => CachedUserProfile(
+              userId: user.id,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              username: user.username,
+              nickname: user.nickname,
+              position: user.position,
+              email: user.email,
+              profileImageUpdatedAt: user.profileImageUpdatedAt,
+              expiresAt: expiresAt,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
   static MattermostUserDto _fromCache(CachedUserProfile profile) =>
       MattermostUserDto(
         id: profile.userId,

@@ -23,6 +23,9 @@ abstract interface class MattermostApi {
 
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds);
 
+    /// Returns users matching the supplied exact usernames.
+  Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames);
+
   /// Returns a fresh user projection without the batch profile cache.
   Future<MattermostUserDto> getUserById(String userId);
 

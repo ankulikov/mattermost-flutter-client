@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
+import 'package:mattermost_flutter/src/features/users/domain/user_mention.dart';
 import 'package:mattermost_flutter/src/features/users/presentation/user_profile_card.dart';
 
 class MessageAvatar extends ConsumerWidget {
@@ -151,7 +152,7 @@ class MessageAuthorLine extends ConsumerWidget {
   }
 }
 
-class MessageBody extends StatelessWidget {
+class MessageBody extends ConsumerWidget {
   const MessageBody({
     required this.post,
     this.serverUrl,
@@ -166,7 +167,7 @@ class MessageBody extends StatelessWidget {
   final String? deletedMessage;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final TextStyle? bodyStyle = Theme.of(context).textTheme.bodyMedium;
     if (post.isDeleted && deletedMessage != null) {
       return Text(
@@ -179,12 +180,36 @@ class MessageBody extends StatelessWidget {
           for (final CustomEmojiReference emoji in post.customEmojis)
             emoji.name: emoji,
         };
+    final Map<String, UserMention> mentionsByUsername = ref
+        .watch(userMentionsProvider(userMentionLookupKey(post.message)))
+        .maybeWhen(
+          data: (List<UserMention> mentions) => <String, UserMention>{
+            for (final UserMention mention in mentions)
+              mention.username.toLowerCase(): mention,
+          },
+          orElse: () => const <String, UserMention>{},
+        );
+    final List<String> resolvedMentionNames = mentionsByUsername.keys.toList()
+      ..sort();
     return MattermostMarkdown(
       data: post.message,
       serverUrl: serverUrl,
       onTapChannel: onSelectChannel,
       textStyle: bodyStyle,
+      inlineParserKey: resolvedMentionNames.join(','),
       inlineReplacements: <MattermostInlineReplacement>[
+        MattermostInlineReplacement(
+          elementName: 'user-mention',
+          pattern: r'\B@([a-zA-Z0-9][a-zA-Z0-9._-]*)',
+          startCharacter: 0x40,
+          shouldReplace: (String username) =>
+              mentionsByUsername.containsKey(username.toLowerCase()),
+          builder: (BuildContext context, String username, TextStyle style) {
+            final UserMention mention =
+                mentionsByUsername[username.toLowerCase()]!;
+            return _UserMentionInline(mention: mention, textStyle: style);
+          },
+        ),
         MattermostInlineReplacement(
           elementName: 'custom-emoji',
           pattern: r':([a-z0-9_+-]+):',
@@ -198,6 +223,49 @@ class MessageBody extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class _UserMentionInline extends ConsumerStatefulWidget {
+  const _UserMentionInline({required this.mention, required this.textStyle});
+
+  final UserMention mention;
+  final TextStyle textStyle;
+
+  @override
+  ConsumerState<_UserMentionInline> createState() => _UserMentionInlineState();
+}
+
+class _UserMentionInlineState extends ConsumerState<_UserMentionInline> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle linkStyle = widget.textStyle.copyWith(
+      color: Theme.of(context).colorScheme.primary,
+      decoration: _hovered ? TextDecoration.underline : TextDecoration.none,
+      decorationColor: Theme.of(context).colorScheme.primary,
+    );
+    return Semantics(
+      button: true,
+      link: true,
+      label: '@${widget.mention.displayName}',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          key: ValueKey<String>('user-mention-${widget.mention.username}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => showUserProfileCard(
+            context,
+            userId: widget.mention.userId,
+            onMessage: (profile) => openDirectMessage(ref, profile),
+          ),
+          child: Text('@${widget.mention.displayName}', style: linkStyle),
+        ),
+      ),
     );
   }
 }

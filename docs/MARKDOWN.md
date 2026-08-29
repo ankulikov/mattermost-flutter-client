@@ -28,6 +28,7 @@ guide.
 | Fenced `latex` formulas | Yes | Custom block syntax plus `flutter_markdown_plus_latex` |
 | Unicode emoji and standard `:shortcode:` emoji | Yes | Unicode plus Dart Markdown `EmojiSyntax` |
 | Custom `:emoji_name:` emoji | Yes | Post metadata plus authenticated, account-scoped image cache |
+| User `@username` mentions | Yes | Batched, account-scoped profile cache lookup and profile-card link |
 
 The Mattermost documentation explicitly says that HTML line breaks in table
 cells are unsupported. `flutter_markdown_plus` does not render inline HTML,

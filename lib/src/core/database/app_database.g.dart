@@ -620,11 +620,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $CachedUserProfilesTable cachedUserProfiles =
       $CachedUserProfilesTable(this);
+  late final Index cachedUserProfilesAccountUsernameIdx = Index(
+    'cached_user_profiles_account_username_idx',
+    'CREATE INDEX cached_user_profiles_account_username_idx ON cached_user_profiles (account_id, username COLLATE NOCASE)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [cachedUserProfiles];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    cachedUserProfiles,
+    cachedUserProfilesAccountUsernameIdx,
+  ];
 }
 
 typedef $$CachedUserProfilesTableCreateCompanionBuilder =

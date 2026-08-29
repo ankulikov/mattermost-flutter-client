@@ -89,6 +89,10 @@ final class _FakePostApi implements MattermostApi {
   _FakePostApi({this.hasReplyOnlyLatest = false});
 
   @override
+  Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames) =>
+      throw UnimplementedError();
+
+  @override
   Future<void> saveReaction({
     required String userId,
     required String postId,

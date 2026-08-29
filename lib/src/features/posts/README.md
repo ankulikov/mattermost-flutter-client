@@ -31,6 +31,8 @@ WebSocket delivery is not required for the sender to see it.
 Post bodies use the shared `MattermostMarkdown` widget. Its documented syntax,
 Mattermost extensions, URL safety policy, and dependency rationale are recorded
 in [`docs/MARKDOWN.md`](../../../../docs/MARKDOWN.md).
+User mentions resolve through the account-scoped user profile cache and render
+as profile-card links only when the exact username belongs to a user.
 
 File metadata from `PostMetadata.files` is mapped into the shared message
 snapshot. A single image uses the authenticated preview endpoint; multiple

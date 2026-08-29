@@ -36,6 +36,11 @@ abstract interface class UserProfileCache {
     required List<String> userIds,
   });
 
+  Future<List<CachedUserProfile>> getByUsernames({
+    required String accountId,
+    required List<String> usernames,
+  });
+
   Future<void> upsertAll({
     required String accountId,
     required List<CachedUserProfile> profiles,
@@ -73,6 +78,26 @@ final class DriftUserProfileCache implements UserProfileCache {
               (db.$CachedUserProfilesTable table) =>
                   table.accountId.equals(accountId) &
                   table.userId.isIn(userIds),
+            ))
+            .get();
+    return rows.map(_fromRow).toList(growable: false);
+  }
+
+  @override
+  Future<List<CachedUserProfile>> getByUsernames({
+    required String accountId,
+    required List<String> usernames,
+  }) async {
+    if (usernames.isEmpty) return const <CachedUserProfile>[];
+    final List<String> normalized = usernames
+        .map((String username) => username.toLowerCase())
+        .toSet()
+        .toList(growable: false);
+    final List<db.CachedUserProfile> rows =
+        await (_database.select(_database.cachedUserProfiles)..where(
+              (db.$CachedUserProfilesTable table) =>
+                  table.accountId.equals(accountId) &
+                  table.username.collate(Collate.noCase).isIn(normalized),
             ))
             .get();
     return rows.map(_fromRow).toList(growable: false);

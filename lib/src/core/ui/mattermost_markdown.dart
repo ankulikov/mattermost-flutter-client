@@ -51,6 +51,7 @@ class MattermostMarkdown extends StatefulWidget {
     this.linkLauncher,
     this.textStyle,
     this.inlineReplacements = const <MattermostInlineReplacement>[],
+    this.inlineParserKey,
     super.key,
   });
 
@@ -60,6 +61,10 @@ class MattermostMarkdown extends StatefulWidget {
   final MattermostLinkLauncher? linkLauncher;
   final TextStyle? textStyle;
   final List<MattermostInlineReplacement> inlineReplacements;
+
+  /// Changes when asynchronous replacement eligibility changes while [data]
+  /// stays the same, forcing the Markdown AST to be parsed again.
+  final Object? inlineParserKey;
 
   @override
   State<MattermostMarkdown> createState() => _MattermostMarkdownState();
@@ -159,6 +164,7 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
 
     return SelectionArea(
       child: MarkdownBody(
+        key: ValueKey<Object?>(widget.inlineParserKey),
         data: _preparedData,
         softLineBreak: true,
         extensionSet: _extensionSet,

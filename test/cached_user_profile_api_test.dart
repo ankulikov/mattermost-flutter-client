@@ -213,6 +213,90 @@ void main() {
     expect(user.position, 'Fresh position');
     expect(user.email, 'fresh@example.com');
   });
+
+  test('resolves usernames from cache and refreshes known stale IDs', () async {
+    await cache.upsertAll(
+      accountId: 'server-a',
+      profiles: <CachedUserProfile>[
+        CachedUserProfile(
+          userId: 'fresh-id',
+          firstName: 'Fresh',
+          lastName: 'User',
+          username: 'Fresh.User',
+          expiresAt: now.add(const Duration(minutes: 1)),
+        ),
+        CachedUserProfile(
+          userId: 'stale-id',
+          firstName: 'Old',
+          lastName: 'Name',
+          username: 'stale',
+          expiresAt: now,
+        ),
+      ],
+    );
+    final _UsersApi api = _UsersApi(<String, MattermostUserDto>{
+      'stale-id': const MattermostUserDto(
+        id: 'stale-id',
+        username: 'stale',
+        firstName: 'New',
+        lastName: 'Name',
+      ),
+    });
+    final CachedUserProfileApi cachedApi = CachedUserProfileApi(
+      delegate: api,
+      cache: cache,
+      accountId: 'server-a',
+      now: () => now,
+    );
+
+    final List<MattermostUserDto> users = await cachedApi.getUsersByUsernames(
+      <String>['fresh.user', 'stale'],
+    );
+
+    expect(users.map((MattermostUserDto user) => user.firstName), <String>[
+      'Fresh',
+      'New',
+    ]);
+    expect(api.requests, <List<String>>[
+      <String>['stale-id'],
+    ]);
+    expect(api.usernameRequests, isEmpty);
+  });
+
+  test(
+    'loads uncached usernames and leaves missing users unresolved',
+    () async {
+      final _UsersApi api = _UsersApi(<String, MattermostUserDto>{
+        'ada-id': const MattermostUserDto(
+          id: 'ada-id',
+          username: 'ada',
+          firstName: 'Ada',
+        ),
+      });
+      final CachedUserProfileApi cachedApi = CachedUserProfileApi(
+        delegate: api,
+        cache: cache,
+        accountId: 'server-a',
+        now: () => now,
+      );
+
+      final List<MattermostUserDto> users = await cachedApi.getUsersByUsernames(
+        <String>['ada', 'does-not-exist'],
+      );
+
+      expect(users.map((MattermostUserDto user) => user.username), <String>[
+        'ada',
+      ]);
+      expect(api.usernameRequests.single, <String>['ada', 'does-not-exist']);
+      expect(
+        (await cache.getByUsernames(
+          accountId: 'server-a',
+          usernames: <String>['ADA'],
+        )).single.userId,
+        'ada-id',
+      );
+    },
+  );
 }
 
 final class _UsersApi implements MattermostApi {
@@ -221,6 +305,7 @@ final class _UsersApi implements MattermostApi {
   final Map<String, MattermostUserDto> users;
   final List<List<String>> requests = <List<String>>[];
   final List<String> singleRequests = <String>[];
+  final List<List<String>> usernameRequests = <List<String>>[];
   Object? error;
 
   @override
@@ -240,6 +325,23 @@ final class _UsersApi implements MattermostApi {
     final MattermostUserDto? user = users[userId];
     if (user == null) throw StateError('missing user');
     return user;
+  }
+
+  @override
+  Future<List<MattermostUserDto>> getUsersByUsernames(
+    List<String> usernames,
+  ) async {
+    usernameRequests.add(List<String>.of(usernames));
+    if (error case final Object error) throw error;
+    final Set<String> requested = usernames
+        .map((String username) => username.toLowerCase())
+        .toSet();
+    return users.values
+        .where(
+          (MattermostUserDto user) =>
+              requested.contains(user.username.toLowerCase()),
+        )
+        .toList(growable: false);
   }
 
   @override

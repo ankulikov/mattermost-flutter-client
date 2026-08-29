@@ -178,6 +178,10 @@ final class _ThreadApi implements MattermostApi {
   _ThreadApi({this.deletedOnly = false});
 
   @override
+  Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames) =>
+      throw UnimplementedError();
+
+  @override
   Future<void> saveReaction({
     required String userId,
     required String postId,

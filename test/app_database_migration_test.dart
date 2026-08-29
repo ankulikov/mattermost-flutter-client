@@ -111,4 +111,44 @@ void main() {
       }
     },
   );
+
+  test(
+    'adds the account-scoped username index when upgrading schema 9',
+    () async {
+      final Directory directory = await Directory.systemTemp.createTemp(
+        'mattermost-user-profile-index-',
+      );
+      final File file = File('${directory.path}/cache.sqlite');
+      final sqlite.Database legacy = sqlite.sqlite3.open(file.path);
+      legacy.execute('''
+      CREATE TABLE cached_user_profiles (
+        account_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        username TEXT NOT NULL,
+        nickname TEXT NOT NULL DEFAULT '',
+        position TEXT NOT NULL DEFAULT '',
+        email TEXT NOT NULL DEFAULT '',
+        profile_image_updated_at INTEGER NOT NULL DEFAULT 0,
+        expires_at INTEGER NOT NULL,
+        PRIMARY KEY (account_id, user_id)
+      )
+    ''');
+      legacy.execute('PRAGMA user_version = 9');
+      legacy.close();
+
+      final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+      try {
+        final List<String> indexes = await database
+            .customSelect("SELECT name FROM sqlite_master WHERE type = 'index'")
+            .map((row) => row.read<String>('name'))
+            .get();
+        expect(indexes, contains('cached_user_profiles_account_username_idx'));
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }

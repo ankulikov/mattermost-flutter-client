@@ -40,6 +40,10 @@ void main() {
 
 final class _FakeMattermostApi implements MattermostApi {
   @override
+  Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames) =>
+      throw UnimplementedError();
+
+  @override
   Future<void> saveReaction({
     required String userId,
     required String postId,
