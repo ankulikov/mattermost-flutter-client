@@ -38,6 +38,7 @@ when needed, must match the resolved `sqlite3` and `drift` package versions.
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Target layered architecture and migration plan](docs/TARGET_ARCHITECTURE.md)
 - [Agent and contributor rules](AGENTS.md)
 
 ## Useful commands
@@ -46,7 +47,8 @@ when needed, must match the resolved `sqlite3` and `drift` package versions.
 flutter run -d chrome
 flutter run -d macos
 flutter test
+dart run tool/check_import_boundaries.dart
 flutter analyze
-dart format --output=none --set-exit-if-changed lib test
+dart format --output=none --set-exit-if-changed lib test tool
 flutter pub run build_runner watch
 ```
