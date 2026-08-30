@@ -1,5 +1,5 @@
-import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_url.dart';
+import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
+import 'package:mattermost_flutter/src/domain/policies/sso_url.dart';
 
 /// Pure validation and URL rules for the SSO browser boundary.
 ///

@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/server_sso_discovery.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_browser_gateway.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/sso_login_dialog.dart';
 
@@ -20,10 +18,6 @@ void main() {
         ProviderScope(
           overrides: [
             authRepositoryProvider.overrideWithValue(_AuthRepository()),
-            serverSsoDiscoveryProvider.overrideWithValue(const _Discovery()),
-            ssoBrowserGatewayProvider.overrideWithValue(
-              const _BrowserGateway(),
-            ),
           ],
           child: const MaterialApp(
             home: MediaQuery(
@@ -55,11 +49,7 @@ void main() {
     final _AuthRepository repository = _AuthRepository();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(repository),
-          serverSsoDiscoveryProvider.overrideWithValue(const _Discovery()),
-          ssoBrowserGatewayProvider.overrideWithValue(const _BrowserGateway()),
-        ],
+        overrides: [authRepositoryProvider.overrideWithValue(repository)],
         child: const MaterialApp(home: SsoLoginDialog()),
       ),
     );
@@ -88,32 +78,6 @@ void main() {
   });
 }
 
-final class _Discovery implements ServerSsoDiscovery {
-  const _Discovery();
-
-  @override
-  Future<List<SsoOption>> discover(Uri serverUrl) async => const <SsoOption>[
-    SsoOption(provider: SsoProvider.saml, displayLabel: 'Company SAML'),
-    SsoOption(
-      provider: SsoProvider.openId,
-      displayLabel: 'OpenID for everyone',
-    ),
-  ];
-}
-
-final class _BrowserGateway implements SsoBrowserGateway {
-  const _BrowserGateway();
-
-  @override
-  Future<SsoBrowserResult> authenticate({
-    required Uri serverUrl,
-    required SsoProvider provider,
-  }) async => const SsoBrowserFailure(SsoBrowserFailureKind.cancelled);
-
-  @override
-  Future<void> cancel() async {}
-}
-
 final class _AuthRepository implements AuthRepository {
   String? token;
 
@@ -125,6 +89,25 @@ final class _AuthRepository implements AuthRepository {
     this.token = token;
     return AuthSession(serverUrl: serverUrl, userId: 'user-1', username: 'ada');
   }
+
+  @override
+  Future<AuthSession> authenticateWithSso({
+    required Uri serverUrl,
+    required SsoProvider provider,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> cancelSsoAuthentication() async {}
+
+  @override
+  Future<List<SsoOption>> discoverSsoOptions({required Uri serverUrl}) async =>
+      const <SsoOption>[
+        SsoOption(provider: SsoProvider.saml, displayLabel: 'Company SAML'),
+        SsoOption(
+          provider: SsoProvider.openId,
+          displayLabel: 'OpenID for everyone',
+        ),
+      ];
 
   @override
   Future<AuthSession?> restoreSession() async => null;

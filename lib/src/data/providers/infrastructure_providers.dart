@@ -4,12 +4,10 @@ import 'package:mattermost_flutter/src/data/cache/avatar_cache.dart';
 import 'package:mattermost_flutter/src/data/cache/custom_emoji_cache.dart';
 import 'package:mattermost_flutter/src/data/database/database_provider.dart';
 import 'package:mattermost_flutter/src/data/database/user_profile_cache_dao.dart';
-import 'package:mattermost_flutter/src/data/platform/in_app_webview_sso_browser_gateway.dart';
 import 'package:mattermost_flutter/src/data/platform/system_attachment_file_saver.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/data/storage/secure_credential_store.dart';
 import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_browser_gateway.dart';
 
 /// Process-wide infrastructure adapters. These providers do not expose UI
 /// state and are composed into repositories by [repository_providers.dart].
@@ -36,6 +34,3 @@ final Provider<AttachmentFileSaver> attachmentFileSaverProvider =
     Provider<AttachmentFileSaver>(
       (Ref ref) => const SystemAttachmentFileSaver(),
     );
-
-final Provider<SsoBrowserGateway> ssoBrowserGatewayProvider =
-    Provider<SsoBrowserGateway>((Ref ref) => InAppWebViewSsoBrowserGateway());

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
-import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.dart';
 import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
 import 'package:mattermost_flutter/src/domain/models/attachment.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
@@ -11,12 +10,12 @@ import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
+import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 
 export '../../data/providers/infrastructure_providers.dart';
 export '../../data/providers/repository_providers.dart';
@@ -24,11 +23,7 @@ export '../../data/providers/session_providers.dart';
 
 final NotifierProvider<AuthController, AuthState> authControllerProvider =
     NotifierProvider<AuthController, AuthState>(
-      () => AuthController(
-        authRepositoryProvider,
-        serverSsoDiscoveryProvider,
-        ssoBrowserGatewayProvider,
-      ),
+      () => AuthController(authRepositoryProvider),
     );
 
 /// UI projection for controller state. It contains only the domain session;

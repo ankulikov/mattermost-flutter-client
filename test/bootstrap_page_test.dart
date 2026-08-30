@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
 import 'package:mattermost_flutter/src/features/bootstrap/presentation/bootstrap_page.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
@@ -739,6 +740,19 @@ final class _SignedOutRepository implements AuthRepository {
   }) => throw UnimplementedError();
 
   @override
+  Future<AuthSession> authenticateWithSso({
+    required Uri serverUrl,
+    required SsoProvider provider,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> cancelSsoAuthentication() async {}
+
+  @override
+  Future<List<SsoOption>> discoverSsoOptions({required Uri serverUrl}) async =>
+      const <SsoOption>[];
+
+  @override
   Future<AuthSession?> restoreSession() async => null;
 
   @override
@@ -994,6 +1008,19 @@ final class _SignedInRepository implements AuthRepository {
     required Uri serverUrl,
     required String token,
   }) => throw UnimplementedError();
+
+  @override
+  Future<AuthSession> authenticateWithSso({
+    required Uri serverUrl,
+    required SsoProvider provider,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> cancelSsoAuthentication() async {}
+
+  @override
+  Future<List<SsoOption>> discoverSsoOptions({required Uri serverUrl}) async =>
+      const <SsoOption>[];
 
   @override
   Future<AuthSession?> restoreSession() async => AuthSession(

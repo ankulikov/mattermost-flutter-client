@@ -1,6 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/normalize_server_url.dart';
+import 'package:mattermost_flutter/src/domain/policies/normalize_server_url.dart';
 
 final class SecureCredentialStore implements CredentialStore {
   SecureCredentialStore({FlutterSecureStorage? storage})

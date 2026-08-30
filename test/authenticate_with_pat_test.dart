@@ -3,6 +3,7 @@ import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/authenticate_with_session_token.dart';
+import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
 
 void main() {
   test('normalizes input and delegates valid credentials', () async {
@@ -57,6 +58,19 @@ final class _FakeAuthRepository implements AuthRepository {
       username: 'user',
     );
   }
+
+  @override
+  Future<AuthSession> authenticateWithSso({
+    required Uri serverUrl,
+    required SsoProvider provider,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> cancelSsoAuthentication() async {}
+
+  @override
+  Future<List<SsoOption>> discoverSsoOptions({required Uri serverUrl}) async =>
+      const <SsoOption>[];
 
   @override
   Future<AuthSession?> restoreSession() async => null;

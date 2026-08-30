@@ -1,7 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/platform/in_app_webview_sso_browser_gateway.dart';
 import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.dart';
 import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
@@ -17,9 +20,6 @@ import 'package:mattermost_flutter/src/domain/repositories/user_avatar_repositor
 import 'package:mattermost_flutter/src/domain/repositories/user_mention_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_profile_repository.dart';
 import 'package:mattermost_flutter/src/features/attachments/data/api_attachment_repository.dart';
-import 'package:mattermost_flutter/src/features/auth/data/api_server_sso_discovery.dart';
-import 'package:mattermost_flutter/src/features/auth/data/mattermost_auth_repository.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/server_sso_discovery.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_direct_channel_repository.dart';
 import 'package:mattermost_flutter/src/features/emojis/data/api_custom_emoji_repository.dart';
@@ -39,6 +39,8 @@ final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
         credentialStore: ref.watch(credentialStoreProvider),
         activeAccount: ref.watch(activeAccountContextProvider),
         clientFactory: ref.watch(mattermostApiClientFactoryProvider),
+        serverSsoDiscovery: ApiServerSsoDiscovery(),
+        ssoBrowserGateway: InAppWebViewSsoBrowserGateway(),
       );
     });
 
@@ -46,9 +48,6 @@ final Provider<AuthRepository> authRepositoryProvider =
     Provider<AuthRepository>(
       (Ref ref) => ref.watch(mattermostAuthRepositoryProvider),
     );
-
-final Provider<ServerSsoDiscovery> serverSsoDiscoveryProvider =
-    Provider<ServerSsoDiscovery>((Ref ref) => ApiServerSsoDiscovery());
 
 final Provider<UserAvatarRepository> userAvatarRepositoryProvider =
     Provider<UserAvatarRepository>(

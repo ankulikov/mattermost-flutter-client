@@ -4,8 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:mattermost_flutter/src/data/logging/auth_diagnostics.dart';
 import 'package:mattermost_flutter/src/data/platform/sso_browser_policy.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_browser_gateway.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
+import 'package:mattermost_flutter/src/domain/models/sso_browser_result.dart';
+import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
+import 'package:mattermost_flutter/src/domain/services/sso_browser_gateway.dart';
 
 /// Builds settings that keep the WebView and the plugin Cookie Manager on the
 /// same native cookie store.
