@@ -32,9 +32,6 @@ final class ApiServerSsoDiscovery implements ServerSsoDiscovery {
             displayLabel: config.openIdButtonText,
           ),
       ];
-      if (options.isEmpty) {
-        throw const AuthFailure(AuthFailureKind.ssoUnavailable);
-      }
       return List<SsoOption>.unmodifiable(options);
     } on AuthFailure {
       rethrow;

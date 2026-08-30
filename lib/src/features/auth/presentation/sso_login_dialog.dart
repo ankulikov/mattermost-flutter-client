@@ -8,7 +8,7 @@ import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
 import 'package:mattermost_flutter/src/features/auth/presentation/auth_strings.dart';
 
-/// Adaptive entry point for Mattermost SAML and OpenID Connect login.
+/// Adaptive entry point for Mattermost SSO and token login.
 ///
 /// The browser surface itself is owned by [SsoBrowserGateway]. This widget only
 /// displays progress and invokes the presentation controller.
@@ -22,10 +22,12 @@ class SsoLoginDialog extends ConsumerStatefulWidget {
 class _SsoLoginDialogState extends ConsumerState<SsoLoginDialog> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _serverController = TextEditingController();
+  final TextEditingController _tokenController = TextEditingController();
 
   @override
   void dispose() {
     _serverController.dispose();
+    _tokenController.dispose();
     super.dispose();
   }
 
@@ -67,6 +69,17 @@ class _SsoLoginDialogState extends ConsumerState<SsoLoginDialog> {
                 onChangeServer: ref
                     .read(authControllerProvider.notifier)
                     .changeServer,
+                onTokenLogin: ref
+                    .read(authControllerProvider.notifier)
+                    .chooseTokenLogin,
+              ),
+              AuthPhase.enteringToken => _TokenForm(
+                controller: _tokenController,
+                failure: auth.failure,
+                onSubmit: _authenticateWithToken,
+                onBack: ref
+                    .read(authControllerProvider.notifier)
+                    .returnToMethodChooser,
               ),
               AuthPhase.authenticatingInBrowser ||
               AuthPhase.validatingToken => _BrowserProgress(
@@ -106,6 +119,14 @@ class _SsoLoginDialogState extends ConsumerState<SsoLoginDialog> {
   void _cancel() {
     ref.read(authControllerProvider.notifier).changeServer();
     Navigator.of(context).pop();
+  }
+
+  void _authenticateWithToken() {
+    final String token = _tokenController.text;
+    _tokenController.clear();
+    unawaited(
+      ref.read(authControllerProvider.notifier).authenticateWithToken(token),
+    );
   }
 }
 
@@ -200,11 +221,13 @@ class _SsoChooser extends StatelessWidget {
     required this.auth,
     required this.onAuthenticate,
     required this.onChangeServer,
+    required this.onTokenLogin,
   });
 
   final AuthState auth;
   final ValueChanged<SsoProvider> onAuthenticate;
   final VoidCallback onChangeServer;
+  final VoidCallback onTokenLogin;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -228,6 +251,14 @@ class _SsoChooser extends StatelessWidget {
         ),
         const SizedBox(height: 8),
       ],
+      Semantics(
+        button: true,
+        label: AuthStrings.loginWithToken,
+        child: OutlinedButton(
+          onPressed: onTokenLogin,
+          child: const Text(AuthStrings.loginWithToken),
+        ),
+      ),
       if (auth.failure != null) ...<Widget>[
         const SizedBox(height: 8),
         _FailureMessage(auth.failure!),
@@ -236,6 +267,65 @@ class _SsoChooser extends StatelessWidget {
       TextButton(
         onPressed: onChangeServer,
         child: const Text(AuthStrings.changeServer),
+      ),
+    ],
+  );
+}
+
+class _TokenForm extends StatelessWidget {
+  const _TokenForm({
+    required this.controller,
+    required this.failure,
+    required this.onSubmit,
+    required this.onBack,
+  });
+
+  final TextEditingController controller;
+  final AuthFailureKind? failure;
+  final VoidCallback onSubmit;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: <Widget>[
+      const Text(AuthStrings.tokenTitle, style: TextStyle(fontSize: 22)),
+      const SizedBox(height: 12),
+      const Text(AuthStrings.tokenDescription),
+      const SizedBox(height: 20),
+      TextField(
+        key: const ValueKey<String>('mattermost-access-token'),
+        controller: controller,
+        autofocus: true,
+        obscureText: true,
+        enableSuggestions: false,
+        autocorrect: false,
+        textInputAction: TextInputAction.done,
+        autofillHints: const <String>[AutofillHints.password],
+        decoration: const InputDecoration(
+          labelText: AuthStrings.tokenLabel,
+          hintText: AuthStrings.tokenHint,
+          border: OutlineInputBorder(),
+        ),
+        onSubmitted: (_) => onSubmit(),
+      ),
+      if (failure != null) ...<Widget>[
+        const SizedBox(height: 16),
+        _FailureMessage(failure!),
+      ],
+      const SizedBox(height: 24),
+      Wrap(
+        alignment: WrapAlignment.end,
+        spacing: 8,
+        runSpacing: 8,
+        children: <Widget>[
+          TextButton(onPressed: onBack, child: const Text(AuthStrings.back)),
+          FilledButton(
+            onPressed: onSubmit,
+            child: const Text(AuthStrings.signIn),
+          ),
+        ],
       ),
     ],
   );

@@ -48,7 +48,7 @@ void main() {
     ]);
   });
 
-  test('reports unavailable SSO when all methods are disabled', () async {
+  test('returns no SSO methods when all methods are disabled', () async {
     final _Client client = _Client.success(
       const MattermostClientConfigDto(
         enableSaml: false,
@@ -58,18 +58,11 @@ void main() {
       ),
     );
 
-    await expectLater(
-      ApiServerSsoDiscovery(
-        clientFactory: _Factory(client),
-      ).discover(Uri.parse('https://chat.example.com')),
-      throwsA(
-        isA<AuthFailure>().having(
-          (AuthFailure failure) => failure.kind,
-          'kind',
-          AuthFailureKind.ssoUnavailable,
-        ),
-      ),
-    );
+    final options = await ApiServerSsoDiscovery(
+      clientFactory: _Factory(client),
+    ).discover(Uri.parse('https://chat.example.com'));
+
+    expect(options, isEmpty);
     expect(client.closed, isTrue);
   });
 

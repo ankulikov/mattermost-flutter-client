@@ -74,6 +74,61 @@ void main() {
     },
   );
 
+  test(
+    'validates a user-entered token without retaining it in state',
+    () async {
+      final _RecordingAuthRepository repository = _RecordingAuthRepository();
+      final ProviderContainer container = _container(
+        repository: repository,
+        discovery: const _Discovery(),
+        browser: _BrowserGateway(
+          const SsoBrowserFailure(SsoBrowserFailureKind.cancelled),
+        ),
+      );
+      addTearDown(container.dispose);
+
+      final AuthController controller = container.read(
+        authControllerProvider.notifier,
+      );
+      await controller.discoverServer('https://chat.example.com');
+      controller.chooseTokenLogin();
+
+      expect(
+        container.read(authControllerProvider).phase,
+        AuthPhase.enteringToken,
+      );
+
+      await controller.authenticateWithToken('  personal-access-token  ');
+
+      final AuthState state = container.read(authControllerProvider);
+      expect(state.phase, AuthPhase.signedIn);
+      expect(repository.token, 'personal-access-token');
+      expect(state.toString(), isNot(contains('personal-access-token')));
+    },
+  );
+
+  test('offers token login when the server exposes no SSO methods', () async {
+    final _RecordingAuthRepository repository = _RecordingAuthRepository();
+    final ProviderContainer container = _container(
+      repository: repository,
+      discovery: const _EmptyDiscovery(),
+      browser: _BrowserGateway(
+        const SsoBrowserFailure(SsoBrowserFailureKind.cancelled),
+      ),
+    );
+    addTearDown(container.dispose);
+
+    final AuthController controller = container.read(
+      authControllerProvider.notifier,
+    );
+    await controller.discoverServer('https://chat.example.com');
+    controller.chooseTokenLogin();
+    await controller.authenticateWithToken('personal-access-token');
+
+    expect(container.read(authControllerProvider).phase, AuthPhase.signedIn);
+    expect(repository.token, 'personal-access-token');
+  });
+
   test('keeps an expired saved-session reason for the signed-out UI', () async {
     final ProviderContainer container = _container(
       repository: _RecordingAuthRepository(
@@ -128,6 +183,13 @@ final class _BrowserGateway implements SsoBrowserGateway {
 
   @override
   Future<void> cancel() async {}
+}
+
+final class _EmptyDiscovery implements ServerSsoDiscovery {
+  const _EmptyDiscovery();
+
+  @override
+  Future<List<SsoOption>> discover(Uri serverUrl) async => const <SsoOption>[];
 }
 
 final class _RecordingAuthRepository implements AuthRepository {

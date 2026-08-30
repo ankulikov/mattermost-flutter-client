@@ -14,6 +14,7 @@ enum AuthPhase {
   restoring,
   discoveringServer,
   choosingSso,
+  enteringToken,
   authenticatingInBrowser,
   validatingToken,
   signedIn,
@@ -35,7 +36,7 @@ final class AuthState {
   final AuthFailureKind? failure;
 }
 
-/// Coordinates SSO without allowing a secret to enter [AuthState].
+/// Coordinates authentication without allowing a secret to enter [AuthState].
 final class AuthController extends Notifier<AuthState> {
   AuthController(
     this._repositoryProvider,
@@ -114,6 +115,70 @@ final class AuthController extends Notifier<AuthState> {
   void changeServer() {
     _attemptId += 1;
     state = const AuthState();
+  }
+
+  void chooseTokenLogin() {
+    final Uri? serverUrl = state.serverUrl;
+    if (serverUrl == null) return;
+    _attemptId += 1;
+    state = AuthState(
+      phase: AuthPhase.enteringToken,
+      serverUrl: serverUrl,
+      ssoOptions: state.ssoOptions,
+    );
+  }
+
+  void returnToMethodChooser() {
+    final Uri? serverUrl = state.serverUrl;
+    if (serverUrl == null) return;
+    _attemptId += 1;
+    state = AuthState(
+      phase: AuthPhase.choosingSso,
+      serverUrl: serverUrl,
+      ssoOptions: state.ssoOptions,
+    );
+  }
+
+  Future<void> authenticateWithToken(String token) async {
+    final Uri? serverUrl = state.serverUrl;
+    final List<SsoOption> options = state.ssoOptions;
+    final String normalizedToken = token.trim();
+    if (serverUrl == null) return;
+    if (normalizedToken.isEmpty) {
+      state = AuthState(
+        phase: AuthPhase.enteringToken,
+        serverUrl: serverUrl,
+        ssoOptions: options,
+        failure: AuthFailureKind.tokenMissing,
+      );
+      return;
+    }
+
+    final int attemptId = ++_attemptId;
+    state = AuthState(
+      phase: AuthPhase.validatingToken,
+      serverUrl: serverUrl,
+      ssoOptions: options,
+    );
+    try {
+      final AuthSession session = await ref
+          .read(_repositoryProvider)
+          .authenticateWithSessionToken(
+            serverUrl: serverUrl,
+            token: normalizedToken,
+          );
+      if (!_isCurrent(attemptId)) return;
+      state = AuthState(phase: AuthPhase.signedIn, session: session);
+    } on AuthFailure catch (error) {
+      if (_isCurrent(attemptId)) {
+        state = AuthState(
+          phase: AuthPhase.enteringToken,
+          serverUrl: serverUrl,
+          ssoOptions: options,
+          failure: error.kind,
+        );
+      }
+    }
   }
 
   Future<void> authenticate(SsoProvider provider) async {

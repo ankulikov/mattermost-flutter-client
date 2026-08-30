@@ -1,10 +1,11 @@
 # Mattermost session authentication
 
 The authentication flow accepts a normalized Mattermost server URL and a
-transient Mattermost session token obtained through the SSO browser flow. The
-repository validates the token with `GET /api/v4/users/me` before persisting it.
-Credentials are stored only in platform secure storage; they are never written
-to the application database or kept in presentation state.
+transient Mattermost session token obtained through the SSO browser flow or a
+personal access token entered by the user. The repository validates every token
+with `GET /api/v4/users/me` before persisting it. Credentials are stored only in
+platform secure storage; they are never written to the application database or
+kept in Riverpod presentation state.
 
 `MattermostAuthRepository` is intentionally independent of the token source:
 SSO and any legacy migration use the same validate → save → activate sequence.

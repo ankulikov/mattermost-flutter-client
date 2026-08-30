@@ -6,6 +6,14 @@ abstract final class AuthStrings {
   static const String serverHint = 'https://mattermost.example.com';
   static const String continueLabel = 'Продолжить';
   static const String chooseMethod = 'Выберите способ входа';
+  static const String loginWithToken = 'Войти по токену';
+  static const String tokenTitle = 'Вход по токену';
+  static const String tokenDescription =
+      'Введите персональный токен доступа Mattermost.';
+  static const String tokenLabel = 'Токен доступа';
+  static const String tokenHint = 'Вставьте токен';
+  static const String signIn = 'Войти';
+  static const String back = 'Назад';
   static const String loadingMethods = 'Проверяем сервер и способы входа…';
   static const String openingBrowser = 'Открываем защищённое окно входа…';
   static const String validatingSession = 'Проверяем сессию…';
