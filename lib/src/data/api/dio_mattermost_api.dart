@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 
 final class DioMattermostApi implements MattermostApi {
   DioMattermostApi({required Dio dio}) : _dio = dio;

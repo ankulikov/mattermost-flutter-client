@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
-import 'package:mattermost_flutter/src/core/api/active_mattermost_api.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_client_factory.dart';
+import 'package:mattermost_flutter/src/data/session/active_account_context.dart';
+import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
@@ -12,19 +12,21 @@ import 'package:mattermost_flutter/src/features/auth/domain/normalize_server_url
 /// Owns the authenticated API transport for the single active Mattermost
 /// account. Both SSO and legacy PAT entry points use [authenticateWithSessionToken]
 /// so validation, storage and activation cannot drift apart.
-class MattermostAuthRepository implements AuthRepository, ActiveMattermostApi {
+class MattermostAuthRepository implements AuthRepository {
   MattermostAuthRepository({
     required CredentialStore credentialStore,
+    ActiveAccountContext? activeAccount,
     MattermostApiClientFactory clientFactory = const MattermostClientFactory(),
   }) : _credentialStore = credentialStore,
+       _activeAccount = activeAccount ?? ActiveAccountContext(),
        _clientFactory = clientFactory;
 
   final CredentialStore _credentialStore;
+  final ActiveAccountContext _activeAccount;
   final MattermostApiClientFactory _clientFactory;
-  MattermostApiClient? _activeClient;
 
-  @override
-  MattermostApi? get api => _activeClient?.api;
+  /// Compatibility projection; new consumers use [ActiveAccountContext].
+  MattermostApi? get api => _activeAccount.api;
 
   @override
   Future<AuthSession> authenticateWithSessionToken({
@@ -39,7 +41,7 @@ class MattermostAuthRepository implements AuthRepository, ActiveMattermostApi {
       validated.client.close();
       throw const AuthFailure(AuthFailureKind.storage);
     }
-    _activate(validated.client);
+    _activate(validated);
     return validated.session;
   }
 
@@ -67,7 +69,7 @@ class MattermostAuthRepository implements AuthRepository, ActiveMattermostApi {
     try {
       final ({MattermostApiClient client, AuthSession session}) validated =
           await _validate(serverUrl, credentials.token);
-      _activate(validated.client);
+      _activate(validated);
       return validated.session;
     } on AuthFailure catch (error) {
       if (error.kind != AuthFailureKind.invalidCredentials) rethrow;
@@ -134,17 +136,14 @@ class MattermostAuthRepository implements AuthRepository, ActiveMattermostApi {
     }
   }
 
-  void _activate(MattermostApiClient client) {
-    final MattermostApiClient? previous = _activeClient;
-    _activeClient = client;
-    previous?.close();
-  }
+  void _activate(
+    ({MattermostApiClient client, AuthSession session}) validated,
+  ) => _activeAccount.activate(
+    client: validated.client,
+    session: validated.session,
+  );
 
-  void _deactivate() {
-    final MattermostApiClient? client = _activeClient;
-    _activeClient = null;
-    client?.close();
-  }
+  void _deactivate() => _activeAccount.deactivate();
 
   void dispose() => _deactivate();
 }

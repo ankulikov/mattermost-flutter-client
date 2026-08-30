@@ -7,6 +7,7 @@ import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/database/database_provider.dart';
+import 'package:mattermost_flutter/src/data/session/active_account_context.dart';
 import 'package:mattermost_flutter/src/features/attachments/data/api_attachment_repository.dart';
 import 'package:mattermost_flutter/src/features/attachments/data/system_attachment_file_saver.dart';
 import 'package:mattermost_flutter/src/features/attachments/domain/attachment_repository.dart';
@@ -67,13 +68,20 @@ final Provider<MattermostApiClientFactory> mattermostApiClientFactoryProvider =
       (Ref ref) => const MattermostClientFactory(),
     );
 
+final Provider<ActiveAccountContext> activeAccountContextProvider =
+    Provider<ActiveAccountContext>((Ref ref) {
+      final ActiveAccountContext context = ActiveAccountContext();
+      ref.onDispose(context.dispose);
+      return context;
+    });
+
 final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
     Provider<MattermostAuthRepository>((Ref ref) {
       final MattermostAuthRepository repository = MattermostAuthRepository(
         credentialStore: ref.watch(credentialStoreProvider),
+        activeAccount: ref.watch(activeAccountContextProvider),
         clientFactory: ref.watch(mattermostApiClientFactoryProvider),
       );
-      ref.onDispose(repository.dispose);
       return repository;
     });
 
@@ -90,7 +98,7 @@ final Provider<SsoBrowserGateway> ssoBrowserGatewayProvider =
 
 final Provider<ActiveMattermostApi> activeMattermostApiSourceProvider =
     Provider<ActiveMattermostApi>(
-      (Ref ref) => ref.watch(mattermostAuthRepositoryProvider),
+      (Ref ref) => ref.watch(activeAccountContextProvider),
     );
 
 final NotifierProvider<AuthController, AuthState> authControllerProvider =
@@ -117,7 +125,11 @@ final Provider<UserProfileCache> userProfileCacheProvider =
 
 final Provider<MattermostApi> activeMattermostApiProvider =
     Provider<MattermostApi>((Ref ref) {
-      final AuthSession? session = ref.watch(authSessionProvider);
+      final AuthSession? session = ref.watch(
+        activeAccountContextProvider.select(
+          (ActiveAccountContext context) => context.session,
+        ),
+      );
       final MattermostApi? api = ref
           .watch(activeMattermostApiSourceProvider)
           .api;
