@@ -1,5 +1,1 @@
-import 'package:drift/drift.dart';
-
-QueryExecutor openDatabaseConnection() => throw UnsupportedError(
-  'No Drift database implementation for this platform',
-);
+export '../../data/database/open_database_stub.dart';
