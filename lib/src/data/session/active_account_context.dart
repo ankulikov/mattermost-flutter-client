@@ -7,8 +7,11 @@ import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 /// transport. UI observes [session] through providers but never constructs API
 /// clients or receives credentials.
 final class ActiveAccountContext implements ActiveMattermostApi {
+  ActiveAccountContext({void Function()? onChanged}) : _onChanged = onChanged;
+
   MattermostApiClient? _client;
   AuthSession? _session;
+  final void Function()? _onChanged;
 
   AuthSession? get session => _session;
 
@@ -23,6 +26,7 @@ final class ActiveAccountContext implements ActiveMattermostApi {
     _client = client;
     _session = session;
     previous?.close();
+    _onChanged?.call();
   }
 
   void deactivate() {
@@ -30,6 +34,7 @@ final class ActiveAccountContext implements ActiveMattermostApi {
     _client = null;
     _session = null;
     previous?.close();
+    _onChanged?.call();
   }
 
   void dispose() => deactivate();

@@ -5,6 +5,7 @@ import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/features/threads/data/api_thread_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
+import 'support/fake_user_repository.dart';
 
 void main() {
   test(
@@ -20,6 +21,7 @@ void main() {
       final ApiThreadRepository repository = ApiThreadRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
+        users: FakeUserRepository(),
         now: () => DateTime.fromMillisecondsSinceEpoch(9999),
       );
 
@@ -56,6 +58,7 @@ void main() {
     final ApiThreadRepository repository = ApiThreadRepository(
       api: api,
       messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
     );
 
     final MessageThread thread = await repository.load(
@@ -75,6 +78,7 @@ void main() {
     final ApiThreadRepository repository = ApiThreadRepository(
       api: api,
       messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
     );
     final AuthSession session = AuthSession(
       serverUrl: Uri.parse('https://chat.example.com'),
@@ -102,6 +106,7 @@ void main() {
       final ApiThreadRepository repository = ApiThreadRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
+        users: FakeUserRepository(),
       );
 
       final MessageThread thread = await repository.load(

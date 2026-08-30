@@ -5,6 +5,8 @@ import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.d
 import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_user_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
@@ -16,9 +18,7 @@ import 'package:mattermost_flutter/src/domain/repositories/message_sender.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/reaction_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
-import 'package:mattermost_flutter/src/domain/repositories/user_avatar_repository.dart';
-import 'package:mattermost_flutter/src/domain/repositories/user_mention_repository.dart';
-import 'package:mattermost_flutter/src/domain/repositories/user_profile_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 import 'package:mattermost_flutter/src/features/attachments/data/api_attachment_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_direct_channel_repository.dart';
@@ -29,9 +29,6 @@ import 'package:mattermost_flutter/src/features/messages/data/mattermost_message
 import 'package:mattermost_flutter/src/features/posts/data/api_channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/data/api_followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/data/api_thread_repository.dart';
-import 'package:mattermost_flutter/src/features/users/data/api_user_avatar_repository.dart';
-import 'package:mattermost_flutter/src/features/users/data/api_user_mention_repository.dart';
-import 'package:mattermost_flutter/src/features/users/data/api_user_profile_repository.dart';
 
 final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
     Provider<MattermostAuthRepository>((Ref ref) {
@@ -49,13 +46,21 @@ final Provider<AuthRepository> authRepositoryProvider =
       (Ref ref) => ref.watch(mattermostAuthRepositoryProvider),
     );
 
-final Provider<UserAvatarRepository> userAvatarRepositoryProvider =
-    Provider<UserAvatarRepository>(
-      (Ref ref) => ApiUserAvatarRepository(
+final Provider<UserRepository> userRepositoryProvider =
+    Provider<UserRepository>((Ref ref) {
+      final session = ref.watch(
+        activeAccountContextProvider.select((context) => context.session),
+      );
+      if (session == null) {
+        throw StateError('No active Mattermost account for user repository');
+      }
+      return MattermostUserRepository(
         api: ref.watch(activeMattermostApiProvider),
-        cache: ref.watch(userAvatarCacheProvider),
-      ),
-    );
+        cache: ref.watch(userProfileCacheProvider),
+        avatarCache: ref.watch(userAvatarCacheProvider),
+        accountScopeId: session.durableDataScopeId,
+      );
+    });
 
 final Provider<AttachmentRepository> attachmentRepositoryProvider =
     Provider<AttachmentRepository>(
@@ -73,18 +78,6 @@ final Provider<CustomEmojiRepository> customEmojiRepositoryProvider =
       ),
     );
 
-final Provider<UserProfileRepository> userProfileRepositoryProvider =
-    Provider<UserProfileRepository>(
-      (Ref ref) =>
-          ApiUserProfileRepository(api: ref.watch(activeMattermostApiProvider)),
-    );
-
-final Provider<UserMentionRepository> userMentionRepositoryProvider =
-    Provider<UserMentionRepository>(
-      (Ref ref) =>
-          ApiUserMentionRepository(api: ref.watch(activeMattermostApiProvider)),
-    );
-
 final Provider<DirectChannelRepository> directChannelRepositoryProvider =
     Provider<DirectChannelRepository>(
       (Ref ref) => ApiDirectChannelRepository(
@@ -92,9 +85,9 @@ final Provider<DirectChannelRepository> directChannelRepositoryProvider =
       ),
     );
 
-final Provider<MessageMapper<MattermostPostDto, MattermostUserDto>>
+final Provider<MessageMapper<MattermostPostDto, UserSummary>>
 mattermostMessageMapperProvider =
-    Provider<MessageMapper<MattermostPostDto, MattermostUserDto>>(
+    Provider<MessageMapper<MattermostPostDto, UserSummary>>(
       (Ref ref) => const MattermostMessageMapper(),
     );
 
@@ -115,6 +108,7 @@ final Provider<ChannelSidebarRepository> channelSidebarRepositoryProvider =
     Provider<ChannelSidebarRepository>(
       (Ref ref) => ApiChannelSidebarRepository(
         api: ref.watch(activeMattermostApiProvider),
+        users: ref.watch(userRepositoryProvider),
       ),
     );
 
@@ -123,6 +117,7 @@ final Provider<ChannelPostRepository> channelPostRepositoryProvider =
       (Ref ref) => ApiChannelPostRepository(
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
+        users: ref.watch(userRepositoryProvider),
       ),
     );
 
@@ -131,6 +126,7 @@ final Provider<ThreadRepository> threadRepositoryProvider =
       (Ref ref) => ApiThreadRepository(
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
+        users: ref.watch(userRepositoryProvider),
       ),
     );
 
@@ -139,5 +135,6 @@ final Provider<FollowedThreadsRepository> followedThreadsRepositoryProvider =
       (Ref ref) => ApiFollowedThreadsRepository(
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
+        users: ref.watch(userRepositoryProvider),
       ),
     );

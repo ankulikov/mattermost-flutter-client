@@ -1,10 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/data/api/active_mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.dart';
 import 'package:mattermost_flutter/src/data/session/active_account_context.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
-import 'package:mattermost_flutter/src/features/users/data/cached_user_profile_api.dart';
 
 /// Owns the current account transport for the lifetime of the provider scope.
 ///
@@ -12,7 +10,9 @@ import 'package:mattermost_flutter/src/features/users/data/cached_user_profile_a
 /// constructing, replacing, or closing the API client.
 final Provider<ActiveAccountContext> activeAccountContextProvider =
     Provider<ActiveAccountContext>((Ref ref) {
-      final ActiveAccountContext context = ActiveAccountContext();
+      final ActiveAccountContext context = ActiveAccountContext(
+        onChanged: () => ref.invalidate(activeMattermostApiProvider),
+      );
       ref.onDispose(context.dispose);
       return context;
     });
@@ -22,11 +22,7 @@ final Provider<ActiveMattermostApi> activeMattermostApiSourceProvider =
       (Ref ref) => ref.watch(activeAccountContextProvider),
     );
 
-/// Transitional authenticated API projection.
-///
-/// User-profile caching still decorates the API until the UserRepository
-/// migration removes [CachedUserProfileApi] in the following architecture
-/// stage. Its session dependency is the data-owned account context, never UI.
+/// Authenticated raw transport. Cache and entity policy belong to repositories.
 final Provider<MattermostApi> activeMattermostApiProvider =
     Provider<MattermostApi>((Ref ref) {
       final AuthSession? session = ref.watch(
@@ -40,9 +36,5 @@ final Provider<MattermostApi> activeMattermostApiProvider =
       if (session == null || api == null) {
         throw StateError('No API client for the active Mattermost account');
       }
-      return CachedUserProfileApi(
-        delegate: api,
-        cache: ref.watch(userProfileCacheProvider),
-        accountId: session.durableDataScopeId,
-      );
+      return api;
     });

@@ -5,6 +5,7 @@ import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/features/threads/data/api_followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
+import 'support/fake_user_repository.dart';
 
 void main() {
   test(
@@ -12,10 +13,12 @@ void main() {
     () async {
       final Uri serverUrl = Uri.parse('https://chat.example.com');
       final _ThreadsApi api = _ThreadsApi();
+      final FakeUserRepository users = FakeUserRepository();
       final ApiFollowedThreadsRepository repository =
           ApiFollowedThreadsRepository(
             api: api,
             messageMapper: const MattermostMessageMapper(),
+            users: users,
           );
 
       final FollowedThreadsPage page = await repository.loadPage(
@@ -32,7 +35,7 @@ void main() {
       expect(api.perPage, 60);
       expect(api.before, 'older-root');
       expect(api.extended, isTrue);
-      expect(api.userIdBatches, <List<String>>[
+      expect(users.requestedIdBatches, <List<String>>[
         <String>['missing-author'],
       ]);
       expect(page.total, 2);

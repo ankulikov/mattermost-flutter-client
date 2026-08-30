@@ -1,7 +1,9 @@
 enum UserPresence { online, away, doNotDisturb, offline }
 
-final class UserProfile {
-  const UserProfile({
+/// A user projection suitable for author, participant, mention, and dialog
+/// enrichment. It deliberately has no transport or cache representation.
+class UserSummary {
+  const UserSummary({
     required this.id,
     required this.firstName,
     required this.lastName,
@@ -9,7 +11,6 @@ final class UserProfile {
     required this.nickname,
     required this.position,
     required this.email,
-    required this.presence,
     this.profileImageUpdatedAt = 0,
   });
 
@@ -20,7 +21,6 @@ final class UserProfile {
   final String nickname;
   final String position;
   final String email;
-  final UserPresence presence;
   final int profileImageUpdatedAt;
 
   String get fullName {
@@ -39,4 +39,21 @@ final class UserProfile {
         : nickname.trim();
     return value.isEmpty ? id : value;
   }
+}
+
+/// A cache-bypassing profile-card projection with current presence.
+final class UserProfile extends UserSummary {
+  const UserProfile({
+    required super.id,
+    required super.firstName,
+    required super.lastName,
+    required super.username,
+    required super.nickname,
+    required super.position,
+    required super.email,
+    required this.presence,
+    super.profileImageUpdatedAt = 0,
+  });
+
+  final UserPresence presence;
 }

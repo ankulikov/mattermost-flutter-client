@@ -1,6 +1,8 @@
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
+import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
@@ -9,14 +11,17 @@ import 'package:mattermost_flutter/src/features/posts/domain/channel_post_reposi
 final class ApiChannelPostRepository implements ChannelPostRepository {
   const ApiChannelPostRepository({
     required MattermostApi api,
-    required MessageMapper<MattermostPostDto, MattermostUserDto> messageMapper,
+    required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
+    required UserRepository users,
   }) : _api = api,
-       _messageMapper = messageMapper;
+       _messageMapper = messageMapper,
+       _users = users;
 
   static const int pageSize = 60;
 
   final MattermostApi _api;
-  final MessageMapper<MattermostPostDto, MattermostUserDto> _messageMapper;
+  final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
+  final UserRepository _users;
 
   @override
   Future<ChannelPostPage> loadLatest({
@@ -27,7 +32,7 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
       channelId: channelId,
       perPage: pageSize,
     );
-    return _mapPage(api: _api, session: session, response: response);
+    return _mapPage(session: session, response: response);
   }
 
   @override
@@ -41,11 +46,10 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
       postId: beforePostId,
       perPage: pageSize,
     );
-    return _mapPage(api: _api, session: session, response: response);
+    return _mapPage(session: session, response: response);
   }
 
   Future<ChannelPostPage> _mapPage({
-    required MattermostApi api,
     required AuthSession session,
     required MattermostPostListDto response,
   }) async {
@@ -57,9 +61,9 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
         .map((MattermostPostDto post) => post.userId)
         .where((String id) => id.isNotEmpty)
         .toSet();
-    final List<MattermostUserDto> users = userIds.isEmpty
-        ? const <MattermostUserDto>[]
-        : await api.getUsersByIds(userIds.toList(growable: false));
+    final List<UserSummary> users = userIds.isEmpty
+        ? const <UserSummary>[]
+        : await _users.getUsers(userIds.toList(growable: false));
     final List<ChannelPost> mappedPosts = _messageMapper.map(
       posts: orderedPosts,
       users: users,

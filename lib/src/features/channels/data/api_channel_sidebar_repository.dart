@@ -1,14 +1,22 @@
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
+import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/channels/data/channel_sidebar_mapper.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
 
 final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
-  const ApiChannelSidebarRepository({required MattermostApi api}) : _api = api;
+  const ApiChannelSidebarRepository({
+    required MattermostApi api,
+    required UserRepository users,
+  }) : _api = api,
+       _users = users;
 
   final MattermostApi _api;
+  final UserRepository _users;
 
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async {
@@ -28,6 +36,7 @@ final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
     try {
       channels = await _resolveDialogNames(
         api: _api,
+        users: _users,
         currentUserId: session.userId,
         channels: channels,
       );
@@ -47,6 +56,7 @@ final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
 
   Future<List<SidebarChannel>> _resolveDialogNames({
     required MattermostApi api,
+    required UserRepository users,
     required String currentUserId,
     required List<SidebarChannel> channels,
   }) async {
@@ -60,7 +70,7 @@ final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
         .expand((SidebarChannel item) => item.name.split('__'))
         .where((String id) => id.isNotEmpty && id != currentUserId)
         .toSet();
-    final Future<List<MattermostUserDto>> directUsersFuture = api.getUsersByIds(
+    final Future<List<UserSummary>> directUsersFuture = users.getUsers(
       directUserIds.toList(growable: false),
     );
     final Future<MattermostGroupChannelUsersDto> groupUsersFuture = api
@@ -69,11 +79,11 @@ final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
               .map((SidebarChannel item) => item.id)
               .toList(growable: false),
         );
-    final List<MattermostUserDto> directUsers = await directUsersFuture;
+    final List<UserSummary> directUsers = await directUsersFuture;
     final MattermostGroupChannelUsersDto groupUsers = await groupUsersFuture;
     final Map<String, String> directNames = <String, String>{
-      for (final MattermostUserDto user in directUsers)
-        if (user.id.isNotEmpty) user.id: userDisplayName(user),
+      for (final UserSummary user in directUsers)
+        if (user.id.isNotEmpty) user.id: _userDisplayName(user),
     };
 
     return channels
@@ -87,12 +97,13 @@ final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
             return name == null ? channel : channel.withDisplayName(name);
           }
           if (channel.kind == ChannelKind.groupMessage) {
-            final List<MattermostUserDto> users =
+            final List<MattermostUserDto> rawGroupUsers =
                 groupUsers.usersByChannelId[channel.id] ??
                 const <MattermostUserDto>[];
-            final String name = users
-                .where((MattermostUserDto user) => user.id != currentUserId)
-                .map(userDisplayName)
+            final String name = rawGroupUsers
+                .map(mapUserSummary)
+                .where((UserSummary user) => user.id != currentUserId)
+                .map(_userDisplayName)
                 .join(', ');
             return name.isEmpty ? channel : channel.withDisplayName(name);
           }
@@ -101,3 +112,5 @@ final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
         .toList(growable: false);
   }
 }
+
+String _userDisplayName(UserSummary user) => user.fullName;

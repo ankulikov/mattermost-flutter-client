@@ -5,6 +5,7 @@ import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/features/posts/data/api_channel_post_repository.dart';
 import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
+import 'support/fake_user_repository.dart';
 
 void main() {
   test(
@@ -20,6 +21,7 @@ void main() {
       final ApiChannelPostRepository repository = ApiChannelPostRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
+        users: FakeUserRepository(),
       );
 
       final ChannelPostPage latest = await repository.loadLatest(
@@ -67,6 +69,7 @@ void main() {
       final ApiChannelPostRepository repository = ApiChannelPostRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
+        users: FakeUserRepository(),
       );
 
       final ChannelPostPage latest = await repository.loadLatest(

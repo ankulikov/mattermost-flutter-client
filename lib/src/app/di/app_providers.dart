@@ -59,9 +59,8 @@ final userAvatarProvider = FutureProvider.autoDispose
       final AuthSession? session = ref.watch(authSessionProvider);
       if (session == null || input.userId.isEmpty) return null;
       return ref
-          .watch(userAvatarRepositoryProvider)
-          .getAvatar(
-            accountId: session.accountId,
+          .watch(userRepositoryProvider)
+          .loadAvatar(
             userId: input.userId,
             profileImageUpdatedAt: input.profileImageUpdatedAt,
           );
@@ -95,9 +94,12 @@ final userMentionsProvider = FutureProvider.autoDispose
       final RequestCancellation cancellation = RequestCancellation();
       ref.onDispose(cancellation.cancel);
       return cancellation.run(
-        () => ref
-            .watch(userMentionRepositoryProvider)
-            .resolveUsernames(usernames),
+        () async =>
+            (await ref
+                    .watch(userRepositoryProvider)
+                    .resolveUsersByUsernames(usernames))
+                .map(userMentionFromSummary)
+                .toList(growable: false),
       );
     });
 
@@ -106,7 +108,7 @@ final userProfileProvider = FutureProvider.autoDispose
       final RequestCancellation cancellation = RequestCancellation();
       ref.onDispose(cancellation.cancel);
       return cancellation.run(
-        () => ref.watch(userProfileRepositoryProvider).getById(userId),
+        () => ref.watch(userRepositoryProvider).getProfile(userId),
       );
     });
 

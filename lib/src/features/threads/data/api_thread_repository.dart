@@ -1,5 +1,7 @@
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
+import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
@@ -9,16 +11,19 @@ import 'package:mattermost_flutter/src/features/threads/domain/thread_repository
 final class ApiThreadRepository implements ThreadRepository {
   ApiThreadRepository({
     required MattermostApi api,
-    required MessageMapper<MattermostPostDto, MattermostUserDto> messageMapper,
+    required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
+    required UserRepository users,
     DateTime Function()? now,
   }) : _api = api,
        _messageMapper = messageMapper,
+       _users = users,
        _now = now ?? DateTime.now;
 
   static const int pageSize = 60;
 
   final MattermostApi _api;
-  final MessageMapper<MattermostPostDto, MattermostUserDto> _messageMapper;
+  final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
+  final UserRepository _users;
   final DateTime Function() _now;
 
   @override
@@ -62,9 +67,9 @@ final class ApiThreadRepository implements ThreadRepository {
         .map((MattermostPostDto post) => post.userId)
         .where((String id) => id.isNotEmpty)
         .toSet();
-    final List<MattermostUserDto> users = userIds.isEmpty
-        ? const <MattermostUserDto>[]
-        : await _api.getUsersByIds(userIds.toList(growable: false));
+    final List<UserSummary> users = userIds.isEmpty
+        ? const <UserSummary>[]
+        : await _users.getUsers(userIds.toList(growable: false));
     final List<ChannelPost> mapped = _messageMapper.map(
       posts: posts.values,
       users: users,

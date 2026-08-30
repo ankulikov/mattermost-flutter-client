@@ -4,6 +4,7 @@ import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
+import 'support/fake_user_repository.dart';
 
 void main() {
   test(
@@ -12,7 +13,7 @@ void main() {
       final Uri serverUrl = Uri.parse('https://chat.example.com');
       final _FakeMattermostApi api = _FakeMattermostApi();
       final ApiChannelSidebarRepository repository =
-          ApiChannelSidebarRepository(api: api);
+          ApiChannelSidebarRepository(api: api, users: FakeUserRepository());
       final AuthSession session = AuthSession(
         serverUrl: serverUrl,
         userId: 'me',

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
 
@@ -35,8 +36,16 @@ void main() {
     final ChannelPost mapped = const MattermostMessageMapper()
         .map(
           posts: const <MattermostPostDto>[post],
-          users: const <MattermostUserDto>[
-            MattermostUserDto(id: 'ada', username: 'ada'),
+          users: const <UserSummary>[
+            UserSummary(
+              id: 'ada',
+              username: 'ada',
+              firstName: '',
+              lastName: '',
+              nickname: '',
+              position: '',
+              email: '',
+            ),
           ],
           currentUserId: 'ada',
         )
@@ -101,8 +110,16 @@ void main() {
     final ChannelPost mapped = const MattermostMessageMapper()
         .map(
           posts: const <MattermostPostDto>[post],
-          users: const <MattermostUserDto>[
-            MattermostUserDto(id: 'ada', username: 'ada'),
+          users: const <UserSummary>[
+            UserSummary(
+              id: 'ada',
+              username: 'ada',
+              firstName: '',
+              lastName: '',
+              nickname: '',
+              position: '',
+              email: '',
+            ),
           ],
           currentUserId: 'ada',
         )
