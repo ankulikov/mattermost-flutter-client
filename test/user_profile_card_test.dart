@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
 import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
@@ -11,6 +12,8 @@ import 'package:mattermost_flutter/src/features/users/domain/user_profile.dart';
 import 'package:mattermost_flutter/src/features/users/presentation/user_profile_card.dart';
 
 void main() {
+  setUpAll(() async => initializeDateFormatting('ru'));
+
   const UserProfile profile = UserProfile(
     id: 'ada',
     firstName: 'Ada',
@@ -69,7 +72,7 @@ void main() {
     },
   );
 
-  testWidgets('opens the card from both the avatar and author name', (
+  testWidgets('opens the card from the avatar only', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -112,7 +115,28 @@ void main() {
 
     await tester.tap(find.text('Ada Lovelace').last);
     await tester.pumpAndSettle();
-    expect(find.byType(UserProfileCard), findsOneWidget);
+    expect(find.byType(UserProfileCard), findsNothing);
+  });
+
+  test('formats post times in 24-hour format with dates for earlier days', () {
+    final DateTime now = DateTime(2026, 8, 31, 12);
+
+    expect(
+      formatMessageTimestamp(
+        sentAt: DateTime(2026, 8, 31, 10, 20),
+        locale: 'ru',
+        now: now,
+      ),
+      '10:20',
+    );
+    expect(
+      formatMessageTimestamp(
+        sentAt: DateTime(2026, 8, 30, 10, 20),
+        locale: 'ru',
+        now: now,
+      ),
+      '30 авг 10:20',
+    );
   });
 
   testWidgets('shows loading and an explicit retry state', (

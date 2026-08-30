@@ -17,7 +17,7 @@ Unknown usernames and lookup failures remain unchanged in message text.
 This profile cache does not store avatar bytes. Its picture-update timestamp is
 passed to the avatar repository and participates in the versioned avatar key.
 
-Clicking a message author name or avatar opens an auto-disposed profile card.
+Clicking a message author avatar opens an auto-disposed profile card.
 The card combines a fresh, cache-bypassing `GET /users/{user_id}` lookup with a
 live `GET /users/{user_id}/status` request and exposes explicit loading, retry,
 and direct-message action states. The batch cache remains an optimization for

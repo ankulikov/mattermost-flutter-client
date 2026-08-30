@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:mattermost_flutter/src/app/di/app_providers.dart';
 import 'package:mattermost_flutter/src/core/ui/avatar_initials.dart';
@@ -97,7 +98,7 @@ class MessageAvatar extends ConsumerWidget {
   }
 }
 
-class MessageAuthorLine extends ConsumerWidget {
+class MessageAuthorLine extends StatelessWidget {
   const MessageAuthorLine({
     required this.author,
     required this.sentAt,
@@ -108,41 +109,27 @@ class MessageAuthorLine extends ConsumerWidget {
   final DateTime sentAt;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final String time = MaterialLocalizations.of(
-      context,
-    ).formatTimeOfDay(TimeOfDay.fromDateTime(sentAt));
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 8,
-      runSpacing: 2,
+    final String timestamp = formatMessageTimestamp(
+      sentAt: sentAt,
+      locale: Localizations.localeOf(context).toLanguageTag(),
+    );
+    return Row(
       children: <Widget>[
-        Semantics(
-          button: true,
-          child: InkWell(
-            onTap: () => showUserProfileCard(
-              context,
-              userId: author.id,
-              onMessage: (profile) => openDirectMessage(ref, profile),
-            ),
-            borderRadius: BorderRadius.circular(4),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 44),
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: Text(
-                  author.displayName,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+        Flexible(
+          child: Text(
+            author.displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
+        const SizedBox(width: 8),
         Text(
-          time,
+          timestamp,
           style: theme.textTheme.labelMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -150,6 +137,28 @@ class MessageAuthorLine extends ConsumerWidget {
       ],
     );
   }
+}
+
+String formatMessageTimestamp({
+  required DateTime sentAt,
+  required String locale,
+  DateTime? now,
+}) {
+  final DateTime localSentAt = sentAt.toLocal();
+  final DateTime localNow = (now ?? DateTime.now()).toLocal();
+  final String time = DateFormat.Hm(locale).format(localSentAt);
+  if (_isSameDay(localSentAt, localNow)) return time;
+
+  final String month = DateFormat.MMM(
+    locale,
+  ).format(localSentAt).replaceFirst(RegExp(r'\.$'), '');
+  return '${localSentAt.day} $month $time';
+}
+
+bool _isSameDay(DateTime first, DateTime second) {
+  return first.year == second.year &&
+      first.month == second.month &&
+      first.day == second.day;
 }
 
 class MessageBody extends ConsumerWidget {
