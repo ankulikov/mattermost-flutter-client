@@ -1,9 +1,1 @@
-import 'dart:typed_data';
-
-/// Decoded-independent profile image payload owned by the users feature.
-final class UserAvatar {
-  const UserAvatar({required this.bytes, this.contentType});
-
-  final Uint8List bytes;
-  final String? contentType;
-}
+export 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
