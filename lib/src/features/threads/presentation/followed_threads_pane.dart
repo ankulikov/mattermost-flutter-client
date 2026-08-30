@@ -92,6 +92,7 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
           serverUrl: serverUrl,
           teamId: widget.team.id,
           unreadReplies: selected.unreadReplies,
+          positionAtEndWhenRead: true,
           onSelectChannel: widget.onSelectChannel,
           onThreadRead: (DateTime timestamp) => ref
               .read(followedThreadsProvider(widget.team.id).notifier)

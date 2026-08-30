@@ -20,6 +20,7 @@ class ThreadPane extends ConsumerStatefulWidget {
     this.serverUrl,
     this.teamId,
     this.unreadReplies = 0,
+    this.positionAtEndWhenRead = false,
     this.onSelectChannel,
     this.onReplySent,
     this.onThreadRead,
@@ -32,6 +33,7 @@ class ThreadPane extends ConsumerStatefulWidget {
   final Uri? serverUrl;
   final String? teamId;
   final int unreadReplies;
+  final bool positionAtEndWhenRead;
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<ChannelPost>? onReplySent;
   final ValueChanged<DateTime>? onThreadRead;
@@ -207,7 +209,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
         if (widget.teamId != null) unawaited(_markRead(state));
         return;
       }
-      if (_scrollController.hasClients) {
+      if (widget.positionAtEndWhenRead && _scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
     });

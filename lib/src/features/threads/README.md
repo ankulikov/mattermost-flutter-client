@@ -33,7 +33,9 @@ divider into view after the complete thread's first frame. Only then it calls
 `timestamp` is captured immediately before the first thread-page request, so a
 reply arriving during pagination is not accidentally marked as read. A
 successful update clears the volatile unread counters in the followed list.
-Threads without unread replies open at the end of the conversation.
+Threads without unread replies open at the end of the conversation only when
+opened from the Threads destination. Threads opened from a channel post list
+preserve their initial list position at the root.
 
 Deleted replies returned by the server retain their place in the conversation
 and are rendered as placeholders without message contents or reactions.

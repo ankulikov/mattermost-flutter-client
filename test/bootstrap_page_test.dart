@@ -396,7 +396,7 @@ void main() {
     );
   });
 
-  testWidgets('opens a thread without unread replies at the end', (
+  testWidgets('opens a channel thread without changing its initial position', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 360));
@@ -428,11 +428,7 @@ void main() {
         const ValueKey<String>('thread-message-list-town-square-post'),
       ),
     );
-    expect(messages.controller?.position.pixels, greaterThan(0));
-    expect(
-      messages.controller?.position.pixels,
-      messages.controller?.position.maxScrollExtent,
-    );
+    expect(messages.controller?.position.pixels, 0);
     expect(tester.takeException(), isNull);
   });
 
