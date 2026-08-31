@@ -2,17 +2,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
+import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 
 final class ChannelSidebarController
     extends AsyncNotifier<ChannelSidebarSnapshot> {
   ChannelSidebarController(this._sessionProvider, this._repositoryProvider);
 
   final Provider<AuthSession?> _sessionProvider;
-  final Provider<ChannelSidebarRepository> _repositoryProvider;
+  final Provider<ChannelRepository> _repositoryProvider;
   late RequestCancellation _cancellation;
   AuthSession? _session;
-  ChannelSidebarRepository? _repository;
+  ChannelRepository? _repository;
   bool _refreshing = false;
 
   @override
@@ -24,7 +26,7 @@ final class ChannelSidebarController
     _repository = null;
     final AuthSession? session = ref.watch(_sessionProvider);
     if (session == null) return const ChannelSidebarSnapshot();
-    final ChannelSidebarRepository repository = ref.watch(_repositoryProvider);
+    final ChannelRepository repository = ref.watch(_repositoryProvider);
     _session = session;
     _repository = repository;
     return cancellation.run(() => repository.load(session));
@@ -32,7 +34,7 @@ final class ChannelSidebarController
 
   Future<void> refresh() async {
     final AuthSession? session = _session;
-    final ChannelSidebarRepository? repository = _repository;
+    final ChannelRepository? repository = _repository;
     if (_refreshing || session == null || repository == null) return;
     final RequestCancellation cancellation = _cancellation;
     _refreshing = true;
@@ -57,5 +59,23 @@ final class ChannelSidebarController
     } finally {
       _refreshing = false;
     }
+  }
+
+  Future<void> openDirectMessage(UserProfile profile) async {
+    final AuthSession? session = _session;
+    final ChannelRepository? repository = _repository;
+    if (session == null || repository == null) {
+      throw StateError('Channel navigation is not ready');
+    }
+    final SidebarChannel channel = await _cancellation.run(
+      () => repository.openDirectMessage(
+        currentUserId: session.userId,
+        otherUserId: profile.id,
+        otherUserDisplayName: profile.fullName,
+      ),
+    );
+    ref.read(threadsDestinationProvider.notifier).clear();
+    ref.read(selectedChannelProvider.notifier).select(channel);
+    await refresh();
   }
 }

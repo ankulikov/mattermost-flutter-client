@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
@@ -12,7 +10,6 @@ import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
-import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_controller.dart';
@@ -112,27 +109,12 @@ final userProfileProvider = FutureProvider.autoDispose
       );
     });
 
-Future<void> openDirectMessage(WidgetRef ref, UserProfile profile) async {
-  final AuthSession? session = ref.read(authSessionProvider);
-  if (session == null) throw StateError('No active Mattermost session');
-  final SidebarChannel channel = await ref
-      .read(directChannelRepositoryProvider)
-      .open(
-        currentUserId: session.userId,
-        otherUserId: profile.id,
-        otherUserDisplayName: profile.fullName,
-      );
-  ref.read(threadsDestinationProvider.notifier).clear();
-  ref.read(selectedChannelProvider.notifier).select(channel);
-  unawaited(ref.read(channelSidebarProvider.notifier).refresh());
-}
-
 final AsyncNotifierProvider<ChannelSidebarController, ChannelSidebarSnapshot>
 channelSidebarProvider =
     AsyncNotifierProvider<ChannelSidebarController, ChannelSidebarSnapshot>(
       () => ChannelSidebarController(
         authSessionProvider,
-        channelSidebarRepositoryProvider,
+        channelRepositoryProvider,
       ),
     );
 

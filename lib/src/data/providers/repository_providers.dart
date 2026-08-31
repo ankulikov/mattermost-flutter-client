@@ -6,21 +6,19 @@ import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.d
 import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_attachment_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_channel_post_repository.dart';
-import 'package:mattermost_flutter/src/data/repositories/api_channel_sidebar_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_custom_emoji_repository.dart';
-import 'package:mattermost_flutter/src/data/repositories/api_direct_channel_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_message_sender.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_reaction_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_thread_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_channel_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_user_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
-import 'package:mattermost_flutter/src/domain/repositories/direct_channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
@@ -78,13 +76,6 @@ final Provider<CustomEmojiRepository> customEmojiRepositoryProvider =
       ),
     );
 
-final Provider<DirectChannelRepository> directChannelRepositoryProvider =
-    Provider<DirectChannelRepository>(
-      (Ref ref) => ApiDirectChannelRepository(
-        api: ref.watch(activeMattermostApiProvider),
-      ),
-    );
-
 final Provider<MessageMapper<MattermostPostDto, UserSummary>>
 mattermostMessageMapperProvider =
     Provider<MessageMapper<MattermostPostDto, UserSummary>>(
@@ -104,9 +95,9 @@ final Provider<ReactionRepository> reactionRepositoryProvider =
           ApiReactionRepository(api: ref.watch(activeMattermostApiProvider)),
     );
 
-final Provider<ChannelSidebarRepository> channelSidebarRepositoryProvider =
-    Provider<ChannelSidebarRepository>(
-      (Ref ref) => ApiChannelSidebarRepository(
+final Provider<ChannelRepository> channelRepositoryProvider =
+    Provider<ChannelRepository>(
+      (Ref ref) => MattermostChannelRepository(
         api: ref.watch(activeMattermostApiProvider),
         users: ref.watch(userRepositoryProvider),
       ),

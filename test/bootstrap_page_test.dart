@@ -45,9 +45,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
         ],
         child: const MaterialApp(home: BootstrapPage()),
       ),
@@ -70,9 +68,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           followedThreadsRepositoryProvider.overrideWithValue(
             const _FollowedThreadsRepository(),
           ),
@@ -112,9 +108,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           followedThreadsRepositoryProvider.overrideWithValue(
             const _FollowedThreadsRepository(),
           ),
@@ -155,9 +149,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           followedThreadsRepositoryProvider.overrideWithValue(
             const _FollowedThreadsRepository(),
           ),
@@ -192,9 +184,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(),
           ),
@@ -233,9 +223,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
@@ -276,9 +264,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
@@ -329,9 +315,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
@@ -364,9 +348,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
@@ -406,9 +388,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
@@ -442,9 +422,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
@@ -485,9 +463,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(posts),
         ],
         child: const MaterialApp(home: BootstrapPage()),
@@ -514,9 +490,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(posts),
         ],
         child: const MaterialApp(home: BootstrapPage()),
@@ -544,9 +518,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(posts),
         ],
         child: const MaterialApp(home: BootstrapPage()),
@@ -572,9 +544,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           channelPostRepositoryProvider.overrideWithValue(posts),
         ],
         child: const MaterialApp(home: BootstrapPage()),
@@ -598,7 +568,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
+          channelRepositoryProvider.overrideWithValue(
             _LargeSidebarRepository(),
           ),
         ],
@@ -631,9 +601,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
         ],
         child: const MaterialApp(home: BootstrapPage()),
       ),
@@ -660,7 +628,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
+          channelRepositoryProvider.overrideWithValue(
             _CollapsedMutedSidebarRepository(),
           ),
         ],
@@ -709,9 +677,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelSidebarRepositoryProvider.overrideWithValue(
-            _SidebarRepository(),
-          ),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
         ],
         child: const MaterialApp(
           home: MediaQuery(
@@ -1032,7 +998,14 @@ final class _SignedInRepository implements AuthRepository {
   Future<void> signOut() async {}
 }
 
-final class _SidebarRepository implements ChannelSidebarRepository {
+final class _SidebarRepository implements ChannelRepository {
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => throw UnimplementedError();
+
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
       const ChannelSidebarSnapshot(
@@ -1107,7 +1080,14 @@ final class _FollowedThreadsRepository implements FollowedThreadsRepository {
   );
 }
 
-final class _LargeSidebarRepository implements ChannelSidebarRepository {
+final class _LargeSidebarRepository implements ChannelRepository {
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => throw UnimplementedError();
+
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
       ChannelSidebarSnapshot(
@@ -1132,8 +1112,14 @@ final class _LargeSidebarRepository implements ChannelSidebarRepository {
       );
 }
 
-final class _CollapsedMutedSidebarRepository
-    implements ChannelSidebarRepository {
+final class _CollapsedMutedSidebarRepository implements ChannelRepository {
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => throw UnimplementedError();
+
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
       const ChannelSidebarSnapshot(

@@ -8,8 +8,8 @@ import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 
-final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
-  const ApiChannelSidebarRepository({
+final class MattermostChannelRepository implements ChannelRepository {
+  const MattermostChannelRepository({
     required MattermostApi api,
     required UserRepository users,
   }) : _api = api,
@@ -52,6 +52,19 @@ final class ApiChannelSidebarRepository implements ChannelSidebarRepository {
         categoryOrder: categoryResponse.order,
       ),
     );
+  }
+
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async {
+    final MattermostChannelDto dto = await _api.createDirectChannel(
+      currentUserId: currentUserId,
+      otherUserId: otherUserId,
+    );
+    return mapChannel(dto).withDisplayName(otherUserDisplayName);
   }
 
   Future<List<SidebarChannel>> _resolveDialogNames({

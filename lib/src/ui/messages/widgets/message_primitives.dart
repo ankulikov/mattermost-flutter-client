@@ -77,7 +77,9 @@ class MessageAvatar extends ConsumerWidget {
             onTap: () => showUserProfileCard(
               context,
               userId: author.id,
-              onMessage: (profile) => openDirectMessage(ref, profile),
+              onMessage: (profile) => ref
+                  .read(channelSidebarProvider.notifier)
+                  .openDirectMessage(profile),
             ),
             child: Center(child: image),
           ),
@@ -270,7 +272,9 @@ class _UserMentionInlineState extends ConsumerState<_UserMentionInline> {
           onTap: () => showUserProfileCard(
             context,
             userId: widget.mention.userId,
-            onMessage: (profile) => openDirectMessage(ref, profile),
+            onMessage: (profile) => ref
+                .read(channelSidebarProvider.notifier)
+                .openDirectMessage(profile),
           ),
           child: Text('@${widget.mention.displayName}', style: linkStyle),
         ),
