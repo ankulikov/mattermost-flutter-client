@@ -38,7 +38,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     final bool threadsSelected = ref.watch(threadsDestinationProvider);
     final ChannelSidebarSnapshot? sidebar = ref
         .watch(channelSidebarProvider)
-        .value;
+        .value
+        ?.snapshot;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool expanded = constraints.maxWidth >= AppBreakpoints.expanded;
@@ -86,7 +87,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
   void _selectChannelNamed(String name) {
     final ChannelSidebarSnapshot? snapshot = ref
         .read(channelSidebarProvider)
-        .value;
+        .value
+        ?.snapshot;
     if (snapshot == null) return;
     for (final SidebarSection section in snapshot.sections) {
       for (final SidebarChannel channel in section.channels) {

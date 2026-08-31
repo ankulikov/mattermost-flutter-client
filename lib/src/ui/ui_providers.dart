@@ -3,7 +3,6 @@ import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
 import 'package:mattermost_flutter/src/domain/models/attachment.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
-import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
@@ -109,9 +108,9 @@ final userProfileProvider = FutureProvider.autoDispose
       );
     });
 
-final AsyncNotifierProvider<ChannelSidebarController, ChannelSidebarSnapshot>
+final AsyncNotifierProvider<ChannelSidebarController, ChannelSidebarViewState>
 channelSidebarProvider =
-    AsyncNotifierProvider<ChannelSidebarController, ChannelSidebarSnapshot>(
+    AsyncNotifierProvider<ChannelSidebarController, ChannelSidebarViewState>(
       () => ChannelSidebarController(
         authSessionProvider,
         channelRepositoryProvider,

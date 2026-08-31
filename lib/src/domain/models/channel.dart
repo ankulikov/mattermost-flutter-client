@@ -61,26 +61,18 @@ final class ChannelSidebarSnapshot {
   const ChannelSidebarSnapshot({
     this.team,
     this.sections = const <SidebarSection>[],
-    this.isRefreshing = false,
-    this.refreshFailed = false,
   });
 
   final SidebarTeam? team;
   final List<SidebarSection> sections;
-  final bool isRefreshing;
-  final bool refreshFailed;
 
   bool get hasData => team != null || sections.isNotEmpty;
 
   ChannelSidebarSnapshot copyWith({
     SidebarTeam? team,
     List<SidebarSection>? sections,
-    bool? isRefreshing,
-    bool? refreshFailed,
   }) => ChannelSidebarSnapshot(
     team: team ?? this.team,
     sections: sections ?? this.sections,
-    isRefreshing: isRefreshing ?? this.isRefreshing,
-    refreshFailed: refreshFailed ?? this.refreshFailed,
   );
 }

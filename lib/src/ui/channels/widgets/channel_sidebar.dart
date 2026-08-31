@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
+import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
@@ -20,7 +21,7 @@ class ChannelSidebar extends ConsumerWidget {
       );
     }
 
-    final AsyncValue<ChannelSidebarSnapshot> sidebar = ref.watch(
+    final AsyncValue<ChannelSidebarViewState> sidebar = ref.watch(
       channelSidebarProvider,
     );
     return SafeArea(
@@ -33,8 +34,10 @@ class ChannelSidebar extends ConsumerWidget {
         ),
         error: (Object error, StackTrace stackTrace) =>
             _InitialError(onRetry: () => unawaited(refreshChannelSidebar(ref))),
-        data: (ChannelSidebarSnapshot snapshot) => _SidebarContent(
-          snapshot: snapshot,
+        data: (ChannelSidebarViewState viewState) => _SidebarContent(
+          snapshot: viewState.snapshot,
+          isRefreshing: viewState.isRefreshing,
+          refreshFailed: viewState.refreshFailed,
           onRefresh: () => refreshChannelSidebar(ref),
         ),
       ),
@@ -70,9 +73,16 @@ class _InitialError extends StatelessWidget {
 }
 
 class _SidebarContent extends StatelessWidget {
-  const _SidebarContent({required this.snapshot, required this.onRefresh});
+  const _SidebarContent({
+    required this.snapshot,
+    required this.isRefreshing,
+    required this.refreshFailed,
+    required this.onRefresh,
+  });
 
   final ChannelSidebarSnapshot snapshot;
+  final bool isRefreshing;
+  final bool refreshFailed;
   final RefreshCallback onRefresh;
 
   @override
@@ -81,8 +91,8 @@ class _SidebarContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _TeamHeader(team: snapshot.team, onRefresh: onRefresh),
-        if (snapshot.isRefreshing) const LinearProgressIndicator(minHeight: 2),
-        if (snapshot.refreshFailed)
+        if (isRefreshing) const LinearProgressIndicator(minHeight: 2),
+        if (refreshFailed)
           const MaterialBanner(
             content: Text(ChannelSidebarStrings.refreshFailed),
             actions: <Widget>[SizedBox.shrink()],

@@ -34,8 +34,6 @@ void main() {
         snapshot.sections.first.channels.first.displayName,
         'Ada Lovelace',
       );
-      expect(snapshot.isRefreshing, isFalse);
-      expect(snapshot.refreshFailed, isFalse);
     },
   );
 }
