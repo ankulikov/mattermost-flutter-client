@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
-import 'package:mattermost_flutter/src/data/repositories/api_followed_threads_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 
@@ -15,14 +15,13 @@ void main() {
       final Uri serverUrl = Uri.parse('https://chat.example.com');
       final _ThreadsApi api = _ThreadsApi();
       final FakeUserRepository users = FakeUserRepository();
-      final ApiFollowedThreadsRepository repository =
-          ApiFollowedThreadsRepository(
-            api: api,
-            messageMapper: const MattermostMessageMapper(),
-            users: users,
-          );
+      final MattermostThreadRepository repository = MattermostThreadRepository(
+        api: api,
+        messageMapper: const MattermostMessageMapper(),
+        users: users,
+      );
 
-      final FollowedThreadsPage page = await repository.loadPage(
+      final FollowedThreadsPage page = await repository.loadFollowed(
         session: AuthSession(
           serverUrl: serverUrl,
           userId: 'me',

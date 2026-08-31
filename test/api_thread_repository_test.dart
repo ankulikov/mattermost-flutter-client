@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
-import 'package:mattermost_flutter/src/data/repositories/api_thread_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
 
@@ -19,7 +19,7 @@ void main() {
         username: 'current',
       );
       final _ThreadApi api = _ThreadApi();
-      final ApiThreadRepository repository = ApiThreadRepository(
+      final MattermostThreadRepository repository = MattermostThreadRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
         users: FakeUserRepository(),
@@ -56,7 +56,7 @@ void main() {
       username: 'current',
     );
     final _ThreadApi api = _ThreadApi(deletedOnly: true);
-    final ApiThreadRepository repository = ApiThreadRepository(
+    final MattermostThreadRepository repository = MattermostThreadRepository(
       api: api,
       messageMapper: const MattermostMessageMapper(),
       users: FakeUserRepository(),
@@ -76,7 +76,7 @@ void main() {
 
   test('marks the thread read at the supplied load timestamp', () async {
     final _ThreadApi api = _ThreadApi();
-    final ApiThreadRepository repository = ApiThreadRepository(
+    final MattermostThreadRepository repository = MattermostThreadRepository(
       api: api,
       messageMapper: const MattermostMessageMapper(),
       users: FakeUserRepository(),
@@ -104,7 +104,7 @@ void main() {
     'loads every page for a thread longer than the former safety cap',
     () async {
       final _LongThreadApi api = _LongThreadApi(pageCount: 22);
-      final ApiThreadRepository repository = ApiThreadRepository(
+      final MattermostThreadRepository repository = MattermostThreadRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
         users: FakeUserRepository(),

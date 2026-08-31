@@ -6,19 +6,17 @@ import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.d
 import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_attachment_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_custom_emoji_repository.dart';
-import 'package:mattermost_flutter/src/data/repositories/api_followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
-import 'package:mattermost_flutter/src/data/repositories/api_thread_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_channel_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_post_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_thread_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_user_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
-import 'package:mattermost_flutter/src/domain/repositories/followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
@@ -97,16 +95,7 @@ final Provider<PostRepository> postRepositoryProvider =
 
 final Provider<ThreadRepository> threadRepositoryProvider =
     Provider<ThreadRepository>(
-      (Ref ref) => ApiThreadRepository(
-        api: ref.watch(activeMattermostApiProvider),
-        messageMapper: ref.watch(mattermostMessageMapperProvider),
-        users: ref.watch(userRepositoryProvider),
-      ),
-    );
-
-final Provider<FollowedThreadsRepository> followedThreadsRepositoryProvider =
-    Provider<FollowedThreadsRepository>(
-      (Ref ref) => ApiFollowedThreadsRepository(
+      (Ref ref) => MattermostThreadRepository(
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         users: ref.watch(userRepositoryProvider),

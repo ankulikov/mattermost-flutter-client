@@ -8,7 +8,6 @@ import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
-import 'package:mattermost_flutter/src/domain/repositories/followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
@@ -68,8 +67,8 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          followedThreadsRepositoryProvider.overrideWithValue(
-            const _FollowedThreadsRepository(),
+          threadRepositoryProvider.overrideWithValue(
+            const _FollowedThreadsTestRepository(),
           ),
         ],
         child: const MaterialApp(home: BootstrapPage()),
@@ -108,9 +107,6 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          followedThreadsRepositoryProvider.overrideWithValue(
-            const _FollowedThreadsRepository(),
-          ),
           threadRepositoryProvider.overrideWithValue(threads),
         ],
         child: const MaterialApp(home: BootstrapPage()),
@@ -149,8 +145,8 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          followedThreadsRepositoryProvider.overrideWithValue(
-            const _FollowedThreadsRepository(),
+          threadRepositoryProvider.overrideWithValue(
+            const _FollowedThreadsTestRepository(),
           ),
         ],
         child: const MaterialApp(
@@ -768,7 +764,7 @@ class _DelayedPostRepository extends PostRepository {
   }) async => ChannelPostPage(posts: await _posts(channelId), hasOlder: false);
 }
 
-final class _ThreadRepository implements ThreadRepository {
+final class _ThreadRepository extends ThreadRepository {
   const _ThreadRepository();
 
   MessageThread _thread(String rootPostId) => MessageThread(
@@ -819,7 +815,7 @@ final class _ThreadRepository implements ThreadRepository {
   }) async {}
 }
 
-final class _ReadRecordingThreadRepository implements ThreadRepository {
+final class _ReadRecordingThreadRepository extends ThreadRepository {
   int markReadCalls = 0;
   String? teamId;
   String? rootPostId;
@@ -844,6 +840,17 @@ final class _ReadRecordingThreadRepository implements ThreadRepository {
     this.rootPostId = rootPostId;
     this.timestamp = timestamp;
   }
+
+  @override
+  Future<FollowedThreadsPage> loadFollowed({
+    required AuthSession session,
+    required String teamId,
+    String? before,
+  }) => const _FollowedThreadsTestRepository().loadFollowed(
+    session: session,
+    teamId: teamId,
+    before: before,
+  );
 }
 
 final class _RecordingPostRepository extends _DelayedPostRepository {
@@ -1030,11 +1037,11 @@ final class _SidebarRepository implements ChannelRepository {
       );
 }
 
-final class _FollowedThreadsRepository implements FollowedThreadsRepository {
-  const _FollowedThreadsRepository();
+final class _FollowedThreadsTestRepository extends ThreadRepository {
+  const _FollowedThreadsTestRepository();
 
   @override
-  Future<FollowedThreadsPage> loadPage({
+  Future<FollowedThreadsPage> loadFollowed({
     required AuthSession session,
     required String teamId,
     String? before,

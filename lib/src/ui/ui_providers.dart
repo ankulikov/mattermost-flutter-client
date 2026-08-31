@@ -142,7 +142,7 @@ final followedThreadsProvider = AsyncNotifierProvider.autoDispose
       (String teamId) => FollowedThreadsController(
         teamId,
         authSessionProvider,
-        followedThreadsRepositoryProvider,
+        threadRepositoryProvider,
       ),
     );
 
