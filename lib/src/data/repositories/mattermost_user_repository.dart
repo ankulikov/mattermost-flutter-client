@@ -197,11 +197,11 @@ final class MattermostUserRepository implements UserRepository {
     required int profileImageUpdatedAt,
   }) async {
     if (userId.isEmpty) throw ArgumentError.value(userId, 'userId');
-    final String key = _profileImageUri(
+    final String key = _profileImageCacheKey(
       accountScopeId: _accountScopeId,
       userId: userId,
       profileImageUpdatedAt: profileImageUpdatedAt,
-    ).toString();
+    );
     final Future<UserAvatar>? existing = _avatarInFlight[key];
     if (existing != null) return existing;
     final Future<UserAvatar> request = _loadAvatar(
@@ -311,19 +311,11 @@ final class MattermostUserRepository implements UserRepository {
   }
 }
 
-Uri _profileImageUri({
+String _profileImageCacheKey({
   required String accountScopeId,
   required String userId,
   required int profileImageUpdatedAt,
-}) {
-  final Uri serverUrl = Uri.parse(
-    accountScopeId.endsWith('/') ? accountScopeId : '$accountScopeId/',
-  );
-  return serverUrl
-      .resolve('api/v4/users/$userId/image')
-      .replace(
-        queryParameters: profileImageUpdatedAt > 0
-            ? <String, String>{'_': '$profileImageUpdatedAt'}
-            : null,
-      );
-}
+}) =>
+    'avatar|account:${Uri.encodeComponent(accountScopeId)}'
+    '|user:${Uri.encodeComponent(userId)}'
+    '|updated:$profileImageUpdatedAt';

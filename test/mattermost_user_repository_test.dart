@@ -119,6 +119,31 @@ void main() {
       expect(api.requestedStatusId, 'ada');
     },
   );
+
+  test('loads an avatar for an account-scoped cache key', () async {
+    final _UserApi api = _UserApi();
+    final _RecordingAvatarCache avatarCache = _RecordingAvatarCache();
+    final MattermostUserRepository repository = MattermostUserRepository(
+      api: api,
+      cache: cache,
+      avatarCache: avatarCache,
+      accountScopeId: 'https://chat.example.com|user:me',
+      now: () => now,
+    );
+
+    final avatar = await repository.loadAvatar(
+      userId: 'ada',
+      profileImageUpdatedAt: 42,
+    );
+
+    expect(avatar.bytes, <int>[1, 2, 3]);
+    expect(api.requestedAvatar, ('ada', 42));
+    expect(
+      avatarCache.writtenKey,
+      'avatar|account:https%3A%2F%2Fchat.example.com%7Cuser%3Ame'
+      '|user:ada|updated:42',
+    );
+  });
 }
 
 final class _NoopAvatarCache implements UserAvatarCache {
@@ -138,6 +163,25 @@ final class _NoopAvatarCache implements UserAvatarCache {
   }) async {}
 }
 
+final class _RecordingAvatarCache implements UserAvatarCache {
+  String? writtenKey;
+
+  @override
+  Future<Uint8List?> read(String key) async => null;
+
+  @override
+  Future<void> remove(String key) async {}
+
+  @override
+  Future<void> write({
+    required String key,
+    required Uint8List bytes,
+    required String? contentType,
+  }) async {
+    writtenKey = key;
+  }
+}
+
 final class _UserApi implements MattermostApi {
   _UserApi({this.failIds = false});
 
@@ -146,6 +190,7 @@ final class _UserApi implements MattermostApi {
   final List<List<String>> usernameBatches = <List<String>>[];
   String? requestedProfileId;
   String? requestedStatusId;
+  (String, int)? requestedAvatar;
 
   @override
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async {
@@ -172,6 +217,18 @@ final class _UserApi implements MattermostApi {
   Future<MattermostUserStatusDto> getUserStatus(String userId) async {
     requestedStatusId = userId;
     return MattermostUserStatusDto(userId: userId, status: 'online');
+  }
+
+  @override
+  Future<MattermostImageDto> getUserProfileImage({
+    required String userId,
+    int lastPictureUpdate = 0,
+  }) async {
+    requestedAvatar = (userId, lastPictureUpdate);
+    return MattermostImageDto(
+      bytes: Uint8List.fromList(<int>[1, 2, 3]),
+      contentType: 'image/png',
+    );
   }
 
   static MattermostUserDto _user(String id) => switch (id.toLowerCase()) {
