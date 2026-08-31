@@ -7,8 +7,8 @@ import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 
-final class ApiChannelPostRepository implements ChannelPostRepository {
-  const ApiChannelPostRepository({
+final class MattermostPostRepository extends PostRepository {
+  const MattermostPostRepository({
     required MattermostApi api,
     required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
     required UserRepository users,
@@ -47,6 +47,64 @@ final class ApiChannelPostRepository implements ChannelPostRepository {
     );
     return _mapPage(session: session, response: response);
   }
+
+  @override
+  Future<ChannelPost> sendText({
+    required AuthSession session,
+    required String channelId,
+    required String message,
+    required String pendingPostId,
+    String rootPostId = '',
+  }) async {
+    final MattermostPostDto post = await _api.createPost(
+      MattermostCreatePostRequestDto(
+        channelId: channelId,
+        message: message,
+        pendingPostId: pendingPostId,
+        rootId: rootPostId,
+      ),
+    );
+    final List<ChannelPost> mapped = _messageMapper.map(
+      posts: <MattermostPostDto>[post],
+      users: <UserSummary>[
+        UserSummary(
+          id: session.userId,
+          username: session.username,
+          firstName: '',
+          lastName: '',
+          nickname: '',
+          position: '',
+          email: '',
+        ),
+      ],
+      currentUserId: session.userId,
+      includeDeleted: true,
+    );
+    if (mapped case <ChannelPost>[final ChannelPost result]) return result;
+    throw const FormatException('Create post response could not be mapped');
+  }
+
+  @override
+  Future<void> addReaction({
+    required AuthSession session,
+    required String postId,
+    required String emojiName,
+  }) => _api.saveReaction(
+    userId: session.userId,
+    postId: postId,
+    emojiName: emojiName,
+  );
+
+  @override
+  Future<void> removeReaction({
+    required AuthSession session,
+    required String postId,
+    required String emojiName,
+  }) => _api.deleteReaction(
+    userId: session.userId,
+    postId: postId,
+    emojiName: emojiName,
+  );
 
   Future<ChannelPostPage> _mapPage({
     required AuthSession session,

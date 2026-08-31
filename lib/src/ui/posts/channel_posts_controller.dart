@@ -2,9 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
-import 'package:mattermost_flutter/src/domain/repositories/message_sender.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
-import 'package:mattermost_flutter/src/domain/repositories/reaction_repository.dart';
 
 final class ChannelPostsViewState {
   const ChannelPostsViewState({
@@ -46,18 +44,14 @@ final class ChannelPostsController
     this.channelId,
     this._sessionProvider,
     this._repositoryProvider,
-    this._messageSenderProvider,
-    this._reactionRepositoryProvider,
   );
 
   final String channelId;
   final Provider<AuthSession?> _sessionProvider;
-  final Provider<ChannelPostRepository> _repositoryProvider;
-  final Provider<MessageSender> _messageSenderProvider;
-  final Provider<ReactionRepository> _reactionRepositoryProvider;
+  final Provider<PostRepository> _repositoryProvider;
   late RequestCancellation _cancellation;
   AuthSession? _session;
-  ChannelPostRepository? _repository;
+  PostRepository? _repository;
   bool _olderRunning = false;
   bool _sendRunning = false;
   final Set<String> _reactionRequests = <String>{};
@@ -76,7 +70,7 @@ final class ChannelPostsController
         hasOlder: false,
       );
     }
-    final ChannelPostRepository repository = ref.watch(_repositoryProvider);
+    final PostRepository repository = ref.watch(_repositoryProvider);
     _session = session;
     _repository = repository;
     return cancellation.run(() => _loadLatest(session, repository));
@@ -84,7 +78,7 @@ final class ChannelPostsController
 
   Future<void> retry() async {
     final AuthSession? session = _session;
-    final ChannelPostRepository? repository = _repository;
+    final PostRepository? repository = _repository;
     if (session == null || repository == null) return;
     final RequestCancellation cancellation = _cancellation;
     state = const AsyncLoading<ChannelPostsViewState>();
@@ -100,7 +94,7 @@ final class ChannelPostsController
 
   Future<void> loadOlder() async {
     final AuthSession? session = _session;
-    final ChannelPostRepository? repository = _repository;
+    final PostRepository? repository = _repository;
     final ChannelPostsViewState? current = state.value;
     final String? beforePostId = current?.beforePostId;
     if (_olderRunning ||
@@ -172,14 +166,12 @@ final class ChannelPostsController
     _sendRunning = true;
     try {
       final ChannelPost sent = await _cancellation.run(
-        () => ref
-            .read(_messageSenderProvider)
-            .sendText(
-              session: session,
-              channelId: channelId,
-              message: message,
-              pendingPostId: pendingPostId,
-            ),
+        () => _repository!.sendText(
+          session: session,
+          channelId: channelId,
+          message: message,
+          pendingPostId: pendingPostId,
+        ),
       );
       final ChannelPostsViewState? latest = state.value;
       if (latest != null) {
@@ -221,12 +213,9 @@ final class ChannelPostsController
     );
     _replacePost(toggleCurrentUserReaction(original, emojiName));
     try {
-      final ReactionRepository repository = ref.read(
-        _reactionRepositoryProvider,
-      );
       if (remove) {
         await _cancellation.run(
-          () => repository.remove(
+          () => _repository!.removeReaction(
             session: session,
             postId: postId,
             emojiName: emojiName,
@@ -234,7 +223,7 @@ final class ChannelPostsController
         );
       } else {
         await _cancellation.run(
-          () => repository.add(
+          () => _repository!.addReaction(
             session: session,
             postId: postId,
             emojiName: emojiName,
@@ -312,7 +301,7 @@ final class ChannelPostsController
 
   Future<ChannelPostsViewState> _loadLatest(
     AuthSession session,
-    ChannelPostRepository repository,
+    PostRepository repository,
   ) async {
     final ChannelPostPage page = await repository.loadLatest(
       session: session,

@@ -9,7 +9,6 @@ import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/followed_threads_repository.dart';
-import 'package:mattermost_flutter/src/domain/repositories/message_sender.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
@@ -185,7 +184,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(
+          postRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(),
           ),
         ],
@@ -217,17 +216,14 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final _RecordingMessageSender sender = _RecordingMessageSender();
+    final _RecordingPostRepository sender = _RecordingPostRepository();
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(
-            const _DelayedPostRepository(delay: Duration.zero),
-          ),
-          messageSenderProvider.overrideWithValue(sender),
+          postRepositoryProvider.overrideWithValue(sender),
         ],
         child: const MaterialApp(home: BootstrapPage()),
       ),
@@ -258,18 +254,15 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final _RecordingMessageSender sender = _RecordingMessageSender();
+    final _RecordingPostRepository sender = _RecordingPostRepository();
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(
-            const _DelayedPostRepository(delay: Duration.zero),
-          ),
+          postRepositoryProvider.overrideWithValue(sender),
           threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
-          messageSenderProvider.overrideWithValue(sender),
         ],
         child: const MaterialApp(home: BootstrapPage()),
       ),
@@ -316,7 +309,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(
+          postRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
         ],
@@ -349,7 +342,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(
+          postRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
           threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
@@ -389,7 +382,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(
+          postRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
           threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
@@ -423,7 +416,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(
+          postRepositoryProvider.overrideWithValue(
             const _DelayedPostRepository(delay: Duration.zero),
           ),
           threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
@@ -464,7 +457,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(posts),
+          postRepositoryProvider.overrideWithValue(posts),
         ],
         child: const MaterialApp(home: BootstrapPage()),
       ),
@@ -491,7 +484,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(posts),
+          postRepositoryProvider.overrideWithValue(posts),
         ],
         child: const MaterialApp(home: BootstrapPage()),
       ),
@@ -519,7 +512,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(posts),
+          postRepositoryProvider.overrideWithValue(posts),
         ],
         child: const MaterialApp(home: BootstrapPage()),
       ),
@@ -545,7 +538,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          channelPostRepositoryProvider.overrideWithValue(posts),
+          postRepositoryProvider.overrideWithValue(posts),
         ],
         child: const MaterialApp(home: BootstrapPage()),
       ),
@@ -724,7 +717,7 @@ final class _SignedOutRepository implements AuthRepository {
   Future<void> signOut() async {}
 }
 
-final class _DelayedPostRepository implements ChannelPostRepository {
+class _DelayedPostRepository extends PostRepository {
   const _DelayedPostRepository({
     this.delay = const Duration(milliseconds: 800),
   });
@@ -853,7 +846,9 @@ final class _ReadRecordingThreadRepository implements ThreadRepository {
   }
 }
 
-final class _RecordingMessageSender implements MessageSender {
+final class _RecordingPostRepository extends _DelayedPostRepository {
+  _RecordingPostRepository() : super(delay: Duration.zero);
+
   String? channelId;
   String? rootPostId;
   String? message;
@@ -884,7 +879,7 @@ final class _RecordingMessageSender implements MessageSender {
   }
 }
 
-final class _AutoPagingPostRepository implements ChannelPostRepository {
+final class _AutoPagingPostRepository extends PostRepository {
   _AutoPagingPostRepository({
     this.startsEmpty = false,
     this.failLoads = false,

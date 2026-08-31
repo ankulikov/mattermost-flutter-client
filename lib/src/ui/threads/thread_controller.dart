@@ -3,9 +3,7 @@ import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
-import 'package:mattermost_flutter/src/domain/models/post.dart';
-import 'package:mattermost_flutter/src/domain/repositories/message_sender.dart';
-import 'package:mattermost_flutter/src/domain/repositories/reaction_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 
 final class ThreadViewState {
@@ -43,15 +41,13 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     this.rootPostId,
     this._sessionProvider,
     this._repositoryProvider,
-    this._messageSenderProvider,
-    this._reactionRepositoryProvider,
+    this._postRepositoryProvider,
   );
 
   final String rootPostId;
   final Provider<AuthSession?> _sessionProvider;
   final Provider<ThreadRepository> _repositoryProvider;
-  final Provider<MessageSender> _messageSenderProvider;
-  final Provider<ReactionRepository> _reactionRepositoryProvider;
+  final Provider<PostRepository> _postRepositoryProvider;
   late RequestCancellation _cancellation;
   AuthSession? _session;
   ThreadRepository? _repository;
@@ -129,7 +125,7 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     try {
       final ChannelPost sent = await _cancellation.run(
         () => ref
-            .read(_messageSenderProvider)
+            .read(_postRepositoryProvider)
             .sendText(
               session: session,
               channelId: channelId,
@@ -222,24 +218,25 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     );
     _replacePost(toggleCurrentUserReaction(original, emojiName));
     try {
-      final ReactionRepository repository = ref.read(
-        _reactionRepositoryProvider,
-      );
       if (remove) {
         await _cancellation.run(
-          () => repository.remove(
-            session: session,
-            postId: postId,
-            emojiName: emojiName,
-          ),
+          () => ref
+              .read(_postRepositoryProvider)
+              .removeReaction(
+                session: session,
+                postId: postId,
+                emojiName: emojiName,
+              ),
         );
       } else {
         await _cancellation.run(
-          () => repository.add(
-            session: session,
-            postId: postId,
-            emojiName: emojiName,
-          ),
+          () => ref
+              .read(_postRepositoryProvider)
+              .addReaction(
+                session: session,
+                postId: postId,
+                emojiName: emojiName,
+              ),
         );
       }
       return true;

@@ -2,8 +2,8 @@ import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 
-final class InMemoryChannelPostRepository implements ChannelPostRepository {
-  const InMemoryChannelPostRepository({
+final class InMemoryPostRepository extends PostRepository {
+  const InMemoryPostRepository({
     this.delay = const Duration(milliseconds: 900),
   });
 
@@ -66,6 +66,29 @@ final class InMemoryChannelPostRepository implements ChannelPostRepository {
     required String channelId,
   }) async =>
       ChannelPostPage(posts: await loadHistory(channelId), hasOlder: false);
+
+  @override
+  Future<ChannelPost> sendText({
+    required AuthSession session,
+    required String channelId,
+    required String message,
+    required String pendingPostId,
+    String rootPostId = '',
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> addReaction({
+    required AuthSession session,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> removeReaction({
+    required AuthSession session,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
 
   static int _stableHash(String value) {
     var result = 17;

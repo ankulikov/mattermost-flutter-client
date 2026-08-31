@@ -123,9 +123,7 @@ final channelPostsProvider = AsyncNotifierProvider.autoDispose
       (String channelId) => ChannelPostsController(
         channelId,
         authSessionProvider,
-        channelPostRepositoryProvider,
-        messageSenderProvider,
-        reactionRepositoryProvider,
+        postRepositoryProvider,
       ),
     );
 
@@ -135,8 +133,7 @@ final threadProvider = AsyncNotifierProvider.autoDispose
         rootPostId,
         authSessionProvider,
         threadRepositoryProvider,
-        messageSenderProvider,
-        reactionRepositoryProvider,
+        postRepositoryProvider,
       ),
     );
 

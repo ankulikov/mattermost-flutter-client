@@ -1,14 +1,14 @@
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/page.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
 
 export '../models/page.dart';
 export '../models/post.dart';
 
-/// Transitional contract for loading pages in the channel-post scenario.
-///
-/// It remains separate from send and reaction contracts until the post
-/// repository migration consolidates those operations behind one aggregate API.
-abstract interface class ChannelPostRepository {
+/// Owns channel post pages, creation and reaction commands.
+abstract class PostRepository {
+  const PostRepository();
+
   Future<ChannelPostPage> loadLatest({
     required AuthSession session,
     required String channelId,
@@ -19,4 +19,24 @@ abstract interface class ChannelPostRepository {
     required String channelId,
     required String beforePostId,
   });
+
+  Future<ChannelPost> sendText({
+    required AuthSession session,
+    required String channelId,
+    required String message,
+    required String pendingPostId,
+    String rootPostId = '',
+  }) => throw UnimplementedError();
+
+  Future<void> addReaction({
+    required AuthSession session,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
+
+  Future<void> removeReaction({
+    required AuthSession session,
+    required String postId,
+    required String emojiName,
+  }) => throw UnimplementedError();
 }

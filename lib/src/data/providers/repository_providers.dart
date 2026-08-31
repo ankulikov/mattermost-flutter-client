@@ -5,15 +5,13 @@ import 'package:mattermost_flutter/src/data/platform/in_app_webview_sso_browser_
 import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.dart';
 import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_attachment_repository.dart';
-import 'package:mattermost_flutter/src/data/repositories/api_channel_post_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_custom_emoji_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_followed_threads_repository.dart';
-import 'package:mattermost_flutter/src/data/repositories/api_message_sender.dart';
-import 'package:mattermost_flutter/src/data/repositories/api_reaction_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_thread_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_channel_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_post_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_user_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
@@ -22,9 +20,7 @@ import 'package:mattermost_flutter/src/domain/repositories/channel_repository.da
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/followed_threads_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
-import 'package:mattermost_flutter/src/domain/repositories/message_sender.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
-import 'package:mattermost_flutter/src/domain/repositories/reaction_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 
@@ -82,19 +78,6 @@ mattermostMessageMapperProvider =
       (Ref ref) => const MattermostMessageMapper(),
     );
 
-final Provider<MessageSender> messageSenderProvider = Provider<MessageSender>(
-  (Ref ref) => ApiMessageSender(
-    api: ref.watch(activeMattermostApiProvider),
-    messageMapper: ref.watch(mattermostMessageMapperProvider),
-  ),
-);
-
-final Provider<ReactionRepository> reactionRepositoryProvider =
-    Provider<ReactionRepository>(
-      (Ref ref) =>
-          ApiReactionRepository(api: ref.watch(activeMattermostApiProvider)),
-    );
-
 final Provider<ChannelRepository> channelRepositoryProvider =
     Provider<ChannelRepository>(
       (Ref ref) => MattermostChannelRepository(
@@ -103,9 +86,9 @@ final Provider<ChannelRepository> channelRepositoryProvider =
       ),
     );
 
-final Provider<ChannelPostRepository> channelPostRepositoryProvider =
-    Provider<ChannelPostRepository>(
-      (Ref ref) => ApiChannelPostRepository(
+final Provider<PostRepository> postRepositoryProvider =
+    Provider<PostRepository>(
+      (Ref ref) => MattermostPostRepository(
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         users: ref.watch(userRepositoryProvider),
