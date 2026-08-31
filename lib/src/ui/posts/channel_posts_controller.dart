@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/policies/post_collection.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 
 final class ChannelPostsViewState {
@@ -121,11 +122,11 @@ final class ChannelPostsController
       final ChannelPostsViewState? latest = state.value;
       if (latest == null) return;
       final Map<String, ChannelReplySummary> replySummaries =
-          _mergeReplySummaries(latest.replySummaries, page.replySummaries);
+          mergeReplySummaries(latest.replySummaries, page.replySummaries);
       state = AsyncData(
         ChannelPostsViewState(
-          posts: _applyReplySummaries(
-            _mergePosts(latest.posts, page.posts),
+          posts: applyReplySummaries(
+            mergePosts(latest.posts, page.posts),
             replySummaries,
           ),
           hasOlder: page.hasOlder,
@@ -176,9 +177,7 @@ final class ChannelPostsController
       final ChannelPostsViewState? latest = state.value;
       if (latest != null) {
         state = AsyncData(
-          latest.copyWith(
-            posts: _mergePosts(latest.posts, <ChannelPost>[sent]),
-          ),
+          latest.copyWith(posts: mergePosts(latest.posts, <ChannelPost>[sent])),
         );
       }
       return sent;
@@ -314,69 +313,4 @@ final class ChannelPostsController
       beforePostId: page.beforePostId,
     );
   }
-
-  static List<ChannelPost> _mergePosts(
-    List<ChannelPost> current,
-    List<ChannelPost> incoming,
-  ) {
-    final Map<String, ChannelPost> byId = <String, ChannelPost>{
-      for (final ChannelPost post in current) post.id: post,
-    };
-    for (final ChannelPost post in incoming) {
-      final ChannelPost? existing = byId[post.id];
-      byId[post.id] = existing == null
-          ? post
-          : post.withThreadSummary(
-              replyCount: existing.replyCount > post.replyCount
-                  ? existing.replyCount
-                  : post.replyCount,
-              lastReplyAt: latestDateTime(
-                existing.lastReplyAt,
-                post.lastReplyAt,
-              ),
-            );
-    }
-    final List<ChannelPost> result = byId.values.toList(growable: false)
-      ..sort(compareMessagesBySentAt);
-    return List<ChannelPost>.unmodifiable(result);
-  }
-
-  static Map<String, ChannelReplySummary> _mergeReplySummaries(
-    Map<String, ChannelReplySummary> current,
-    Map<String, ChannelReplySummary> incoming,
-  ) {
-    final Set<String> rootIds = <String>{...current.keys, ...incoming.keys};
-    return Map<String, ChannelReplySummary>.unmodifiable(
-      <String, ChannelReplySummary>{
-        for (final String rootId in rootIds)
-          rootId: ChannelReplySummary(
-            replyIds: Set<String>.unmodifiable(<String>{
-              ...?current[rootId]?.replyIds,
-              ...?incoming[rootId]?.replyIds,
-            }),
-            lastReplyAt: latestDateTime(
-              current[rootId]?.lastReplyAt,
-              incoming[rootId]?.lastReplyAt,
-            ),
-          ),
-      },
-    );
-  }
-
-  static List<ChannelPost> _applyReplySummaries(
-    List<ChannelPost> posts,
-    Map<String, ChannelReplySummary> summaries,
-  ) => List<ChannelPost>.unmodifiable(
-    posts.map((ChannelPost post) {
-      final ChannelReplySummary? summary = summaries[post.id];
-      if (summary == null) return post;
-      final int observedCount = summary.replyIds.length;
-      return post.withThreadSummary(
-        replyCount: post.replyCount > observedCount
-            ? post.replyCount
-            : observedCount,
-        lastReplyAt: latestDateTime(post.lastReplyAt, summary.lastReplyAt),
-      );
-    }),
-  );
 }
