@@ -65,7 +65,7 @@ final class PostAttachment {
       mimeType.toLowerCase().startsWith('image/') || (width > 0 && height > 0);
 }
 
-/// Shared message entity used by channel, thread, and followed-thread slices.
+/// Shared message entity used by channel and thread scenarios.
 final class Post {
   const Post({
     required this.id,

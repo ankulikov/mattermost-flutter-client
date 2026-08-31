@@ -137,7 +137,7 @@ API-вызовом до времени, зафиксированного пер�
 
 ## Профили и аватары пользователей
 
-Запросы профилей по ID используют отдельный DB-first cache в `users` slice.
+Запросы профилей по ID используют DB-first cache внутри `UserRepository`.
 Таблица хранит scope активного server/account, user id, имя, фамилию, логин,
 nickname, должность, email, версию изображения и время истечения. Scope включает
 URL сервера и ID вошедшего пользователя,
@@ -173,7 +173,7 @@ User DTO сохраняет `last_picture_update`; для bot-аккаунта �
 поста. Само изображение загружается авторизованным
 `GET /users/{user_id}/image?_=<version>` только через `MattermostApi`.
 
-`users` slice владеет временным cache изображений на базе
+`UserRepository` владеет временным cache изображений на базе
 `flutter_cache_manager`. Ключ содержит server/account id, user id и версию
 изображения. Поэтому сообщения одного автора разделяют один cache entry и один
 in-flight запрос, а смена аватара создает новый ключ без ручной инвалидации.
@@ -224,7 +224,7 @@ consumer этого API; будущие замены наподобие `@userna
 
 Schema version 7 удаляет прежние 11 таблиц сайдбара, постов, реакций, порядка и
 sync metadata. Schema version 8 добавляет `cached_user_profiles`, владельцем
-которой является `users` slice. Schema version 9 добавляет поля полной карточки
+которой является `UserRepository`. Schema version 9 добавляет поля полной карточки
 и версию аватара. Schema version 10 добавляет составной индекс по account id и
 регистронезависимому username. Записи разделены по account/server id и живут 7 дней;
 сообщения, треды, сайдбар и sync metadata по-прежнему не сохраняются.
