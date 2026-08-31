@@ -20,24 +20,32 @@ Drift не сохраняются.
 ## Общая схема
 
 ```text
-Widgets / adaptive layouts
-        │ watch / commands
-        ▼
-Riverpod controllers
-        │ volatile page/thread state
-        ▼
-Domain repositories
-        ▼
-MattermostApi
-        ▼
+app ── bootstrap, router, theme and localization
+ │
+ ├──────────────────────────────────────► ui
+ │                                         │ widgets, controllers and
+ │                                         │ volatile view state
+ │                                         ▼
+ │                               domain repository contracts
+ │                                         ▲
+ │                                         │ domain entities and policies
+ └── data/providers ──────────────────────┘
+       │ constructs implementations
+       ▼
+data ── raw MattermostApi/DTO, Drift, cache, secure storage,
+        platform adapters and repository implementations
+       ▼
 Mattermost API v4
 
-AppDatabase (Drift) ── tenant-scoped user profile cache
+AppDatabase (Drift) ── account-scoped user-profile cache
 ```
 
-Presentation не вызывает HTTP, WebSocket, DAO или secure storage напрямую.
-Контроллер обращается к domain-контракту репозитория; data-реализация получает
-DTO через `MattermostApi` и явно преобразует их в domain entities.
+Направление продуктовых зависимостей — `ui → domain ← data`: presentation не
+вызывает HTTP, WebSocket, DAO или secure storage напрямую. Контроллер обращается
+к domain-контракту репозитория; data-реализация получает DTO через
+`MattermostApi` и явно преобразует их в domain entities. Единственное
+разрешённое пересечение UI и data — публичные handles в `data/providers`,
+возвращающие domain-типы.
 
 Provider wiring инфраструктуры и repository contracts находится в
 `data/providers`, а UI projections — в `ui/ui_providers.dart`. UI-классы
@@ -46,6 +54,22 @@ Provider wiring инфраструктуры и repository contracts наход�
 при восстановлении сессии или использует только что введенный PAT, а logout и
 смена сервера закрывают Dio вместе с его connection pool. Feature-repository
 получают уже аутентифицированный API и не имеют доступа к токену.
+
+### Проверяемые границы импортов
+
+`import_rules` превращает основные границы этой схемы в проверку анализатора:
+
+- `domain` не импортирует `data`, `ui`, `app`, Flutter, Riverpod, Dio или Drift;
+- `data` не импортирует `ui`, а `data/api` не импортирует domain;
+- `ui` может импортировать только публичный мост `data/providers` и не может
+  обращаться к data implementation напрямую;
+- `ui/core` не зависит от Mattermost domain/data и остаётся generic UI слоем;
+- `app` может использовать `data/providers`, но не data infrastructure.
+
+Правила находятся в `analysis_options.yaml` и обязательны для `dart analyze`
+(запускайте его в CI наряду с обычным `flutter analyze`). Плагин требует Dart
+3.10+ (Flutter 3.38+); после изменения блока `plugins` перезапустите Dart
+Analysis Server в IDE.
 
 ## Модули и зависимости
 

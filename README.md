@@ -38,7 +38,6 @@ when needed, must match the resolved `sqlite3` and `drift` package versions.
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
-- [Target layered architecture and migration plan](docs/TARGET_ARCHITECTURE.md)
 - [Agent and contributor rules](AGENTS.md)
 
 ## Useful commands
