@@ -46,7 +46,6 @@ when needed, must match the resolved `sqlite3` and `drift` package versions.
 flutter run -d chrome
 flutter run -d macos
 flutter test
-dart run tool/check_import_boundaries.dart
 flutter analyze
 dart format --output=none --set-exit-if-changed lib test tool
 flutter pub run build_runner watch
