@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/logging/auth_diagnostics.dart';
+import 'package:mattermost_flutter/src/data/logging/auth_diagnostics.dart';
 
 void main() {
   test('logs SSO URL routing metadata without query or fragment values', () {

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_server_discovery.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_server_discovery.dart';
 
 void main() {
   test('loads the legacy client config without authorization', () async {

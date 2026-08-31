@@ -1,27 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/server_sso_discovery.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_browser_gateway.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
+import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
+import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
   test(
     'discovers SSO then validates its transient browser session token',
     () async {
       final _RecordingAuthRepository repository = _RecordingAuthRepository();
-      final _BrowserGateway browser = _BrowserGateway(
-        const SsoBrowserSuccess('session-token'),
-      );
-      final ProviderContainer container = _container(
-        repository: repository,
-        discovery: const _Discovery(),
-        browser: browser,
-      );
+      final ProviderContainer container = _container(repository: repository);
       addTearDown(container.dispose);
 
       final AuthController controller = container.read(
@@ -54,10 +45,8 @@ void main() {
     'returns to method chooser without an error when browser is cancelled',
     () async {
       final ProviderContainer container = _container(
-        repository: _RecordingAuthRepository(),
-        discovery: const _Discovery(),
-        browser: _BrowserGateway(
-          const SsoBrowserFailure(SsoBrowserFailureKind.cancelled),
+        repository: _RecordingAuthRepository(
+          ssoFailure: const AuthFailure(AuthFailureKind.cancelled),
         ),
       );
       addTearDown(container.dispose);
@@ -78,13 +67,7 @@ void main() {
     'validates a user-entered token without retaining it in state',
     () async {
       final _RecordingAuthRepository repository = _RecordingAuthRepository();
-      final ProviderContainer container = _container(
-        repository: repository,
-        discovery: const _Discovery(),
-        browser: _BrowserGateway(
-          const SsoBrowserFailure(SsoBrowserFailureKind.cancelled),
-        ),
-      );
+      final ProviderContainer container = _container(repository: repository);
       addTearDown(container.dispose);
 
       final AuthController controller = container.read(
@@ -108,14 +91,10 @@ void main() {
   );
 
   test('offers token login when the server exposes no SSO methods', () async {
-    final _RecordingAuthRepository repository = _RecordingAuthRepository();
-    final ProviderContainer container = _container(
-      repository: repository,
-      discovery: const _EmptyDiscovery(),
-      browser: _BrowserGateway(
-        const SsoBrowserFailure(SsoBrowserFailureKind.cancelled),
-      ),
+    final _RecordingAuthRepository repository = _RecordingAuthRepository(
+      options: const <SsoOption>[],
     );
+    final ProviderContainer container = _container(repository: repository);
     addTearDown(container.dispose);
 
     final AuthController controller = container.read(
@@ -134,10 +113,6 @@ void main() {
       repository: _RecordingAuthRepository(
         restoreFailure: const AuthFailure(AuthFailureKind.sessionExpired),
       ),
-      discovery: const _Discovery(),
-      browser: _BrowserGateway(
-        const SsoBrowserFailure(SsoBrowserFailureKind.cancelled),
-      ),
     );
     addTearDown(container.dispose);
 
@@ -149,53 +124,23 @@ void main() {
   });
 }
 
-ProviderContainer _container({
-  required AuthRepository repository,
-  required ServerSsoDiscovery discovery,
-  required SsoBrowserGateway browser,
-}) => ProviderContainer(
-  overrides: [
-    authRepositoryProvider.overrideWithValue(repository),
-    serverSsoDiscoveryProvider.overrideWithValue(discovery),
-    ssoBrowserGatewayProvider.overrideWithValue(browser),
-  ],
-);
-
-final class _Discovery implements ServerSsoDiscovery {
-  const _Discovery();
-
-  @override
-  Future<List<SsoOption>> discover(Uri serverUrl) async => const <SsoOption>[
-    SsoOption(provider: SsoProvider.saml, displayLabel: 'Company SSO'),
-  ];
-}
-
-final class _BrowserGateway implements SsoBrowserGateway {
-  const _BrowserGateway(this.result);
-
-  final SsoBrowserResult result;
-
-  @override
-  Future<SsoBrowserResult> authenticate({
-    required Uri serverUrl,
-    required SsoProvider provider,
-  }) async => result;
-
-  @override
-  Future<void> cancel() async {}
-}
-
-final class _EmptyDiscovery implements ServerSsoDiscovery {
-  const _EmptyDiscovery();
-
-  @override
-  Future<List<SsoOption>> discover(Uri serverUrl) async => const <SsoOption>[];
-}
+ProviderContainer _container({required AuthRepository repository}) =>
+    ProviderContainer(
+      overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    );
 
 final class _RecordingAuthRepository implements AuthRepository {
-  _RecordingAuthRepository({this.restoreFailure});
+  _RecordingAuthRepository({
+    this.restoreFailure,
+    this.ssoFailure,
+    this.options = const <SsoOption>[
+      SsoOption(provider: SsoProvider.saml, displayLabel: 'Company SSO'),
+    ],
+  });
 
   final AuthFailure? restoreFailure;
+  final AuthFailure? ssoFailure;
+  final List<SsoOption> options;
   Uri? serverUrl;
   String? token;
 
@@ -208,6 +153,27 @@ final class _RecordingAuthRepository implements AuthRepository {
     this.token = token;
     return AuthSession(serverUrl: serverUrl, userId: 'user-1', username: 'ada');
   }
+
+  @override
+  Future<AuthSession> authenticateWithSso({
+    required Uri serverUrl,
+    required SsoProvider provider,
+  }) {
+    if (ssoFailure case final AuthFailure failure) {
+      return Future<AuthSession>.error(failure);
+    }
+    return authenticateWithSessionToken(
+      serverUrl: serverUrl,
+      token: 'session-token',
+    );
+  }
+
+  @override
+  Future<void> cancelSsoAuthentication() async {}
+
+  @override
+  Future<List<SsoOption>> discoverSsoOptions({required Uri serverUrl}) async =>
+      options;
 
   @override
   Future<AuthSession?> restoreSession() async {

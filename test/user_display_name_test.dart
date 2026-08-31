@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_display_name.dart';
+import 'package:mattermost_flutter/src/domain/policies/user_display_name.dart';
 
 void main() {
   test('uses one full-name, nickname, username, and id fallback policy', () {

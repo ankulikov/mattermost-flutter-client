@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/database/app_database.dart' as db;
+import 'package:mattermost_flutter/src/data/database/app_database.dart' as db;
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 
 void main() {

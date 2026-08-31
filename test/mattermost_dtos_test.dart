@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 
 void main() {
   test('decodes profile picture versions for people and bots', () {

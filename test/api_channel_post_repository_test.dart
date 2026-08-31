@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
-import 'package:mattermost_flutter/src/features/posts/data/api_channel_post_repository.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_post_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
+
+import 'support/fake_user_repository.dart';
 
 void main() {
   test(
@@ -17,16 +19,17 @@ void main() {
         username: 'current',
       );
       final _FakePostApi api = _FakePostApi();
-      final ApiChannelPostRepository repository = ApiChannelPostRepository(
+      final MattermostPostRepository repository = MattermostPostRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
+        users: FakeUserRepository(),
       );
 
       final ChannelPostPage latest = await repository.loadLatest(
         session: session,
         channelId: 'channel-1',
       );
-      expect(api.latestPerPage, ApiChannelPostRepository.pageSize);
+      expect(api.latestPerPage, MattermostPostRepository.pageSize);
       expect(latest.posts.map((post) => post.id), const <String>[
         'post-1',
         'post-2',
@@ -64,9 +67,10 @@ void main() {
         username: 'current',
       );
       final _FakePostApi api = _FakePostApi(hasReplyOnlyLatest: true);
-      final ApiChannelPostRepository repository = ApiChannelPostRepository(
+      final MattermostPostRepository repository = MattermostPostRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
+        users: FakeUserRepository(),
       );
 
       final ChannelPostPage latest = await repository.loadLatest(

@@ -2,14 +2,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
-import 'package:mattermost_flutter/src/features/messages/presentation/message_primitives.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_mention.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_mention_repository.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_profile.dart';
-import 'package:mattermost_flutter/src/features/users/presentation/user_profile_card.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
+import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
 void main() {
   test('extracts unique user mentions without treating emails as mentions', () {
@@ -51,8 +50,8 @@ void main() {
       ProviderScope(
         overrides: [
           authSessionProvider.overrideWithValue(session),
-          userMentionRepositoryProvider.overrideWithValue(
-            const _FakeMentionRepository(<UserMention>[mention]),
+          userMentionsProvider(userMentionLookupKey(message)).overrideWithValue(
+            const AsyncValue<List<UserMention>>.data(<UserMention>[mention]),
           ),
           userProfileProvider.overrideWith(
             (Ref ref, String userId) async => profile,
@@ -86,8 +85,11 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          userMentionRepositoryProvider.overrideWithValue(
-            const _FakeMentionRepository(<UserMention>[], fails: true),
+          userMentionsProvider(userMentionLookupKey(message)).overrideWithValue(
+            AsyncValue<List<UserMention>>.error(
+              StateError('offline'),
+              StackTrace.empty,
+            ),
           ),
         ],
         child: MaterialApp(home: Scaffold(body: _messageBody(message))),
@@ -148,8 +150,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          userMentionRepositoryProvider.overrideWithValue(
-            const _FakeMentionRepository(<UserMention>[
+          userMentionsProvider(userMentionLookupKey(message)).overrideWithValue(
+            const AsyncValue<List<UserMention>>.data(<UserMention>[
               UserMention(
                 userId: 'ada-id',
                 username: 'ada',
@@ -190,16 +192,3 @@ MessageBody _messageBody(String message) => MessageBody(
     message: message,
   ),
 );
-
-final class _FakeMentionRepository implements UserMentionRepository {
-  const _FakeMentionRepository(this.mentions, {this.fails = false});
-
-  final List<UserMention> mentions;
-  final bool fails;
-
-  @override
-  Future<List<UserMention>> resolveUsernames(List<String> usernames) async {
-    if (fails) throw StateError('offline');
-    return mentions;
-  }
-}

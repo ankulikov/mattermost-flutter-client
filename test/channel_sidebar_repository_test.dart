@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
-import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_channel_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+
+import 'support/fake_user_repository.dart';
 
 void main() {
   test(
@@ -11,8 +13,8 @@ void main() {
     () async {
       final Uri serverUrl = Uri.parse('https://chat.example.com');
       final _FakeMattermostApi api = _FakeMattermostApi();
-      final ApiChannelSidebarRepository repository =
-          ApiChannelSidebarRepository(api: api);
+      final MattermostChannelRepository repository =
+          MattermostChannelRepository(api: api, users: FakeUserRepository());
       final AuthSession session = AuthSession(
         serverUrl: serverUrl,
         userId: 'me',
@@ -32,8 +34,6 @@ void main() {
         snapshot.sections.first.channels.first.displayName,
         'Ada Lovelace',
       );
-      expect(snapshot.isRefreshing, isFalse);
-      expect(snapshot.refreshFailed, isFalse);
     },
   );
 }

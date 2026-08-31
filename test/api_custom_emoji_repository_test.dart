@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/features/emojis/data/api_custom_emoji_repository.dart';
-import 'package:mattermost_flutter/src/features/emojis/data/custom_emoji_cache.dart';
-import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/cache/custom_emoji_cache.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_custom_emoji_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 
 void main() {
   test(

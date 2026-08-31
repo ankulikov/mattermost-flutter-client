@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as md;
-import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
-import 'package:mattermost_flutter/src/core/ui/mattermost_markdown_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
+import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown_strings.dart';
 
 void main() {
   test('rewrites Mattermost image dimensions outside code only', () {

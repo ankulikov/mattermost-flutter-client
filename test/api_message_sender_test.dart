@@ -1,17 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/data/api_message_sender.dart';
-import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_post_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+
+import 'support/fake_user_repository.dart';
 
 void main() {
   test('sends a reply and maps the authoritative response', () async {
     final _CreatePostApi api = _CreatePostApi();
-    final ApiMessageSender sender = ApiMessageSender(
+    final MattermostPostRepository sender = MattermostPostRepository(
       api: api,
       messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
     );
     final AuthSession session = AuthSession(
       serverUrl: Uri.parse('https://chat.example.com'),

@@ -1,15 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/reaction_repository.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
-import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
+import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
 
 void main() {
   test('adds and removes the current user reaction optimistically', () async {
-    final _ReactionRepository reactions = _ReactionRepository();
+    final _PostRepository posts = _PostRepository();
     final Provider<AuthSession?> sessionProvider = Provider<AuthSession?>((_) {
       return AuthSession(
         serverUrl: Uri.parse('https://chat.example.com'),
@@ -17,13 +14,9 @@ void main() {
         username: 'current',
       );
     });
-    final Provider<ChannelPostRepository> postsProvider =
-        Provider<ChannelPostRepository>((_) => const _PostRepository());
-    final Provider<MessageSender> senderProvider = Provider<MessageSender>(
-      (_) => _MessageSender(),
+    final Provider<PostRepository> postsProvider = Provider<PostRepository>(
+      (_) => posts,
     );
-    final Provider<ReactionRepository> reactionsProvider =
-        Provider<ReactionRepository>((_) => reactions);
     final AsyncNotifierProvider<ChannelPostsController, ChannelPostsViewState>
     controllerProvider =
         AsyncNotifierProvider<ChannelPostsController, ChannelPostsViewState>(
@@ -31,8 +24,6 @@ void main() {
             'channel-1',
             sessionProvider,
             postsProvider,
-            senderProvider,
-            reactionsProvider,
           ),
         );
     final ProviderContainer container = ProviderContainer();
@@ -58,7 +49,7 @@ void main() {
         .single;
     expect(reaction.count, 3);
     expect(reaction.reactedByCurrentUser, isTrue);
-    expect(reactions.added, <String>['post-1:party_parrot']);
+    expect(posts.added, <String>['post-1:party_parrot']);
 
     expect(
       await controller.toggleReaction(
@@ -76,9 +67,9 @@ void main() {
         .single;
     expect(reaction.count, 2);
     expect(reaction.reactedByCurrentUser, isFalse);
-    expect(reactions.removed, <String>['post-1:party_parrot']);
+    expect(posts.removed, <String>['post-1:party_parrot']);
 
-    reactions.failAdd = true;
+    posts.failAdd = true;
     expect(
       await controller.toggleReaction(
         postId: 'post-1',
@@ -98,8 +89,10 @@ void main() {
   });
 }
 
-final class _PostRepository implements ChannelPostRepository {
-  const _PostRepository();
+final class _PostRepository extends PostRepository {
+  final List<String> added = <String>[];
+  final List<String> removed = <String>[];
+  bool failAdd = false;
 
   @override
   Future<ChannelPostPage> loadLatest({
@@ -130,15 +123,9 @@ final class _PostRepository implements ChannelPostRepository {
     required String channelId,
     required String beforePostId,
   }) async => const ChannelPostPage();
-}
-
-final class _ReactionRepository implements ReactionRepository {
-  final List<String> added = <String>[];
-  final List<String> removed = <String>[];
-  bool failAdd = false;
 
   @override
-  Future<void> add({
+  Future<void> addReaction({
     required AuthSession session,
     required String postId,
     required String emojiName,
@@ -148,20 +135,9 @@ final class _ReactionRepository implements ReactionRepository {
   }
 
   @override
-  Future<void> remove({
+  Future<void> removeReaction({
     required AuthSession session,
     required String postId,
     required String emojiName,
   }) async => removed.add('$postId:$emojiName');
-}
-
-final class _MessageSender implements MessageSender {
-  @override
-  Future<ChannelPost> sendText({
-    required AuthSession session,
-    required String channelId,
-    required String message,
-    required String pendingPostId,
-    String rootPostId = '',
-  }) => throw UnimplementedError();
 }

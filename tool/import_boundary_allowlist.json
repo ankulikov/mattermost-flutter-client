@@ -1,0 +1,10 @@
+{
+  "legacySourcePrefixes": [
+    {
+      "prefix": "lib/src/core/",
+      "removalStage": 11,
+      "reason": "Infrastructure is moved incrementally with forwarding exports."
+    }
+  ],
+  "exceptions": []
+}

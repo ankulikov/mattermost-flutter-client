@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 
 void main() {
   test('carries active custom emoji metadata into the message snapshot', () {
@@ -35,8 +36,16 @@ void main() {
     final ChannelPost mapped = const MattermostMessageMapper()
         .map(
           posts: const <MattermostPostDto>[post],
-          users: const <MattermostUserDto>[
-            MattermostUserDto(id: 'ada', username: 'ada'),
+          users: const <UserSummary>[
+            UserSummary(
+              id: 'ada',
+              username: 'ada',
+              firstName: '',
+              lastName: '',
+              nickname: '',
+              position: '',
+              email: '',
+            ),
           ],
           currentUserId: 'ada',
         )
@@ -101,8 +110,16 @@ void main() {
     final ChannelPost mapped = const MattermostMessageMapper()
         .map(
           posts: const <MattermostPostDto>[post],
-          users: const <MattermostUserDto>[
-            MattermostUserDto(id: 'ada', username: 'ada'),
+          users: const <UserSummary>[
+            UserSummary(
+              id: 'ada',
+              username: 'ada',
+              firstName: '',
+              lastName: '',
+              nickname: '',
+              position: '',
+              email: '',
+            ),
           ],
           currentUserId: 'ada',
         )

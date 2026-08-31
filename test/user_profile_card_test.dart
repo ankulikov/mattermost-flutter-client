@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
-import 'package:mattermost_flutter/src/features/messages/presentation/message_primitives.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_profile.dart';
-import 'package:mattermost_flutter/src/features/users/presentation/user_profile_card.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
 void main() {
   setUpAll(() async => initializeDateFormatting('ru'));

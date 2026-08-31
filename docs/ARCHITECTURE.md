@@ -20,56 +20,80 @@ Drift не сохраняются.
 ## Общая схема
 
 ```text
-Widgets / adaptive layouts
-        │ watch / commands
-        ▼
-Riverpod controllers
-        │ volatile page/thread state
-        ▼
-Domain repositories
-        ▼
-MattermostApi
-        ▼
+app ── bootstrap, router, theme and localization
+ │
+ ├──────────────────────────────────────► ui
+ │                                         │ widgets, controllers and
+ │                                         │ volatile view state
+ │                                         ▼
+ │                               domain repository contracts
+ │                                         ▲
+ │                                         │ domain entities and policies
+ └── data/providers ──────────────────────┘
+       │ constructs implementations
+       ▼
+data ── raw MattermostApi/DTO, Drift, cache, secure storage,
+        platform adapters and repository implementations
+       ▼
 Mattermost API v4
 
-AppDatabase (Drift) ── tenant-scoped user profile cache
+AppDatabase (Drift) ── account-scoped user-profile cache
 ```
 
-Presentation не вызывает HTTP, WebSocket, DAO или secure storage напрямую.
-Контроллер обращается к domain-контракту репозитория; data-реализация получает
-DTO через `MattermostApi` и явно преобразует их в domain entities.
+Направление продуктовых зависимостей — `ui → domain ← data`: presentation не
+вызывает HTTP, WebSocket, DAO или secure storage напрямую. Контроллер обращается
+к domain-контракту репозитория; data-реализация получает DTO через
+`MattermostApi` и явно преобразует их в domain entities. Единственное
+разрешённое пересечение UI и data — публичные handles в `data/providers`,
+возвращающие domain-типы.
 
-Provider wiring находится в `app/di`: presentation-классы получают только
-domain-контракты через конструкторы. Auth-репозиторий владеет единственным
+Provider wiring инфраструктуры и repository contracts находится в
+`data/providers`, а UI projections — в `ui/ui_providers.dart`. UI-классы
+получают только domain-контракты через конструкторы. Auth-репозиторий владеет единственным
 закрываемым `MattermostApi` активного аккаунта. Он читает secure storage один раз
 при восстановлении сессии или использует только что введенный PAT, а logout и
 смена сервера закрывают Dio вместе с его connection pool. Feature-repository
 получают уже аутентифицированный API и не имеют доступа к токену.
 
+### Проверяемые границы импортов
+
+`import_rules` превращает основные границы этой схемы в проверку анализатора:
+
+- `domain` не импортирует `data`, `ui`, `app`, Flutter, Riverpod, Dio или Drift;
+- `data` не импортирует `ui`, а `data/api` не импортирует domain;
+- `ui` может импортировать только публичный мост `data/providers` и не может
+  обращаться к data implementation напрямую;
+- `ui/core` не зависит от Mattermost domain/data и остаётся generic UI слоем;
+- `app` может использовать `data/providers`, но не data infrastructure.
+
+Правила находятся в `analysis_options.yaml` и обязательны для `dart analyze`
+(запускайте его в CI наряду с обычным `flutter analyze`). Плагин требует Dart
+3.10+ (Flutter 3.38+); после изменения блока `plugins` перезапустите Dart
+Analysis Server в IDE.
+
 ## Модули и зависимости
 
-Продуктовый код организован вертикальными feature slices:
+Продуктовый код разделён по владельцам ответственности:
 
 ```text
-features/<feature>/
-  domain/        # entities and repository contracts
-  data/          # API implementations and DTO mappers
-  presentation/  # Riverpod state and widgets
+data/      # raw API/DTO, БД, cache, platform services и repository implementations
+domain/    # entities, policies, use cases и repository contracts
+ui/        # controller/view state и widgets, сгруппированные по UI-сценарию
 ```
 
 Зависимости направлены внутрь:
 
 ```text
-presentation -> domain <- data -> core infrastructure
+ui -> domain <- data
 ```
 
 Domain не импортирует Flutter, Riverpod, Dio, Drift или API DTO. Все REST-вызовы
-проходят через `MattermostApi`; Dio создается только в core API wiring.
+проходят через `MattermostApi`; Dio создается только в data API wiring.
 
-Общая message entity и DTO mapping находятся в публичном `messages` slice.
-Posts и threads не импортируют data/presentation internals друг друга. Единая
-domain policy выбора display name находится в `users/domain`; avatar initials и
-малые author/time/Markdown primitives переиспользуются всеми message surfaces.
+Общие модели сообщений и их DTO mapping находятся в root `domain` и `data`.
+Posts и threads не импортируют internals друг друга. Единая domain policy выбора
+display name находится в `domain/policies`; avatar initials находятся в
+`ui/core`, а author/time/Markdown primitives — в `ui/messages`.
 
 ## Посты и пагинация
 
@@ -137,7 +161,7 @@ API-вызовом до времени, зафиксированного пер�
 
 ## Профили и аватары пользователей
 
-Запросы профилей по ID используют отдельный DB-first cache в `users` slice.
+Запросы профилей по ID используют DB-first cache внутри `UserRepository`.
 Таблица хранит scope активного server/account, user id, имя, фамилию, логин,
 nickname, должность, email, версию изображения и время истечения. Scope включает
 URL сервера и ID вошедшего пользователя,
@@ -173,7 +197,7 @@ User DTO сохраняет `last_picture_update`; для bot-аккаунта �
 поста. Само изображение загружается авторизованным
 `GET /users/{user_id}/image?_=<version>` только через `MattermostApi`.
 
-`users` slice владеет временным cache изображений на базе
+`UserRepository` владеет временным cache изображений на базе
 `flutter_cache_manager`. Ключ содержит server/account id, user id и версию
 изображения. Поэтому сообщения одного автора разделяют один cache entry и один
 in-flight запрос, а смена аватара создает новый ключ без ручной инвалидации.
@@ -224,7 +248,7 @@ consumer этого API; будущие замены наподобие `@userna
 
 Schema version 7 удаляет прежние 11 таблиц сайдбара, постов, реакций, порядка и
 sync metadata. Schema version 8 добавляет `cached_user_profiles`, владельцем
-которой является `users` slice. Schema version 9 добавляет поля полной карточки
+которой является `UserRepository`. Schema version 9 добавляет поля полной карточки
 и версию аватара. Schema version 10 добавляет составной индекс по account id и
 регистронезависимому username. Записи разделены по account/server id и живут 7 дней;
 сообщения, треды, сайдбар и sync metadata по-прежнему не сохраняются.

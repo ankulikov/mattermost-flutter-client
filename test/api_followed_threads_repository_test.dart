@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
-import 'package:mattermost_flutter/src/features/threads/data/api_followed_threads_repository.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_thread_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/thread.dart';
+
+import 'support/fake_user_repository.dart';
 
 void main() {
   test(
@@ -12,13 +14,14 @@ void main() {
     () async {
       final Uri serverUrl = Uri.parse('https://chat.example.com');
       final _ThreadsApi api = _ThreadsApi();
-      final ApiFollowedThreadsRepository repository =
-          ApiFollowedThreadsRepository(
-            api: api,
-            messageMapper: const MattermostMessageMapper(),
-          );
+      final FakeUserRepository users = FakeUserRepository();
+      final MattermostThreadRepository repository = MattermostThreadRepository(
+        api: api,
+        messageMapper: const MattermostMessageMapper(),
+        users: users,
+      );
 
-      final FollowedThreadsPage page = await repository.loadPage(
+      final FollowedThreadsPage page = await repository.loadFollowed(
         session: AuthSession(
           serverUrl: serverUrl,
           userId: 'me',
@@ -32,7 +35,7 @@ void main() {
       expect(api.perPage, 60);
       expect(api.before, 'older-root');
       expect(api.extended, isTrue);
-      expect(api.userIdBatches, <List<String>>[
+      expect(users.requestedIdBatches, <List<String>>[
         <String>['missing-author'],
       ]);
       expect(page.total, 2);

@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/features/messages/presentation/message_composer.dart';
-import 'package:mattermost_flutter/src/features/messages/presentation/message_composer_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
 
 void main() {
   testWidgets('keeps a failed draft and reuses its pending post id', (

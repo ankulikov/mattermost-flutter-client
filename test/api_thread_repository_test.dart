@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
-import 'package:mattermost_flutter/src/features/threads/data/api_thread_repository.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_thread_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
+
+import 'support/fake_user_repository.dart';
 
 void main() {
   test(
@@ -17,9 +19,10 @@ void main() {
         username: 'current',
       );
       final _ThreadApi api = _ThreadApi();
-      final ApiThreadRepository repository = ApiThreadRepository(
+      final MattermostThreadRepository repository = MattermostThreadRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
+        users: FakeUserRepository(),
         now: () => DateTime.fromMillisecondsSinceEpoch(9999),
       );
 
@@ -53,9 +56,10 @@ void main() {
       username: 'current',
     );
     final _ThreadApi api = _ThreadApi(deletedOnly: true);
-    final ApiThreadRepository repository = ApiThreadRepository(
+    final MattermostThreadRepository repository = MattermostThreadRepository(
       api: api,
       messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
     );
 
     final MessageThread thread = await repository.load(
@@ -72,9 +76,10 @@ void main() {
 
   test('marks the thread read at the supplied load timestamp', () async {
     final _ThreadApi api = _ThreadApi();
-    final ApiThreadRepository repository = ApiThreadRepository(
+    final MattermostThreadRepository repository = MattermostThreadRepository(
       api: api,
       messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
     );
     final AuthSession session = AuthSession(
       serverUrl: Uri.parse('https://chat.example.com'),
@@ -99,9 +104,10 @@ void main() {
     'loads every page for a thread longer than the former safety cap',
     () async {
       final _LongThreadApi api = _LongThreadApi(pageCount: 22);
-      final ApiThreadRepository repository = ApiThreadRepository(
+      final MattermostThreadRepository repository = MattermostThreadRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
+        users: FakeUserRepository(),
       );
 
       final MessageThread thread = await repository.load(
