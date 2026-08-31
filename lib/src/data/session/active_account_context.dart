@@ -29,13 +29,15 @@ final class ActiveAccountContext implements ActiveMattermostApi {
     _onChanged?.call();
   }
 
-  void deactivate() {
+  void deactivate() => _clear(notify: true);
+
+  void dispose() => _clear(notify: false);
+
+  void _clear({required bool notify}) {
     final MattermostApiClient? previous = _client;
     _client = null;
     _session = null;
     previous?.close();
-    _onChanged?.call();
+    if (notify) _onChanged?.call();
   }
-
-  void dispose() => deactivate();
 }
