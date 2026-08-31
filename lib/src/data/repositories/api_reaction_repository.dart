@@ -1,6 +1,6 @@
-import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/reaction_repository.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/repositories/reaction_repository.dart';
 
 final class ApiReactionRepository implements ReactionRepository {
   const ApiReactionRepository({required MattermostApi api}) : _api = api;

@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_repository.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
-import 'package:mattermost_flutter/src/features/bootstrap/presentation/bootstrap_page.dart';
-import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
-import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar_repository.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/followed_threads_repository.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
+import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
+import 'package:mattermost_flutter/src/domain/models/thread.dart';
+import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/followed_threads_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/message_sender.dart';
+import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
+import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
   testWidgets('uses a drawer on compact screens', (WidgetTester tester) async {

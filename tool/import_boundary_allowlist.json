@@ -1,19 +1,9 @@
 {
   "legacySourcePrefixes": [
     {
-      "prefix": "lib/src/features/",
-      "removalStage": 11,
-      "reason": "Feature-owned layers are migrated aggregate by aggregate."
-    },
-    {
       "prefix": "lib/src/core/",
       "removalStage": 11,
       "reason": "Infrastructure is moved incrementally with forwarding exports."
-    },
-    {
-      "prefix": "lib/src/app/di/",
-      "removalStage": 11,
-      "reason": "The legacy composition root is replaced in stage 4."
     }
   ],
   "exceptions": []

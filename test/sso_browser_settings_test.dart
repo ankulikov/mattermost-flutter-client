@@ -1,6 +1,6 @@
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/features/auth/data/in_app_webview_sso_browser_gateway.dart';
+import 'package:mattermost_flutter/src/data/platform/in_app_webview_sso_browser_gateway.dart';
 
 void main() {
   test(

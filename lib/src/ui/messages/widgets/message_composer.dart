@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:mattermost_flutter/src/features/messages/presentation/message_composer_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 
 typedef SubmitMessage =
     Future<void> Function(String message, String pendingPostId);

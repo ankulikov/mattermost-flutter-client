@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/features/auth/data/sso_browser_policy.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
+import 'package:mattermost_flutter/src/data/platform/sso_browser_policy.dart';
+import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 
 void main() {
   group('SSO start URL', () {

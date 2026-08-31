@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/normalize_server_url.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
+import 'package:mattermost_flutter/src/domain/policies/normalize_server_url.dart';
 
 void main() {
   const NormalizeServerUrl normalize = NormalizeServerUrl();

@@ -1,6 +1,9 @@
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/page.dart';
 
+export '../models/page.dart';
+export '../models/post.dart';
+
 /// Transitional contract for loading pages in the channel-post scenario.
 ///
 /// It remains separate from send and reaction contracts until the post

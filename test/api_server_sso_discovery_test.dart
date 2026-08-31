@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_server_discovery.dart';
-import 'package:mattermost_flutter/src/features/auth/data/api_server_sso_discovery.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/sso_provider.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_server_discovery.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
+import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 
 void main() {
   test('maps only SSO methods enabled by the server', () async {

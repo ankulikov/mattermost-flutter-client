@@ -1,6 +1,6 @@
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_display_name.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/policies/user_display_name.dart';
 
 SidebarTeam mapTeam(MattermostTeamDto dto) => SidebarTeam(
   id: _required(dto.id, 'team.id'),

@@ -6,7 +6,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:highlight/highlight.dart' as syntax;
 import 'package:markdown/markdown.dart' as md;
-import 'package:mattermost_flutter/src/core/ui/mattermost_markdown_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown_strings.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 typedef MattermostLinkLauncher = Future<bool> Function(Uri uri);

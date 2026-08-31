@@ -1,4 +1,4 @@
-import 'package:mattermost_flutter/src/features/users/domain/user_profile.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 
 abstract final class UserProfileStrings {
   static const String title = 'User profile';

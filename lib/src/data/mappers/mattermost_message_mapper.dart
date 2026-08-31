@@ -1,10 +1,10 @@
 import 'package:markdown/markdown.dart' as md;
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/policies/user_display_name.dart';
-import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message_mapper.dart';
+import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
 
 final class MattermostMessageMapper
     implements MessageMapper<MattermostPostDto, UserSummary> {

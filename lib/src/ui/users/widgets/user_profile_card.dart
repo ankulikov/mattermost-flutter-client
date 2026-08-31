@@ -2,11 +2,11 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/core/ui/avatar_initials.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_profile.dart';
-import 'package:mattermost_flutter/src/features/users/presentation/user_profile_strings.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
+import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
+import 'package:mattermost_flutter/src/ui/core/widgets/avatar_initials.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:mattermost_flutter/src/ui/users/user_profile_strings.dart';
 
 typedef OpenDirectMessage = Future<void> Function(UserProfile profile);
 

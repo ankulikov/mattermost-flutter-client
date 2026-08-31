@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
 
 final NotifierProvider<SelectedChannelController, SidebarChannel?>
 selectedChannelProvider =

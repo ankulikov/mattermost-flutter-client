@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
-import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
-import 'package:mattermost_flutter/src/features/messages/presentation/message_primitives.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
-import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_controller.dart';
-import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_strings.dart';
-import 'package:mattermost_flutter/src/features/threads/presentation/thread_pane.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/thread.dart';
+import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
+import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
+import 'package:mattermost_flutter/src/ui/threads/followed_threads_strings.dart';
+import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class FollowedThreadsPane extends ConsumerStatefulWidget {
   const FollowedThreadsPane({

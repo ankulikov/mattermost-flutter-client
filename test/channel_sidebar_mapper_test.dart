@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/features/channels/data/channel_sidebar_mapper.dart';
-import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
 
 void main() {
   test('uses category channel order and adds uncategorized dialogs', () {

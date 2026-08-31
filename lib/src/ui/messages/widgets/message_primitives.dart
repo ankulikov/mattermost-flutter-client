@@ -4,14 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:markdown/markdown.dart' as md;
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/core/ui/avatar_initials.dart';
-import 'package:mattermost_flutter/src/core/ui/mattermost_markdown.dart';
-import 'package:mattermost_flutter/src/features/emojis/domain/custom_emoji.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_avatar.dart';
-import 'package:mattermost_flutter/src/features/users/domain/user_mention.dart';
-import 'package:mattermost_flutter/src/features/users/presentation/user_profile_card.dart';
+import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
+import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
+import 'package:mattermost_flutter/src/ui/core/widgets/avatar_initials.dart';
+import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
 class MessageAvatar extends ConsumerWidget {
   const MessageAvatar({required this.author, this.radius = 19, super.key});

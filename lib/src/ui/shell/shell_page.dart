@@ -2,18 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/core/ui/app_breakpoints.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_controller.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/auth_strings.dart';
-import 'package:mattermost_flutter/src/features/auth/presentation/sso_login_dialog.dart';
-import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
-import 'package:mattermost_flutter/src/features/channels/presentation/channel_sidebar.dart';
-import 'package:mattermost_flutter/src/features/channels/presentation/selected_channel_controller.dart';
-import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_pane.dart';
-import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_strings.dart';
-import 'package:mattermost_flutter/src/features/threads/presentation/followed_threads_pane.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
+import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
+import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
+import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
+import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/posts/channel_posts_strings.dart';
+import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
+import 'package:mattermost_flutter/src/ui/threads/widgets/followed_threads_pane.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class BootstrapPage extends ConsumerStatefulWidget {
   const BootstrapPage({super.key});

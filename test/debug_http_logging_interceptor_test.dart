@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/debug_http_logging_interceptor.dart';
+import 'package:mattermost_flutter/src/data/api/debug_http_logging_interceptor.dart';
 
 void main() {
   test('logs request and response as formatted sanitized JSON', () async {

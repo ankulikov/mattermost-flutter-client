@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/followed_thread.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/followed_threads_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/thread.dart';
+import 'package:mattermost_flutter/src/domain/repositories/followed_threads_repository.dart';
 
 final class FollowedThreadsViewState {
   const FollowedThreadsViewState({

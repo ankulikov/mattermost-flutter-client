@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/features/attachments/domain/attachment_repository.dart';
-import 'package:mattermost_flutter/src/features/attachments/presentation/attachment_strings.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
+import 'package:mattermost_flutter/src/ui/messages/attachment_strings.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class MessageAttachments extends ConsumerWidget {
   const MessageAttachments({required this.attachments, super.key});

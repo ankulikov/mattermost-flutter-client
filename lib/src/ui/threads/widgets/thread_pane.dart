@@ -2,15 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/app/di/app_providers.dart';
-import 'package:mattermost_flutter/src/features/attachments/presentation/message_attachments.dart';
-import 'package:mattermost_flutter/src/features/channels/domain/channel_sidebar.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
-import 'package:mattermost_flutter/src/features/messages/presentation/message_composer.dart';
-import 'package:mattermost_flutter/src/features/messages/presentation/message_composer_strings.dart';
-import 'package:mattermost_flutter/src/features/messages/presentation/message_primitives.dart';
-import 'package:mattermost_flutter/src/features/threads/presentation/thread_controller.dart';
-import 'package:mattermost_flutter/src/features/threads/presentation/thread_strings.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_attachments.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
+import 'package:mattermost_flutter/src/ui/threads/thread_controller.dart';
+import 'package:mattermost_flutter/src/ui/threads/thread_strings.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class ThreadPane extends ConsumerStatefulWidget {
   const ThreadPane({

@@ -1,12 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/reaction_repository.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/message_thread.dart';
-import 'package:mattermost_flutter/src/features/threads/domain/thread_repository.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/repositories/message_sender.dart';
+import 'package:mattermost_flutter/src/domain/repositories/reaction_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 
 final class ThreadViewState {
   const ThreadViewState({

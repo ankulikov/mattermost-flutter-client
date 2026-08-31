@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:mattermost_flutter/src/domain/models/attachment.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 
+export '../models/attachment.dart';
+
 abstract interface class AttachmentRepository {
   Future<AttachmentContent> load({
     required String fileId,

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
-import 'package:mattermost_flutter/src/features/attachments/domain/attachment_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
 import 'package:path/path.dart' as p;
 
 final class SystemAttachmentFileSaver implements AttachmentFileSaver {

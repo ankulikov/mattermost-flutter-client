@@ -1,12 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/core/api/dto/mattermost_dtos.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/core/api/mattermost_client_factory.dart';
-import 'package:mattermost_flutter/src/features/auth/data/credential_store.dart';
-import 'package:mattermost_flutter/src/features/auth/data/mattermost_auth_repository.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_failure.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_client_factory.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
+import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 
 void main() {
   test(

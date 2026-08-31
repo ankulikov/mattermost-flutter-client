@@ -1,11 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/features/auth/domain/auth_session.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/message_sender.dart';
-import 'package:mattermost_flutter/src/features/messages/domain/reaction_repository.dart';
-import 'package:mattermost_flutter/src/features/posts/domain/channel_post_repository.dart';
-import 'package:mattermost_flutter/src/features/posts/presentation/channel_posts_controller.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/repositories/message_sender.dart';
+import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/reaction_repository.dart';
+import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
 
 void main() {
   test('adds and removes the current user reaction optimistically', () async {

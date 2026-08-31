@@ -39,8 +39,9 @@ Presentation не вызывает HTTP, WebSocket, DAO или secure storage н
 Контроллер обращается к domain-контракту репозитория; data-реализация получает
 DTO через `MattermostApi` и явно преобразует их в domain entities.
 
-Provider wiring находится в `app/di`: presentation-классы получают только
-domain-контракты через конструкторы. Auth-репозиторий владеет единственным
+Provider wiring инфраструктуры и repository contracts находится в
+`data/providers`, а UI projections — в `ui/ui_providers.dart`. UI-классы
+получают только domain-контракты через конструкторы. Auth-репозиторий владеет единственным
 закрываемым `MattermostApi` активного аккаунта. Он читает secure storage один раз
 при восстановлении сессии или использует только что введенный PAT, а logout и
 смена сервера закрывают Dio вместе с его connection pool. Feature-repository
@@ -48,28 +49,27 @@ domain-контракты через конструкторы. Auth-репози
 
 ## Модули и зависимости
 
-Продуктовый код организован вертикальными feature slices:
+Продуктовый код разделён по владельцам ответственности:
 
 ```text
-features/<feature>/
-  domain/        # entities and repository contracts
-  data/          # API implementations and DTO mappers
-  presentation/  # Riverpod state and widgets
+data/      # raw API/DTO, БД, cache, platform services и repository implementations
+domain/    # entities, policies, use cases и repository contracts
+ui/        # controller/view state и widgets, сгруппированные по UI-сценарию
 ```
 
 Зависимости направлены внутрь:
 
 ```text
-presentation -> domain <- data -> core infrastructure
+ui -> domain <- data
 ```
 
 Domain не импортирует Flutter, Riverpod, Dio, Drift или API DTO. Все REST-вызовы
-проходят через `MattermostApi`; Dio создается только в core API wiring.
+проходят через `MattermostApi`; Dio создается только в data API wiring.
 
-Общая message entity и DTO mapping находятся в публичном `messages` slice.
-Posts и threads не импортируют data/presentation internals друг друга. Единая
-domain policy выбора display name находится в `users/domain`; avatar initials и
-малые author/time/Markdown primitives переиспользуются всеми message surfaces.
+Общие модели сообщений и их DTO mapping находятся в root `domain` и `data`.
+Posts и threads не импортируют internals друг друга. Единая domain policy выбора
+display name находится в `domain/policies`; avatar initials находятся в
+`ui/core`, а author/time/Markdown primitives — в `ui/messages`.
 
 ## Посты и пагинация
 

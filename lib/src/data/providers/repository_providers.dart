@@ -1,9 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/data/platform/in_app_webview_sso_browser_gateway.dart';
 import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.dart';
 import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_attachment_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_channel_post_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_channel_sidebar_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_custom_emoji_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_direct_channel_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_followed_threads_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_message_sender.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_reaction_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
+import 'package:mattermost_flutter/src/data/repositories/api_thread_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_user_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
@@ -19,16 +29,6 @@ import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart'
 import 'package:mattermost_flutter/src/domain/repositories/reaction_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
-import 'package:mattermost_flutter/src/features/attachments/data/api_attachment_repository.dart';
-import 'package:mattermost_flutter/src/features/channels/data/api_channel_sidebar_repository.dart';
-import 'package:mattermost_flutter/src/features/channels/data/api_direct_channel_repository.dart';
-import 'package:mattermost_flutter/src/features/emojis/data/api_custom_emoji_repository.dart';
-import 'package:mattermost_flutter/src/features/messages/data/api_message_sender.dart';
-import 'package:mattermost_flutter/src/features/messages/data/api_reaction_repository.dart';
-import 'package:mattermost_flutter/src/features/messages/data/mattermost_message_mapper.dart';
-import 'package:mattermost_flutter/src/features/posts/data/api_channel_post_repository.dart';
-import 'package:mattermost_flutter/src/features/threads/data/api_followed_threads_repository.dart';
-import 'package:mattermost_flutter/src/features/threads/data/api_thread_repository.dart';
 
 final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
     Provider<MattermostAuthRepository>((Ref ref) {
