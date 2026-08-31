@@ -1,6 +1,6 @@
-import 'package:markdown/markdown.dart' as md;
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/policies/user_display_name.dart';
@@ -117,4 +117,4 @@ List<PostReaction> _mapReactions(MattermostPostDto post, String currentUserId) {
       .toList(growable: false);
 }
 
-String _emojiLabel(String name) => md.emojis[name] ?? ':$name:';
+String _emojiLabel(String name) => mattermostSystemEmojis[name] ?? ':$name:';

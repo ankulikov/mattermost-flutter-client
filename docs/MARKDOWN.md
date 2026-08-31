@@ -26,7 +26,7 @@ guide.
 | Tables and column alignment | Yes | Width-constrained GFM tables with wrapping cells |
 | Inline `$LaTeX$` | Yes | `flutter_markdown_plus_latex` |
 | Fenced `latex` formulas | Yes | Custom block syntax plus `flutter_markdown_plus_latex` |
-| Unicode emoji and standard `:shortcode:` emoji | Yes | Unicode plus Dart Markdown `EmojiSyntax` |
+| Unicode emoji and standard `:shortcode:` emoji | Yes | Unicode plus a generated Mattermost emoji dictionary |
 | Custom `:emoji_name:` emoji | Yes | Post metadata plus authenticated, account-scoped image cache |
 | User `@username` mentions | Yes | Batched, account-scoped profile cache lookup and profile-card link |
 
@@ -51,6 +51,19 @@ avoids passing server-provided HTML through to a platform renderer.
 - Custom emoji keep their shortcode as an immediate loading/error fallback.
   Image bytes are cached separately from Markdown parsing and capped at 5000
   account-scoped objects.
+- The system shortcode dictionary is generated from Mattermost's pinned
+  `emoji.json`, including aliases newer than the GitHub dictionary used by
+  `package:markdown`. The JSON is used only by
+  `tool/generate_mattermost_system_emojis.dart`; it is never an application
+  asset. The committed generated output is
+  `lib/src/domain/models/mattermost_system_emojis.g.dart`.
+
+To update the dictionary after intentionally selecting a new Mattermost source
+revision, change the pinned URL in the generator and run:
+
+```sh
+dart run tool/generate_mattermost_system_emojis.dart
+```
 
 ## Dependencies
 

@@ -5,6 +5,37 @@ import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 
 void main() {
+  test('uses the Mattermost system dictionary for reaction labels', () {
+    const MattermostPostDto post = MattermostPostDto(
+      id: 'post-1',
+      userId: 'ada',
+      channelId: 'channel-1',
+      message: '',
+      metadata: MattermostPostMetadataDto(
+        reactions: <MattermostReactionDto>[
+          MattermostReactionDto(
+            userId: 'ada',
+            postId: 'post-1',
+            emojiName: 'large_green_circle',
+            createAt: 1,
+          ),
+        ],
+      ),
+    );
+
+    final ChannelPost mapped = const MattermostMessageMapper()
+        .map(
+          posts: const <MattermostPostDto>[post],
+          users: const <UserSummary>[],
+          currentUserId: 'ada',
+        )
+        .single;
+
+    expect(mapped.reactions.single.emoji, '🟢');
+    expect(mapped.reactions.single.emojiName, 'large_green_circle');
+    expect(mapped.reactions.single.reactedByCurrentUser, isTrue);
+  });
+
   test('carries active custom emoji metadata into the message snapshot', () {
     const MattermostPostDto post = MattermostPostDto(
       id: 'post-1',

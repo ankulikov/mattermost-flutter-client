@@ -2,11 +2,16 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:markdown/markdown.dart' as md;
+import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown_strings.dart';
 
 void main() {
+  test('uses Mattermost system emoji aliases generated from emoji.json', () {
+    expect(mattermostSystemEmojis['large_green_circle'], '🟢');
+    expect(mattermostSystemEmojis, isNot(contains('mattermost')));
+  });
+
   test('rewrites Mattermost image dimensions outside code only', () {
     const String source = '''
 ![fixed](https://example.com/image.png =50x76 "hover")
@@ -286,14 +291,15 @@ X_k = \sum_{n=0}^{N} x_n
       MaterialApp(
         home: Scaffold(
           body: MattermostMarkdown(
-            data: ':smile: :party_parrot:',
+            data: ':large_green_circle: :party_parrot:',
             inlineReplacements: <MattermostInlineReplacement>[
               MattermostInlineReplacement(
                 elementName: 'test-emoji',
                 pattern: r':([a-z0-9_+-]+):',
                 startCharacter: 0x3a,
-                shouldReplace: (String name) => !md.emojis.containsKey(name),
-                fallbackText: (String name) => md.emojis[name],
+                shouldReplace: (String name) =>
+                    !mattermostSystemEmojis.containsKey(name),
+                fallbackText: (String name) => mattermostSystemEmojis[name],
                 builder: (_, String name, _) => Text('custom=$name'),
               ),
             ],
@@ -304,7 +310,7 @@ X_k = \sum_{n=0}^{N} x_n
 
     final Finder inlineText = find.byWidgetPredicate((Widget widget) {
       if (widget case Text(textSpan: final InlineSpan span?)) {
-        return span.toPlainText().contains('😄') && _containsWidgetSpan(span);
+        return span.toPlainText().contains('🟢') && _containsWidgetSpan(span);
       }
       return false;
     });

@@ -6,6 +6,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:highlight/highlight.dart' as syntax;
 import 'package:markdown/markdown.dart' as md;
+import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown_strings.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -77,7 +78,7 @@ class MattermostMarkdown extends StatefulWidget {
       <md.InlineSyntax>[
         _MattermostChannelLinkSyntax(),
         _MattermostInlineLatexSyntax(),
-        md.EmojiSyntax(),
+        _MattermostEmojiSyntax(),
         ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
       ];
 }
@@ -302,6 +303,26 @@ final class _MattermostInlineReplacementSyntax extends md.InlineSyntax {
     final md.Element element = md.Element.empty(replacement.elementName);
     element.attributes['value'] = value;
     parser.addNode(element);
+    return true;
+  }
+}
+
+/// Converts the complete Mattermost system-shortcode vocabulary to Unicode.
+///
+/// This intentionally does not use [md.EmojiSyntax], whose GitHub-derived map
+/// can lag behind the system emoji list supported by Mattermost.
+final class _MattermostEmojiSyntax extends md.InlineSyntax {
+  _MattermostEmojiSyntax() : super(r':([a-z0-9_+-]+):');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final String alias = match[1]!;
+    final String? emoji = mattermostSystemEmojis[alias];
+    if (emoji == null) {
+      parser.advanceBy(1);
+      return false;
+    }
+    parser.addNode(md.Text(emoji));
     return true;
   }
 }

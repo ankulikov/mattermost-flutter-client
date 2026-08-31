@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
@@ -225,8 +225,9 @@ class MessageBody extends ConsumerWidget {
           elementName: 'custom-emoji',
           pattern: r':([a-z0-9_+-]+):',
           startCharacter: 0x3a,
-          shouldReplace: (String name) => !md.emojis.containsKey(name),
-          fallbackText: (String name) => md.emojis[name],
+          shouldReplace: (String name) =>
+              !mattermostSystemEmojis.containsKey(name),
+          fallbackText: (String name) => mattermostSystemEmojis[name],
           builder: (BuildContext context, String name, TextStyle style) {
             final CustomEmojiReference reference =
                 customEmojiByName[name] ?? CustomEmojiReference(name: name);

@@ -23,6 +23,7 @@ flutter create \
   .
 flutter pub get
 flutter pub run build_runner build
+dart run tool/generate_mattermost_system_emojis.dart
 flutter analyze
 flutter test
 ```
@@ -48,5 +49,6 @@ flutter run -d macos
 flutter test
 flutter analyze
 dart format --output=none --set-exit-if-changed lib test tool
+dart run tool/generate_mattermost_system_emojis.dart
 flutter pub run build_runner watch
 ```
