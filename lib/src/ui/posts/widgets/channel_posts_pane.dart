@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
@@ -12,6 +13,7 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_strings.dart';
+import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_strings.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
@@ -53,70 +55,85 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
       channelPostsProvider(channel.id),
     );
     final ChannelPostsViewState? viewState = posts.value;
-    final Widget channelPane = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        _ChannelHeader(
-          channel: channel,
-          isLoading: viewState?.isLoadingOlder == true,
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: posts.when(
-            loading: () => const _PostsLoading(),
-            error: (Object error, StackTrace stackTrace) => _PostsError(
-              onRetry: () =>
-                  ref.read(channelPostsProvider(channel.id).notifier).retry(),
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final bool showSideThread =
+            constraints.maxWidth >= AppBreakpoints.sideThread;
+        final Widget channelPane = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _ChannelHeader(
+              channel: channel,
+              isLoading: viewState?.isLoadingOlder == true,
             ),
-            data: (ChannelPostsViewState state) {
-              final List<ChannelPost> items = state.posts;
-              if (items.isEmpty && state.loadFailed) {
-                return _PostsError(
+            const Divider(height: 1),
+            Expanded(
+              child: posts.when(
+                loading: () => const _PostsLoading(),
+                error: (Object error, StackTrace stackTrace) => _PostsError(
                   onRetry: () => ref
                       .read(channelPostsProvider(channel.id).notifier)
                       .retry(),
-                );
-              }
-              if (items.isEmpty && !state.hasOlder) {
-                return const Center(child: Text(ChannelPostsStrings.empty));
-              }
-              return _PostList(
-                channelId: channel.id,
-                serverUrl: serverUrl,
-                posts: items,
-                isLoadingOlder: state.isLoadingOlder,
-                hasOlder: state.hasOlder,
-                autoLoadOlder: !state.loadFailed,
-                onLoadOlder: () => ref
-                    .read(channelPostsProvider(channel.id).notifier)
-                    .loadOlder(),
-                onOpenThread: (ChannelPost post) {
-                  setState(() => _selectedRootPostId = post.id);
+                ),
+                data: (ChannelPostsViewState state) {
+                  final List<ChannelPost> items = state.posts;
+                  if (items.isEmpty && state.loadFailed) {
+                    return _PostsError(
+                      onRetry: () => ref
+                          .read(channelPostsProvider(channel.id).notifier)
+                          .retry(),
+                    );
+                  }
+                  if (items.isEmpty && !state.hasOlder) {
+                    return const Center(child: Text(ChannelPostsStrings.empty));
+                  }
+                  return _PostList(
+                    channelId: channel.id,
+                    serverUrl: serverUrl,
+                    posts: items,
+                    isLoadingOlder: state.isLoadingOlder,
+                    hasOlder: state.hasOlder,
+                    autoLoadOlder: !state.loadFailed,
+                    onLoadOlder: () => ref
+                        .read(channelPostsProvider(channel.id).notifier)
+                        .loadOlder(),
+                    onOpenThread: (ChannelPost post) {
+                      if (showSideThread) {
+                        setState(() => _selectedRootPostId = post.id);
+                        return;
+                      }
+                      unawaited(
+                        _openThreadRoute(
+                          context: context,
+                          rootPostId: post.id,
+                          channel: channel,
+                          serverUrl: serverUrl,
+                        ),
+                      );
+                    },
+                    onToggleReaction:
+                        (ChannelPost post, PostReaction reaction) =>
+                            _toggleReaction(context, post, reaction),
+                    onSelectChannel: widget.onSelectChannel,
+                  );
                 },
-                onToggleReaction: (ChannelPost post, PostReaction reaction) =>
-                    _toggleReaction(context, post, reaction),
-                onSelectChannel: widget.onSelectChannel,
-              );
-            },
-          ),
-        ),
-        if (viewState != null)
-          MessageComposer(
-            key: ValueKey<String>('channel-composer-${channel.id}'),
-            destinationId: channel.id,
-            placeholder: MessageComposerStrings.channelPlaceholder(
-              channel.displayName,
+              ),
             ),
-            onSubmit: (String message, String pendingPostId) async {
-              await ref
-                  .read(channelPostsProvider(channel.id).notifier)
-                  .sendText(message: message, pendingPostId: pendingPostId);
-            },
-          ),
-      ],
-    );
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
+            if (viewState != null)
+              MessageComposer(
+                key: ValueKey<String>('channel-composer-${channel.id}'),
+                destinationId: channel.id,
+                placeholder: MessageComposerStrings.channelPlaceholder(
+                  channel.displayName,
+                ),
+                onSubmit: (String message, String pendingPostId) async {
+                  await ref
+                      .read(channelPostsProvider(channel.id).notifier)
+                      .sendText(message: message, pendingPostId: pendingPostId);
+                },
+              ),
+          ],
+        );
         final String? rootPostId = _selectedRootPostId;
         if (rootPostId == null) return channelPane;
         final Widget thread = ThreadPane(
@@ -130,7 +147,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
               .recordSentReply(reply),
           onClose: () => setState(() => _selectedRootPostId = null),
         );
-        if (constraints.maxWidth >= AppBreakpoints.sideThread) {
+        if (showSideThread) {
           return Row(
             children: <Widget>[
               Expanded(child: channelPane),
@@ -148,6 +165,29 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
       },
     );
   }
+
+  Future<void> _openThreadRoute({
+    required BuildContext context,
+    required String rootPostId,
+    required SidebarChannel channel,
+    required Uri? serverUrl,
+  }) => ThreadRoute.open(
+    context,
+    ThreadRouteArguments(
+      rootPostId: rootPostId,
+      channel: channel,
+      serverUrl: serverUrl,
+      onSelectChannel: widget.onSelectChannel == null
+          ? null
+          : (String name) {
+              widget.onSelectChannel!(name);
+              if (context.mounted) context.pop();
+            },
+      onReplySent: (ChannelPost reply) => ref
+          .read(channelPostsProvider(channel.id).notifier)
+          .recordSentReply(reply),
+    ),
+  );
 
   Future<void> _toggleReaction(
     BuildContext context,

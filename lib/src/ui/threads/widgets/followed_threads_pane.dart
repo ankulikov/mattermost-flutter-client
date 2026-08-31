@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
@@ -7,6 +10,7 @@ import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_strings.dart';
+import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
@@ -46,32 +50,39 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
         (AuthState state) => state.session?.serverUrl,
       ),
     );
-    final Widget listPane = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        const _ThreadsHeader(),
-        const Divider(height: 1),
-        Expanded(
-          child: value.when(
-            loading: () => const _Loading(),
-            error: (_, _) => _Error(
-              onRetry: () =>
-                  ref.invalidate(followedThreadsProvider(widget.team.id)),
-            ),
-            data: (FollowedThreadsViewState state) => _ThreadsBody(
-              teamId: widget.team.id,
-              state: state,
-              selectedThreadId: _selectedThreadId,
-              channelsById: widget.channelsById,
-              onSelect: (FollowedThread thread) =>
-                  setState(() => _selectedThreadId = thread.id),
-            ),
-          ),
-        ),
-      ],
-    );
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
+        final bool showSideThread =
+            constraints.maxWidth >= AppBreakpoints.sideThread;
+        final Widget listPane = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const _ThreadsHeader(),
+            const Divider(height: 1),
+            Expanded(
+              child: value.when(
+                loading: () => const _Loading(),
+                error: (_, _) => _Error(
+                  onRetry: () =>
+                      ref.invalidate(followedThreadsProvider(widget.team.id)),
+                ),
+                data: (FollowedThreadsViewState state) => _ThreadsBody(
+                  teamId: widget.team.id,
+                  state: state,
+                  selectedThreadId: _selectedThreadId,
+                  channelsById: widget.channelsById,
+                  onSelect: (FollowedThread thread) {
+                    if (showSideThread) {
+                      setState(() => _selectedThreadId = thread.id);
+                      return;
+                    }
+                    unawaited(_openThreadRoute(context, thread, serverUrl));
+                  },
+                ),
+              ),
+            ),
+          ],
+        );
         final FollowedThread? selected = value.value?.items
             .where((FollowedThread item) => item.id == _selectedThreadId)
             .firstOrNull;
@@ -99,7 +110,7 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
               .recordThreadRead(rootPostId: selected.id, timestamp: timestamp),
           onClose: () => setState(() => _selectedThreadId = null),
         );
-        if (constraints.maxWidth >= AppBreakpoints.sideThread) {
+        if (showSideThread) {
           return Row(
             children: <Widget>[
               Expanded(child: listPane),
@@ -115,6 +126,42 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
           ],
         );
       },
+    );
+  }
+
+  Future<void> _openThreadRoute(
+    BuildContext context,
+    FollowedThread thread,
+    Uri? serverUrl,
+  ) {
+    final SidebarChannel channel =
+        widget.channelsById[thread.channelId] ??
+        SidebarChannel(
+          id: thread.channelId,
+          teamId: widget.team.id,
+          name: thread.channelId,
+          displayName: thread.channelId,
+          kind: ChannelKind.publicChannel,
+        );
+    return ThreadRoute.open(
+      context,
+      ThreadRouteArguments(
+        rootPostId: thread.id,
+        channel: channel,
+        serverUrl: serverUrl,
+        teamId: widget.team.id,
+        unreadReplies: thread.unreadReplies,
+        positionAtEndWhenRead: true,
+        onSelectChannel: widget.onSelectChannel == null
+            ? null
+            : (String name) {
+                widget.onSelectChannel!(name);
+                if (context.mounted) context.pop();
+              },
+        onThreadRead: (DateTime timestamp) => ref
+            .read(followedThreadsProvider(widget.team.id).notifier)
+            .recordThreadRead(rootPostId: thread.id, timestamp: timestamp),
+      ),
     );
   }
 }

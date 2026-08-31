@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/app/app.dart';
+import 'package:mattermost_flutter/src/app/router.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
@@ -11,6 +13,7 @@ import 'package:mattermost_flutter/src/domain/repositories/channel_repository.da
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
+import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
@@ -165,6 +168,44 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Mentioned root'), findsOneWidget);
+    expect(find.text('Unread root'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('returns from a followed thread route on compact width', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => appRouter.go('/'));
+    final _ReadRecordingThreadRepository threads =
+        _ReadRecordingThreadRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          threadRepositoryProvider.overrideWithValue(threads),
+        ],
+        child: const MattermostApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.forum_outlined));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unread root'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Thread'), findsOneWidget);
+    expect(find.text('Thread reply 1'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Thread'), findsNothing);
     expect(find.text('Unread root'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -406,6 +447,11 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.padding = const FakeViewPadding(top: 72, bottom: 72);
+    addTearDown(tester.view.resetPadding);
+    tester.view.viewPadding = const FakeViewPadding(top: 72, bottom: 72);
+    addTearDown(tester.view.resetViewPadding);
+    addTearDown(() => appRouter.go('/'));
 
     await tester.pumpWidget(
       ProviderScope(
@@ -417,7 +463,7 @@ void main() {
           ),
           threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
         ],
-        child: const MaterialApp(home: BootstrapPage()),
+        child: const MattermostApp(),
       ),
     );
     await tester.pumpAndSettle();
@@ -430,7 +476,11 @@ void main() {
 
     expect(find.text('Thread'), findsOneWidget);
     expect(find.text('Thread reply 1'), findsOneWidget);
-    expect(find.text('Message for town-square'), findsNWidgets(2));
+    expect(find.text('Message for town-square'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byType(ThreadPane)).dy,
+      greaterThanOrEqualTo(24),
+    );
     expect(
       tester
           .getSize(
@@ -439,6 +489,13 @@ void main() {
           .width,
       390,
     );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Thread'), findsNothing);
+    expect(find.text('Message for town-square'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('auto-pages when replies leave a short root list unscrollable', (
