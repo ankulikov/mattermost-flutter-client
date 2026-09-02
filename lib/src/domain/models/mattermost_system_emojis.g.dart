@@ -6,6 +6,7 @@
 
 /// Mattermost system emoji shortcodes mapped to their Unicode text.
 const Map<String, String> mattermostSystemEmojis = <String, String>{
+  // dart format off
   '+1': '👍',
   '+1_dark_skin_tone': '👍🏿',
   '+1_light_skin_tone': '👍🏻',
@@ -4469,4 +4470,5 @@ const Map<String, String> mattermostSystemEmojis = <String, String>{
   'zipper_mouth_face': '🤐',
   'zombie': '🧟',
   'zzz': '💤',
+  // dart format on
 };
