@@ -22,11 +22,13 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
   const ChannelPostsPane({
     required this.channel,
     this.onSelectChannel,
+    this.onBack,
     super.key,
   });
 
   final SidebarChannel channel;
   final ValueChanged<String>? onSelectChannel;
+  final VoidCallback? onBack;
 
   @override
   ConsumerState<ChannelPostsPane> createState() => _ChannelPostsPaneState();
@@ -65,6 +67,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
             _ChannelHeader(
               channel: channel,
               isLoading: viewState?.isLoadingOlder == true,
+              onBack: widget.onBack,
             ),
             const Divider(height: 1),
             Expanded(
@@ -206,16 +209,25 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
 }
 
 class _ChannelHeader extends StatelessWidget {
-  const _ChannelHeader({required this.channel, required this.isLoading});
+  const _ChannelHeader({
+    required this.channel,
+    required this.isLoading,
+    required this.onBack,
+  });
 
   final SidebarChannel channel;
   final bool isLoading;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
     child: Row(
       children: <Widget>[
+        if (onBack != null) ...<Widget>[
+          BackButton(onPressed: onBack),
+          const SizedBox(width: 4),
+        ],
         Icon(_channelIcon(channel.kind), size: 20),
         const SizedBox(width: 8),
         Expanded(

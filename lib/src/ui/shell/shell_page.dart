@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
@@ -12,6 +13,7 @@ import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart'
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_strings.dart';
 import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
+import 'package:mattermost_flutter/src/ui/shell/shell_strings.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/followed_threads_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
@@ -23,6 +25,8 @@ class BootstrapPage extends ConsumerStatefulWidget {
 }
 
 class _BootstrapPageState extends ConsumerState<BootstrapPage> {
+  bool _showCompactChannel = false;
+
   @override
   void initState() {
     super.initState();
@@ -40,48 +44,201 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
         .watch(channelSidebarProvider)
         .value
         ?.snapshot;
+
+    if (auth.phase != AuthPhase.signedIn) {
+      return _buildUnauthenticated(
+        auth: auth,
+        selectedChannel: selectedChannel,
+        threadsSelected: threadsSelected,
+        sidebar: sidebar,
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        if (constraints.maxWidth < AppBreakpoints.compact) {
+          return _buildCompact(
+            auth: auth,
+            selectedChannel: selectedChannel,
+            threadsSelected: threadsSelected,
+            sidebar: sidebar,
+          );
+        }
+        return _buildDesktop(
+          auth: auth,
+          selectedChannel: selectedChannel,
+          threadsSelected: threadsSelected,
+          sidebar: sidebar,
+          expanded: constraints.maxWidth >= AppBreakpoints.expanded,
+        );
+      },
+    );
+  }
+
+  Widget _buildUnauthenticated({
+    required AuthState auth,
+    required SidebarChannel? selectedChannel,
+    required bool threadsSelected,
+    required ChannelSidebarSnapshot? sidebar,
+  }) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool expanded = constraints.maxWidth >= AppBreakpoints.expanded;
+        final Widget content = _MainContent(
+          auth: auth,
+          selectedChannel: selectedChannel,
+          threadsSelected: threadsSelected,
+          sidebar: sidebar,
+          onSelectChannel: _selectChannelNamed,
+        );
         if (expanded) {
           return Scaffold(
             body: Row(
               children: <Widget>[
                 const SizedBox(width: 280, child: ChannelSidebar()),
                 const VerticalDivider(width: 1),
-                Expanded(
-                  child: _MainContent(
-                    auth: auth,
-                    selectedChannel: selectedChannel,
-                    threadsSelected: threadsSelected,
-                    sidebar: sidebar,
-                    onSelectChannel: _selectChannelNamed,
-                  ),
-                ),
+                Expanded(child: content),
               ],
             ),
           );
         }
-
         return Scaffold(
-          appBar: AppBar(
-            title: Text(
-              threadsSelected
-                  ? 'Threads'
-                  : selectedChannel?.displayName ?? 'Mattermost',
-            ),
-          ),
-          body: _MainContent(
-            auth: auth,
-            selectedChannel: selectedChannel,
-            threadsSelected: threadsSelected,
-            sidebar: sidebar,
-            onSelectChannel: _selectChannelNamed,
-          ),
+          appBar: AppBar(title: const Text(ShellStrings.appTitle)),
+          body: content,
           drawer: const Drawer(child: ChannelSidebar()),
         );
       },
     );
+  }
+
+  Widget _buildDesktop({
+    required AuthState auth,
+    required SidebarChannel? selectedChannel,
+    required bool threadsSelected,
+    required ChannelSidebarSnapshot? sidebar,
+    required bool expanded,
+  }) {
+    return Scaffold(
+      body: SafeArea(
+        child: Row(
+          key: ValueKey<String>(expanded ? 'expanded-layout' : 'medium-layout'),
+          children: <Widget>[
+            _DestinationRail(
+              selectedIndex: threadsSelected ? 1 : 0,
+              onDestinationSelected: _selectDestination,
+            ),
+            const VerticalDivider(width: 1),
+            SizedBox(
+              width: 280,
+              child: ChannelSidebar(
+                onChannelSelected: _showSelectedChannelOnCompact,
+                onThreadsSelected: _showThreadsDestination,
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(
+              child: _MainContent(
+                auth: auth,
+                selectedChannel: selectedChannel,
+                threadsSelected: threadsSelected,
+                sidebar: sidebar,
+                onSelectChannel: _selectChannelNamed,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompact({
+    required AuthState auth,
+    required SidebarChannel? selectedChannel,
+    required bool threadsSelected,
+    required ChannelSidebarSnapshot? sidebar,
+  }) {
+    final bool showChannel =
+        _showCompactChannel && !threadsSelected && selectedChannel != null;
+    final Widget pane;
+    if (showChannel) {
+      pane = _MainContent(
+        auth: auth,
+        selectedChannel: selectedChannel,
+        threadsSelected: false,
+        sidebar: sidebar,
+        onSelectChannel: _selectChannelNamed,
+        onBackToChannels: _showChannelsDestination,
+      );
+    } else if (threadsSelected) {
+      pane = _MainContent(
+        auth: auth,
+        selectedChannel: selectedChannel,
+        threadsSelected: true,
+        sidebar: sidebar,
+        onSelectChannel: _selectChannelNamed,
+      );
+    } else {
+      pane = ChannelSidebar(
+        onChannelSelected: _showSelectedChannelOnCompact,
+        onThreadsSelected: _showThreadsDestination,
+      );
+    }
+
+    return PopScope<void>(
+      canPop: !showChannel,
+      onPopInvokedWithResult: (bool didPop, void result) {
+        if (!didPop && showChannel) _showChannelsDestination();
+      },
+      child: CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.escape): () {
+            if (showChannel) _showChannelsDestination();
+          },
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            key: const ValueKey<String>('compact-layout'),
+            body: SafeArea(child: pane),
+            bottomNavigationBar: showChannel
+                ? null
+                : _BottomDestinations(
+                    selectedIndex: threadsSelected ? 1 : 0,
+                    onDestinationSelected: _selectDestination,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _selectDestination(int index) {
+    if (index == 1) {
+      _showThreadsDestination();
+    } else {
+      _showChannelsDestination();
+    }
+  }
+
+  void _showChannelsDestination() {
+    ref.read(threadsDestinationProvider.notifier).clear();
+    if (_showCompactChannel) {
+      setState(() => _showCompactChannel = false);
+    }
+  }
+
+  void _showThreadsDestination() {
+    ref.read(threadsDestinationProvider.notifier).select();
+    ref.read(selectedChannelProvider.notifier).clear();
+    if (_showCompactChannel) {
+      setState(() => _showCompactChannel = false);
+    }
+  }
+
+  void _showSelectedChannelOnCompact() {
+    if (!_showCompactChannel) {
+      setState(() => _showCompactChannel = true);
+    }
   }
 
   void _selectChannelNamed(String name) {
@@ -95,11 +252,74 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
         if (channel.name == name) {
           ref.read(threadsDestinationProvider.notifier).clear();
           ref.read(selectedChannelProvider.notifier).select(channel);
+          _showSelectedChannelOnCompact();
           return;
         }
       }
     }
   }
+}
+
+class _DestinationRail extends StatelessWidget {
+  const _DestinationRail({
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+
+  @override
+  Widget build(BuildContext context) => NavigationRail(
+    key: const ValueKey<String>('shell-navigation-rail'),
+    selectedIndex: selectedIndex,
+    labelType: NavigationRailLabelType.all,
+    groupAlignment: -1,
+    minWidth: 82,
+    backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+    onDestinationSelected: onDestinationSelected,
+    destinations: const <NavigationRailDestination>[
+      NavigationRailDestination(
+        icon: Icon(Icons.home_outlined),
+        selectedIcon: Icon(Icons.home),
+        label: Text(ShellStrings.channels),
+      ),
+      NavigationRailDestination(
+        icon: Icon(Icons.forum_outlined),
+        selectedIcon: Icon(Icons.forum),
+        label: Text(ShellStrings.threads),
+      ),
+    ],
+  );
+}
+
+class _BottomDestinations extends StatelessWidget {
+  const _BottomDestinations({
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+
+  @override
+  Widget build(BuildContext context) => NavigationBar(
+    key: const ValueKey<String>('shell-bottom-navigation'),
+    selectedIndex: selectedIndex,
+    onDestinationSelected: onDestinationSelected,
+    destinations: const <NavigationDestination>[
+      NavigationDestination(
+        icon: Icon(Icons.home_outlined),
+        selectedIcon: Icon(Icons.home),
+        label: ShellStrings.channels,
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.forum_outlined),
+        selectedIcon: Icon(Icons.forum),
+        label: ShellStrings.threads,
+      ),
+    ],
+  );
 }
 
 class _MainContent extends StatelessWidget {
@@ -109,6 +329,7 @@ class _MainContent extends StatelessWidget {
     required this.threadsSelected,
     required this.sidebar,
     required this.onSelectChannel,
+    this.onBackToChannels,
   });
 
   final AuthState auth;
@@ -116,6 +337,7 @@ class _MainContent extends StatelessWidget {
   final bool threadsSelected;
   final ChannelSidebarSnapshot? sidebar;
   final ValueChanged<String> onSelectChannel;
+  final VoidCallback? onBackToChannels;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +362,7 @@ class _MainContent extends StatelessWidget {
         return ChannelPostsPane(
           channel: channel,
           onSelectChannel: onSelectChannel,
+          onBack: onBackToChannels,
         );
       }
       return Center(
