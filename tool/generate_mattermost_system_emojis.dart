@@ -132,11 +132,13 @@ String _render(Map<String, String> emojis) {
 
 /// Mattermost system emoji shortcodes mapped to their Unicode text.
 const Map<String, String> mattermostSystemEmojis = <String, String>{
+  // dart format off
 ''',
   );
   for (final MapEntry<String, String> entry in entries) {
     output.writeln("  '${entry.key}': '${entry.value}',");
   }
+  output.writeln('  // dart format on');
   output.writeln('};');
   return output.toString();
 }

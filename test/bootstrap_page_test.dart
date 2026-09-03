@@ -17,6 +17,19 @@ import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
+  Future<void> selectThreads(WidgetTester tester) async {
+    final Finder rail = find.byKey(
+      const ValueKey<String>('shell-navigation-rail'),
+    );
+    final Finder navigation = rail.evaluate().isNotEmpty
+        ? rail
+        : find.byKey(const ValueKey<String>('shell-bottom-navigation'));
+    await tester.tap(
+      find.descendant(of: navigation, matching: find.text('Threads')),
+    );
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('uses a drawer on compact screens', (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -34,6 +47,106 @@ void main() {
     final Scaffold scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     expect(scaffold.drawer, isA<Drawer>());
     expect(find.text('Mattermost'), findsOneWidget);
+  });
+
+  testWidgets('switches layout on both sides of shared breakpoints', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(699, 800));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('compact-layout')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('shell-navigation-rail')),
+      findsNothing,
+    );
+
+    await tester.binding.setSurfaceSize(const Size(700, 800));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('medium-layout')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('shell-navigation-rail')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+      findsNothing,
+    );
+
+    await tester.binding.setSurfaceSize(const Size(1119, 800));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('medium-layout')), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(const Size(1120, 800));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('expanded-layout')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('stacks compact panes and returns to bottom navigation', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          postRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Town Square'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Message for town-square'), findsOneWidget);
+    expect(find.byType(BackButton), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Town Square'), findsOneWidget);
+    expect(find.text('Message for town-square'), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows categorized channels and dialogs when signed in', (
@@ -79,8 +192,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.forum_outlined));
-    await tester.pumpAndSettle();
+    await selectThreads(tester);
 
     expect(find.text('Mentioned root'), findsOneWidget);
     expect(find.text('Unread root'), findsOneWidget);
@@ -116,8 +228,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.forum_outlined));
-    await tester.pumpAndSettle();
+    await selectThreads(tester);
     await tester.tap(find.text('Unread root'));
     await tester.pumpAndSettle();
 
@@ -162,10 +273,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.forum_outlined));
-    await tester.pumpAndSettle();
+    await selectThreads(tester);
 
     expect(find.text('Mentioned root'), findsOneWidget);
     expect(find.text('Unread root'), findsOneWidget);
@@ -192,10 +300,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.forum_outlined));
-    await tester.pumpAndSettle();
+    await selectThreads(tester);
     await tester.tap(find.text('Unread root'));
     await tester.pumpAndSettle();
 
@@ -359,8 +464,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Town Square'));
     await tester.pumpAndSettle();
 
@@ -466,8 +569,6 @@ void main() {
         child: const MattermostApp(),
       ),
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Town Square'));
     await tester.pumpAndSettle();
@@ -713,7 +814,7 @@ void main() {
     );
   });
 
-  testWidgets('shows the channel list in compact drawer at large text scale', (
+  testWidgets('shows the compact channel list at large text scale', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -734,9 +835,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
-
     expect(find.text('Favorites'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(tester.takeException(), isNull);

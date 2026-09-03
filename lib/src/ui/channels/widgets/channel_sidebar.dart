@@ -10,7 +10,14 @@ import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.d
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class ChannelSidebar extends ConsumerWidget {
-  const ChannelSidebar({super.key});
+  const ChannelSidebar({
+    this.onChannelSelected,
+    this.onThreadsSelected,
+    super.key,
+  });
+
+  final VoidCallback? onChannelSelected;
+  final VoidCallback? onThreadsSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,6 +46,8 @@ class ChannelSidebar extends ConsumerWidget {
           isRefreshing: viewState.isRefreshing,
           refreshFailed: viewState.refreshFailed,
           onRefresh: () => refreshChannelSidebar(ref),
+          onChannelSelected: onChannelSelected,
+          onThreadsSelected: onThreadsSelected,
         ),
       ),
     );
@@ -78,12 +87,16 @@ class _SidebarContent extends StatelessWidget {
     required this.isRefreshing,
     required this.refreshFailed,
     required this.onRefresh,
+    required this.onChannelSelected,
+    required this.onThreadsSelected,
   });
 
   final ChannelSidebarSnapshot snapshot;
   final bool isRefreshing;
   final bool refreshFailed;
   final RefreshCallback onRefresh;
+  final VoidCallback? onChannelSelected;
+  final VoidCallback? onThreadsSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -101,14 +114,17 @@ class _SidebarContent extends StatelessWidget {
         Expanded(
           child: Column(
             children: <Widget>[
-              const _ThreadsTile(),
+              _ThreadsTile(onSelected: onThreadsSelected),
               const Divider(height: 1),
               Expanded(
                 child: snapshot.sections.isEmpty
                     ? const Center(child: Text(ChannelSidebarStrings.empty))
                     : RefreshIndicator(
                         onRefresh: onRefresh,
-                        child: _LazyChannelList(sections: snapshot.sections),
+                        child: _LazyChannelList(
+                          sections: snapshot.sections,
+                          onChannelSelected: onChannelSelected,
+                        ),
                       ),
               ),
             ],
@@ -120,7 +136,9 @@ class _SidebarContent extends StatelessWidget {
 }
 
 class _ThreadsTile extends ConsumerWidget {
-  const _ThreadsTile();
+  const _ThreadsTile({this.onSelected});
+
+  final VoidCallback? onSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -139,6 +157,7 @@ class _ThreadsTile extends ConsumerWidget {
           ref.read(selectedChannelProvider.notifier).clear();
           final ScaffoldState? scaffold = Scaffold.maybeOf(context);
           if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();
+          onSelected?.call();
         },
       ),
     );
@@ -168,9 +187,13 @@ class _TeamHeader extends StatelessWidget {
 }
 
 class _LazyChannelList extends ConsumerStatefulWidget {
-  const _LazyChannelList({required this.sections});
+  const _LazyChannelList({
+    required this.sections,
+    required this.onChannelSelected,
+  });
 
   final List<SidebarSection> sections;
+  final VoidCallback? onChannelSelected;
 
   @override
   ConsumerState<_LazyChannelList> createState() => _LazyChannelListState();
@@ -275,6 +298,7 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
     ref.read(selectedChannelProvider.notifier).select(channel);
     final ScaffoldState? scaffold = Scaffold.maybeOf(context);
     if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();
+    widget.onChannelSelected?.call();
   }
 }
 
