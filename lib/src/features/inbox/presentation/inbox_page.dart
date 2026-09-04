@@ -2,22 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/policies/classify_inbox_section.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
-import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class InboxPage extends ConsumerStatefulWidget {
-  const InboxPage({
-    required this.channelsById,
-    required this.onSelectChannel,
-    super.key,
-  });
+  const InboxPage({required this.onOpenItem, super.key});
 
-  final Map<String, SidebarChannel> channelsById;
-  final ValueChanged<String> onSelectChannel;
+  final ValueChanged<InboxItem> onOpenItem;
 
   @override
   ConsumerState<InboxPage> createState() => _InboxPageState();
@@ -88,15 +83,13 @@ class _InboxPageState extends ConsumerState<InboxPage>
                   _InboxList(
                     items: state.snapshot.newItems,
                     empty: InboxStrings.emptyNew,
-                    channelsById: widget.channelsById,
-                    onSelectChannel: widget.onSelectChannel,
+                    onOpenItem: widget.onOpenItem,
                     isPostponed: false,
                   ),
                   _InboxList(
                     items: state.snapshot.postponedItems,
                     empty: InboxStrings.emptyPostponed,
-                    channelsById: widget.channelsById,
-                    onSelectChannel: widget.onSelectChannel,
+                    onOpenItem: widget.onOpenItem,
                     isPostponed: true,
                   ),
                 ],
@@ -113,168 +106,177 @@ class _InboxList extends StatelessWidget {
   const _InboxList({
     required this.items,
     required this.empty,
-    required this.channelsById,
-    required this.onSelectChannel,
+    required this.onOpenItem,
     required this.isPostponed,
   });
+
   final List<InboxItem> items;
   final String empty;
-  final Map<String, SidebarChannel> channelsById;
-  final ValueChanged<String> onSelectChannel;
+  final ValueChanged<InboxItem> onOpenItem;
   final bool isPostponed;
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return Center(child: Text(empty));
-    final List<InboxItem> people = items
-        .where(
-          (InboxItem item) =>
-              item is! DirectMessageBundleInboxItem ||
-              item.automationClass.name == 'person',
-        )
-        .toList();
-    final List<InboxItem> bots = items
-        .whereType<DirectMessageBundleInboxItem>()
-        .where(
-          (DirectMessageBundleInboxItem item) =>
-              item.automationClass.name != 'person',
-        )
-        .toList();
+    final Map<InboxSection, List<InboxItem>> sections =
+        <InboxSection, List<InboxItem>>{
+          for (final InboxSection section in InboxSection.values)
+            section: <InboxItem>[],
+        };
+    for (final InboxItem item in items.expand(_presentationItems)) {
+      sections[classifyInboxSection(item)]!.add(item);
+    }
     return ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       children: <Widget>[
-        if (people.isNotEmpty) ..._section(context, people, null),
-        if (bots.isNotEmpty) ..._section(context, bots, InboxStrings.bots),
+        for (final InboxSection section in InboxSection.values)
+          if (sections[section]!.isNotEmpty) ...<Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+              child: Text(
+                _sectionLabel(section),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            for (final InboxItem item in sections[section]!)
+              _InboxRow(
+                item: item,
+                onOpen: () => onOpenItem(item),
+                isPostponed: isPostponed,
+              ),
+          ],
       ],
     );
   }
 
-  List<Widget> _section(
-    BuildContext context,
-    List<InboxItem> items,
-    String? label,
-  ) => <Widget>[
-    if (label != null)
-      Padding(
-        padding: const EdgeInsets.only(left: 4, top: 8, bottom: 4),
-        child: Text(label, style: Theme.of(context).textTheme.titleSmall),
-      ),
-    for (final InboxItem item in items)
-      _InboxCard(
-        item: item,
-        channelsById: channelsById,
-        onSelectChannel: onSelectChannel,
-        isPostponed: isPostponed,
-      ),
-  ];
+  Iterable<InboxItem> _presentationItems(InboxItem item) sync* {
+    if (item case DirectMessageBundleInboxItem(:final messages)) {
+      for (final message in messages) {
+        yield DirectMessageBundleInboxItem(
+          channelId: item.channelId,
+          authorId: item.authorId,
+          automationClass: item.automationClass,
+          messages: <InboxPostCandidate>[message],
+          postponedAt: item.postponedAt,
+        );
+      }
+      return;
+    }
+    yield item;
+  }
+
+  String _sectionLabel(InboxSection section) => switch (section) {
+    InboxSection.mentions => InboxStrings.mentions,
+    InboxSection.botsAndIntegrations => InboxStrings.bots,
+    InboxSection.directMessages => InboxStrings.directMessages,
+    InboxSection.threads => InboxStrings.threads,
+  };
 }
 
-class _InboxCard extends ConsumerWidget {
-  const _InboxCard({
+class _InboxRow extends ConsumerWidget {
+  const _InboxRow({
     required this.item,
-    required this.channelsById,
-    required this.onSelectChannel,
+    required this.onOpen,
     required this.isPostponed,
   });
+
   final InboxItem item;
-  final Map<String, SidebarChannel> channelsById;
-  final ValueChanged<String> onSelectChannel;
+  final VoidCallback onOpen;
   final bool isPostponed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final _Preview preview = _preview(item);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(preview.title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 4),
-            Text(preview.body, maxLines: 3, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: <Widget>[
-                FilledButton.tonal(
-                  onPressed: () => _open(context),
-                  child: const Text(InboxStrings.open),
+    return InkWell(
+      key: ValueKey<String>('inbox-item-${item.key}'),
+      onTap: onOpen,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: Theme.of(context).dividerColor),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      preview.title,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      preview.body,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-                if (!isPostponed)
-                  OutlinedButton(
-                    onPressed: () => unawaited(_postpone(context, ref)),
-                    child: const Text(InboxStrings.postpone),
-                  ),
-                if (isPostponed)
-                  OutlinedButton(
-                    onPressed: () => unawaited(_remove(context, ref)),
-                    child: const Text(InboxStrings.remove),
-                  ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(width: 8),
+              if (!isPostponed) ...<Widget>[
+                IconButton(
+                  key: ValueKey<String>('read-${item.key}'),
+                  tooltip: InboxStrings.read,
+                  onPressed: () => unawaited(_markRead(context, ref)),
+                  icon: const Icon(Icons.done),
+                ),
+                IconButton(
+                  key: ValueKey<String>('postpone-${item.key}'),
+                  tooltip: InboxStrings.postpone,
+                  onPressed: () => unawaited(_postpone(context, ref)),
+                  icon: const Icon(Icons.schedule),
+                ),
+              ] else
+                IconButton(
+                  key: ValueKey<String>('remove-${item.key}'),
+                  tooltip: InboxStrings.remove,
+                  onPressed: () => unawaited(_remove(context, ref)),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  Future<void> _markRead(BuildContext context, WidgetRef ref) async {
+    if (!await ref.read(inboxProvider.notifier).markRead(item) &&
+        context.mounted) {
+      _showFailure(context, InboxStrings.markReadFailed);
+    }
+  }
+
   Future<void> _postpone(BuildContext context, WidgetRef ref) async {
     if (!await ref.read(inboxProvider.notifier).postpone(item) &&
         context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text(InboxStrings.refreshFailed)));
+      _showFailure(context, InboxStrings.postponeFailed);
     }
   }
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
     if (!await ref.read(inboxProvider.notifier).remove(item) &&
         context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text(InboxStrings.refreshFailed)));
+      _showFailure(context, InboxStrings.removeFailed);
     }
   }
 
-  void _open(BuildContext context) {
-    if (item case ThreadInboxItem(thread: final thread)) {
-      final SidebarChannel? channel = channelsById[thread.root.channelId];
-      if (channel == null) return;
-      unawaited(
-        ThreadRoute.open(
-          context,
-          ThreadRouteArguments(
-            rootPostId: thread.id,
-            channel: channel,
-            unreadReplies: thread.unreadReplies,
-            positionAtEndWhenRead: thread.unreadReplies == 0,
-            onSelectChannel: onSelectChannel,
-          ),
-        ),
-      );
-      return;
-    }
-    final String channelId = switch (item) {
-      ChannelPostInboxItem(post: final post) => post.channelId,
-      DirectMessageBundleInboxItem(channelId: final channelId) => channelId,
-      ThreadInboxItem() => '',
-    };
-    final SidebarChannel? channel = channelsById[channelId];
-    if (channel != null) {
-      // TODO(inbox): pass the Inbox post id into ChannelPostsPane and mark the
-      // viewed channel/thread read. MVP opens the selected channel only.
-      onSelectChannel(channel.name);
-    }
+  void _showFailure(BuildContext context, String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   _Preview _preview(InboxItem item) => switch (item) {
     ThreadInboxItem(thread: final thread) => _Preview(
-      InboxStrings.thread,
-      thread.root.message.isEmpty
-          ? thread.root.author.displayName
-          : thread.root.message,
+      thread.root.author.displayName,
+      thread.root.message.isEmpty ? InboxStrings.thread : thread.root.message,
     ),
     ChannelPostInboxItem(post: final post) => _Preview(
       post.author.displayName,
@@ -291,6 +293,7 @@ class _InboxCard extends ConsumerWidget {
 
 final class _Preview {
   const _Preview(this.title, this.body);
+
   final String title;
   final String body;
 }

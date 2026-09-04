@@ -1,5 +1,6 @@
 import 'dart:collection';
 
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
@@ -19,11 +20,17 @@ sealed class InboxItem {
 final class ThreadInboxItem extends InboxItem {
   const ThreadInboxItem({
     required this.thread,
+    required this.channel,
+    required this.teamId,
+    this.rootAttentionReason,
     this.reactivatesPostponed = false,
     super.postponedAt,
   });
 
   final FollowedThread thread;
+  final SidebarChannel channel;
+  final String teamId;
+  final InboxAttentionReason? rootAttentionReason;
   final bool reactivatesPostponed;
 
   @override

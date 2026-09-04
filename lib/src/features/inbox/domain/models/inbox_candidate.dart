@@ -62,10 +62,21 @@ final class InboxPostCandidate {
 final class InboxThreadCandidate {
   InboxThreadCandidate({
     required this.thread,
+    required this.channel,
+    required this.teamId,
+    this.rootAttentionReason,
     this.hasNewExplicitMention = false,
   });
 
   final FollowedThread thread;
+  final SidebarChannel channel;
+  final String teamId;
+
+  /// The attention reason of the root post, when it can be reconstructed.
+  ///
+  /// This survives canonicalization so a thread whose root introduced an
+  /// Inbox mention can remain in Mentions until a later reply needs attention.
+  final InboxAttentionReason? rootAttentionReason;
 
   /// True only when the incoming thread update is an explicit mention. It lets
   /// that mention reactivate an otherwise postponed thread.

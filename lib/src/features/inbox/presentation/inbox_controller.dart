@@ -88,6 +88,53 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   Future<bool> postpone(InboxItem item) => _move(item, toPostponed: true);
   Future<bool> remove(InboxItem item) => _move(item, toPostponed: false);
 
+  Future<bool> markRead(InboxItem item) async {
+    final InboxViewState? current = state.value;
+    final AuthSession? session = _session;
+    final InboxRepository? inbox = _inbox;
+    if (_busy || current == null || session == null || inbox == null) {
+      return false;
+    }
+    _busy = true;
+    try {
+      await inbox.markRead(session: session, item: item);
+      final List<InboxItem> newItems = current.snapshot.newItems
+          .where((InboxItem candidate) => !_isReadBy(candidate, item))
+          .toList(growable: false);
+      state = AsyncData(
+        InboxViewState(
+          snapshot: InboxSnapshot(
+            newItems: newItems,
+            postponedItems: current.snapshot.postponedItems,
+            builtAt: current.snapshot.builtAt,
+            hasIncompleteMentionReconstruction:
+                current.snapshot.hasIncompleteMentionReconstruction,
+          ),
+        ),
+      );
+      return true;
+    } on Object {
+      return false;
+    } finally {
+      _busy = false;
+    }
+  }
+
+  bool _isReadBy(InboxItem candidate, InboxItem readItem) {
+    if (readItem is ThreadInboxItem) return candidate.key == readItem.key;
+    final String channelId = switch (readItem) {
+      ChannelPostInboxItem(:final post) => post.channelId,
+      DirectMessageBundleInboxItem(:final channelId) => channelId,
+      ThreadInboxItem() => '',
+    };
+    return switch (candidate) {
+      ChannelPostInboxItem(:final post) => post.channelId == channelId,
+      DirectMessageBundleInboxItem(channelId: final candidateChannelId) =>
+        candidateChannelId == channelId,
+      ThreadInboxItem() => false,
+    };
+  }
+
   Future<bool> _move(InboxItem item, {required bool toPostponed}) async {
     final InboxViewState? current = state.value;
     final AuthSession? session = _session;
@@ -121,10 +168,10 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         current.snapshot.postponedItems,
       );
       if (toPostponed) {
-        newItems.removeWhere((InboxItem value) => value.key == item.key);
+        _removePostIds(newItems, item);
         postponedItems.add(_withPostponedAt(item, now));
       } else {
-        postponedItems.removeWhere((InboxItem value) => value.key == item.key);
+        _removePostIds(postponedItems, item);
       }
       state = AsyncData(
         InboxViewState(
@@ -145,8 +192,34 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     }
   }
 
+  void _removePostIds(List<InboxItem> items, InboxItem removed) {
+    final Set<String> removedIds = removed.postIds.toSet();
+    for (var index = items.length - 1; index >= 0; index--) {
+      final InboxItem current = items[index];
+      if (current is DirectMessageBundleInboxItem) {
+        final Set<String> retainedIds = current.postIds.toSet()
+          ..removeAll(removedIds);
+        if (retainedIds.length == current.postIds.length) continue;
+        if (retainedIds.isEmpty) {
+          items.removeAt(index);
+        } else {
+          items[index] = current.retainingPostIds(retainedIds);
+        }
+      } else if (current.postIds.any(removedIds.contains)) {
+        items.removeAt(index);
+      }
+    }
+  }
+
   InboxItem _withPostponedAt(InboxItem item, DateTime at) => switch (item) {
-    ThreadInboxItem() => ThreadInboxItem(thread: item.thread, postponedAt: at),
+    ThreadInboxItem() => ThreadInboxItem(
+      thread: item.thread,
+      channel: item.channel,
+      teamId: item.teamId,
+      rootAttentionReason: item.rootAttentionReason,
+      reactivatesPostponed: item.reactivatesPostponed,
+      postponedAt: at,
+    ),
     ChannelPostInboxItem() => ChannelPostInboxItem(
       candidate: item.candidate,
       postponedAt: at,

@@ -79,24 +79,27 @@ final class MattermostInboxRepository extends InboxRepository {
       }
     }
 
-    final List<List<MattermostUserThreadDto>> unreadThreadPages =
-        await Future.wait(
-          teams.map(
-            (MattermostTeamDto team) =>
-                _loadUnreadThreads(userId: session.userId, teamId: team.id),
-          ),
+    final List<_TeamThreads> unreadThreadPages = await Future.wait(
+      teams.map(
+        (MattermostTeamDto team) async => _TeamThreads(
+          team.id,
+          await _loadUnreadThreads(userId: session.userId, teamId: team.id),
+        ),
+      ),
+    );
+    final Map<String, _ThreadSource> rawThreads = <String, _ThreadSource>{};
+    for (final _TeamThreads page in unreadThreadPages) {
+      for (final MattermostUserThreadDto thread in page.threads) {
+        if (thread.post == null ||
+            thread.deleteAt != 0 ||
+            thread.unreadReplies <= 0) {
+          continue;
+        }
+        rawThreads.putIfAbsent(
+          thread.id,
+          () => _ThreadSource(teamId: page.teamId, raw: thread),
         );
-    final Map<String, MattermostUserThreadDto> rawThreads =
-        <String, MattermostUserThreadDto>{};
-    for (final MattermostUserThreadDto thread in unreadThreadPages.expand(
-      (List<MattermostUserThreadDto> page) => page,
-    )) {
-      if (thread.post == null ||
-          thread.deleteAt != 0 ||
-          thread.unreadReplies <= 0) {
-        continue;
       }
-      rawThreads.putIfAbsent(thread.id, () => thread);
     }
 
     final List<_UnreadChannelPosts> unread = await _loadUnreadPosts(
@@ -110,8 +113,8 @@ final class MattermostInboxRepository extends InboxRepository {
     final Map<String, MattermostPostDto> rawPosts = <String, MattermostPostDto>{
       for (final _UnreadChannelPosts entry in unread)
         for (final MattermostPostDto post in entry.posts) post.id: post,
-      for (final MattermostUserThreadDto thread in rawThreads.values)
-        if (thread.post != null) thread.post!.id: thread.post!,
+      for (final _ThreadSource source in rawThreads.values)
+        if (source.raw.post != null) source.raw.post!.id: source.raw.post!,
     };
     for (final List<String> batch in _batches(postponedIds.toList())) {
       final List<MattermostPostDto> hydrated = await _api.getPostsByIds(batch);
@@ -133,7 +136,10 @@ final class MattermostInboxRepository extends InboxRepository {
     };
 
     final List<InboxThreadCandidate> threadCandidates = rawThreads.values
-        .map((MattermostUserThreadDto raw) => _mapThread(raw, mappedById))
+        .map(
+          (_ThreadSource source) =>
+              _mapThread(source, mappedById, channels, members, currentUser),
+        )
         .whereType<InboxThreadCandidate>()
         .toList(growable: false);
     final List<InboxPostCandidate> newCandidates = <InboxPostCandidate>[];
@@ -340,14 +346,30 @@ final class MattermostInboxRepository extends InboxRepository {
   }
 
   InboxThreadCandidate? _mapThread(
-    MattermostUserThreadDto raw,
+    _ThreadSource source,
     Map<String, ChannelPost> mappedById,
+    Map<String, MattermostChannelDto> channels,
+    Map<String, MattermostChannelMemberDto> members,
+    MattermostUserDto currentUser,
   ) {
+    final MattermostUserThreadDto raw = source.raw;
     final ChannelPost? root = raw.post == null
         ? null
         : mappedById[raw.post!.id];
-    if (root == null) return null;
+    final SidebarChannel? channel = root == null
+        ? null
+        : _mapKnownChannel(channels[root.channelId]);
+    if (root == null || channel == null) return null;
+    final MattermostChannelMemberDto? member = members[root.channelId];
+    final InboxAttentionReason? rootReason = channel.isDialog
+        ? InboxAttentionReason.allMessagesSubscription
+        : member == null || raw.post == null
+        ? null
+        : _classify(raw.post!, currentUser, member);
     return InboxThreadCandidate(
+      channel: channel,
+      teamId: source.teamId,
+      rootAttentionReason: rootReason,
       thread: FollowedThread(
         root: root.withThreadSummary(
           replyCount: raw.replyCount,
@@ -397,6 +419,8 @@ final class MattermostInboxRepository extends InboxRepository {
       if (reference.kind == PostponedReferenceKind.thread) {
         threads.add(
           ThreadInboxItem(
+            channel: channel,
+            teamId: channel.teamId,
             thread: FollowedThread(
               root: post,
               replyCount: post.replyCount,
@@ -448,6 +472,27 @@ final class MattermostInboxRepository extends InboxRepository {
     };
   }
 
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required InboxItem item,
+  }) => switch (item) {
+    ThreadInboxItem(:final thread, :final teamId) => _api.updateThreadRead(
+      userId: session.userId,
+      teamId: teamId,
+      threadId: thread.id,
+      timestamp: _now().millisecondsSinceEpoch,
+    ),
+    ChannelPostInboxItem(:final post) => _api.viewChannel(
+      userId: session.userId,
+      channelId: post.channelId,
+    ),
+    DirectMessageBundleInboxItem(:final channelId) => _api.viewChannel(
+      userId: session.userId,
+      channelId: channelId,
+    ),
+  };
+
   SidebarChannel? _mapKnownChannel(MattermostChannelDto? channel) {
     if (channel == null) return null;
     try {
@@ -473,6 +518,20 @@ final class MattermostInboxRepository extends InboxRepository {
       );
     }
   }
+}
+
+final class _TeamThreads {
+  const _TeamThreads(this.teamId, this.threads);
+
+  final String teamId;
+  final List<MattermostUserThreadDto> threads;
+}
+
+final class _ThreadSource {
+  const _ThreadSource({required this.teamId, required this.raw});
+
+  final String teamId;
+  final MattermostUserThreadDto raw;
 }
 
 final class _TeamChannels {

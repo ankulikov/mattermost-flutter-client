@@ -10,11 +10,16 @@ abstract final class InboxStrings {
   static const String refresh = 'Refresh Inbox';
   static const String emptyNew = 'No new messages';
   static const String emptyPostponed = 'No postponed messages';
-  static const String open = 'Open';
+  static const String read = 'Mark as read';
   static const String postpone = 'Postpone';
   static const String remove = 'Remove';
-  static const String people = 'People';
+  static const String markReadFailed = 'Could not mark this item as read.';
+  static const String postponeFailed = 'Could not postpone this item.';
+  static const String removeFailed = 'Could not remove this item.';
+  static const String mentions = 'Mentions';
   static const String bots = 'Bots & integrations';
+  static const String directMessages = 'Direct Messages';
+  static const String threads = 'Threads';
   static const String thread = 'Thread';
   static String messages(int count) =>
       count == 1 ? '1 message' : '$count messages';

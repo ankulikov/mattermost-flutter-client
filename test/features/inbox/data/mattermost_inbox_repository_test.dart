@@ -3,7 +3,11 @@ import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_inbox_repository.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
@@ -213,7 +217,88 @@ void main() {
       expect(api.unreadChannelIds, <String>['all']);
     },
   );
+
+  test(
+    'marks channel and direct-message items read by viewing channel',
+    () async {
+      final _InboxApi api = _emptyApi();
+      final MattermostInboxRepository repository = _repository(api);
+      final ChannelPostInboxItem item = ChannelPostInboxItem(
+        candidate: _candidate('post', direct: true),
+      );
+
+      await repository.markRead(session: session, item: item);
+
+      expect(api.viewedChannelId, 'dm');
+      expect(api.viewedUserId, 'me');
+    },
+  );
+
+  test('marks a thread read in its source team at the current time', () async {
+    final _InboxApi api = _emptyApi();
+    final DateTime now = DateTime.utc(2026, 9, 4, 12);
+    final MattermostInboxRepository repository = MattermostInboxRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+      postponed: const _Postponed(),
+      now: () => now,
+    );
+    final ThreadInboxItem item = ThreadInboxItem(
+      thread: _thread(),
+      channel: _channel(),
+      teamId: 'source-team',
+    );
+
+    await repository.markRead(session: session, item: item);
+
+    expect(api.readThreadId, 'root');
+    expect(api.readTeamId, 'source-team');
+    expect(api.readTimestamp, now.millisecondsSinceEpoch);
+  });
 }
+
+_InboxApi _emptyApi() => _InboxApi(
+  teams: const <MattermostTeamDto>[],
+  channels: const <MattermostChannelDto>[],
+  members: const <MattermostChannelMemberDto>[],
+  unread: const <MattermostPostDto>[],
+);
+
+SidebarChannel _channel({bool direct = false}) => SidebarChannel(
+  id: direct ? 'dm' : 'channel',
+  teamId: 'team',
+  name: 'channel',
+  displayName: 'Channel',
+  kind: direct ? ChannelKind.directMessage : ChannelKind.publicChannel,
+);
+
+InboxPostCandidate _candidate(String id, {bool direct = false}) =>
+    InboxPostCandidate(
+      post: Post(
+        id: id,
+        channelId: direct ? 'dm' : 'channel',
+        author: const PostAuthor(id: 'other', displayName: 'Other'),
+        sentAt: DateTime.utc(2026),
+        message: id,
+      ),
+      channel: _channel(direct: direct),
+      reason: InboxAttentionReason.directMention,
+    );
+
+FollowedThread _thread() => FollowedThread(
+  root: Post(
+    id: 'root',
+    channelId: 'channel',
+    author: const PostAuthor(id: 'other', displayName: 'Other'),
+    sentAt: DateTime.utc(2026),
+    message: 'Root',
+  ),
+  replyCount: 1,
+  lastReplyAt: DateTime.utc(2026),
+  lastViewedAt: DateTime.utc(2025),
+  unreadReplies: 1,
+  unreadMentions: 0,
+);
 
 MattermostInboxRepository _repository(
   _InboxApi api, [
@@ -236,6 +321,11 @@ final class _InboxApi extends Fake implements MattermostApi {
   final List<MattermostChannelMemberDto> members;
   final List<MattermostPostDto> unread;
   final List<String> unreadChannelIds = <String>[];
+  String? viewedChannelId;
+  String? viewedUserId;
+  String? readThreadId;
+  String? readTeamId;
+  int? readTimestamp;
   @override
   Future<MattermostUserDto> getCurrentUser() async =>
       const MattermostUserDto(id: 'me', username: 'me');
@@ -291,6 +381,28 @@ final class _InboxApi extends Fake implements MattermostApi {
       const <MattermostUserDto>[
         MattermostUserDto(id: 'other', username: 'other'),
       ];
+
+  @override
+  Future<void> viewChannel({
+    required String userId,
+    required String channelId,
+    String? previousChannelId,
+  }) async {
+    viewedUserId = userId;
+    viewedChannelId = channelId;
+  }
+
+  @override
+  Future<void> updateThreadRead({
+    required String userId,
+    required String teamId,
+    required String threadId,
+    required int timestamp,
+  }) async {
+    readTeamId = teamId;
+    readThreadId = threadId;
+    readTimestamp = timestamp;
+  }
 }
 
 final class _Postponed extends PostponedRepository {

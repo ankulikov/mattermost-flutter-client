@@ -106,6 +106,94 @@ void main() {
     );
   });
 
+  testWidgets('replaces the channel pane with Inbox on a wide screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          postRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          inboxRepositoryProvider.overrideWithValue(_InboxTestRepository()),
+          postponedRepositoryProvider.overrideWithValue(
+            _PostponedTestRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+    expect(find.text('Message for town-square'), findsOneWidget);
+
+    await selectInbox(tester);
+
+    expect(
+      find.byKey(const ValueKey<String>('channels-side-pane')),
+      findsNothing,
+    );
+    final Finder inboxPane = find.byKey(
+      const ValueKey<String>('inbox-thread-list-pane'),
+    );
+    expect(inboxPane, findsOneWidget);
+    expect(tester.getSize(inboxPane).width, 380);
+    expect(find.text('Inbox message'), findsOneWidget);
+    expect(find.text('Message for town-square'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('adds the adjacent Inbox workspace at the compact breakpoint', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(699, 800));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          inboxRepositoryProvider.overrideWithValue(_InboxTestRepository()),
+          postponedRepositoryProvider.overrideWithValue(
+            _PostponedTestRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await selectInbox(tester);
+
+    expect(
+      find.byKey(const ValueKey<String>('inbox-thread-host-narrow')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('inbox-thread-host-wide')),
+      findsNothing,
+    );
+
+    await tester.binding.setSurfaceSize(const Size(700, 800));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('inbox-thread-host-narrow')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('inbox-thread-host-wide')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('stacks compact panes and returns to bottom navigation', (
     WidgetTester tester,
   ) async {
@@ -174,6 +262,13 @@ void main() {
     expect(find.text('Favorites'), findsOneWidget);
     expect(find.text('Town Square'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('channels-side-pane')),
+        matching: find.text('Inbox'),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('shows Inbox tabs and moves an item to Postponed', (
@@ -203,18 +298,18 @@ void main() {
     expect(find.text('New'), findsOneWidget);
     expect(find.text('Postponed'), findsOneWidget);
     expect(find.text('Inbox message'), findsOneWidget);
-    expect(find.text('Postpone'), findsOneWidget);
+    expect(find.byTooltip('Postpone'), findsOneWidget);
 
-    await tester.tap(find.text('Postpone'));
+    await tester.tap(find.byTooltip('Postpone'));
     await tester.pumpAndSettle();
     expect(find.text('No new messages'), findsOneWidget);
 
     await tester.tap(find.text('Postponed'));
     await tester.pumpAndSettle();
     expect(find.text('Inbox message'), findsOneWidget);
-    expect(find.text('Remove'), findsOneWidget);
+    expect(find.byTooltip('Remove'), findsOneWidget);
 
-    await tester.tap(find.text('Remove'));
+    await tester.tap(find.byTooltip('Remove'));
     await tester.pumpAndSettle();
     expect(find.text('No postponed messages'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -247,6 +342,7 @@ void main() {
 
     expect(find.text('Inbox'), findsWidgets);
     expect(find.text('New'), findsOneWidget);
+    expect(find.text('Town Square'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -1090,6 +1186,12 @@ final class _SidebarRepository implements ChannelRepository {
 }
 
 final class _InboxTestRepository extends InboxRepository {
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required InboxItem item,
+  }) async {}
+
   @override
   Future<InboxSnapshot> load({required AuthSession session}) async {
     const SidebarChannel channel = SidebarChannel(

@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_thread_host.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
@@ -118,6 +120,13 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     required ChannelSidebarSnapshot? sidebar,
     required bool expanded,
   }) {
+    final Widget mainContent = _MainContent(
+      auth: auth,
+      selectedChannel: selectedChannel,
+      threadsSelected: false,
+      sidebar: sidebar,
+      onSelectChannel: _selectChannelNamed,
+    );
     return Scaffold(
       body: SafeArea(
         child: Row(
@@ -128,22 +137,29 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
               onDestinationSelected: _selectDestination,
             ),
             const VerticalDivider(width: 1),
-            SizedBox(
-              width: 280,
-              child: ChannelSidebar(
-                onChannelSelected: _showSelectedChannelOnCompact,
-                onInboxSelected: _showThreadsDestination,
-              ),
-            ),
-            const VerticalDivider(width: 1),
             Expanded(
-              child: _MainContent(
-                auth: auth,
-                selectedChannel: selectedChannel,
-                threadsSelected: threadsSelected,
-                sidebar: sidebar,
-                onSelectChannel: _selectChannelNamed,
-              ),
+              child: threadsSelected
+                  ? InboxThreadHost(
+                      inboxBuilder:
+                          (
+                            BuildContext context,
+                            ValueChanged<InboxItem> onOpenItem,
+                          ) => InboxPage(onOpenItem: onOpenItem),
+                      background: mainContent,
+                      showAdjacentThread: true,
+                      onSelectChannel: _selectChannelNamed,
+                    )
+                  : Row(
+                      children: <Widget>[
+                        const SizedBox(
+                          key: ValueKey<String>('channels-side-pane'),
+                          width: 280,
+                          child: ChannelSidebar(),
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(child: mainContent),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -178,10 +194,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
         onSelectChannel: _selectChannelNamed,
       );
     } else {
-      pane = ChannelSidebar(
-        onChannelSelected: _showSelectedChannelOnCompact,
-        onInboxSelected: _showThreadsDestination,
-      );
+      pane = ChannelSidebar(onChannelSelected: _showSelectedChannelOnCompact);
     }
 
     return PopScope<void>(
@@ -229,7 +242,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
 
   void _showThreadsDestination() {
     ref.read(threadsDestinationProvider.notifier).select();
-    ref.read(selectedChannelProvider.notifier).clear();
     if (_showCompactChannel) {
       setState(() => _showCompactChannel = false);
     }
@@ -346,14 +358,12 @@ class _MainContent extends StatelessWidget {
     }
     if (auth.phase == AuthPhase.signedIn) {
       if (threadsSelected && sidebar?.team != null) {
-        final Map<String, SidebarChannel> channelsById =
-            <String, SidebarChannel>{
-              for (final SidebarSection section in sidebar!.sections)
-                for (final SidebarChannel channel in section.channels)
-                  channel.id: channel,
-            };
-        return InboxPage(
-          channelsById: channelsById,
+        return InboxThreadHost(
+          inboxBuilder:
+              (BuildContext context, ValueChanged<InboxItem> onOpenItem) =>
+                  InboxPage(onOpenItem: onOpenItem),
+          background: const SizedBox.shrink(),
+          showAdjacentThread: false,
           onSelectChannel: onSelectChannel,
         );
       }

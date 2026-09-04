@@ -10,14 +10,9 @@ import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.d
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class ChannelSidebar extends ConsumerWidget {
-  const ChannelSidebar({
-    this.onChannelSelected,
-    this.onInboxSelected,
-    super.key,
-  });
+  const ChannelSidebar({this.onChannelSelected, super.key});
 
   final VoidCallback? onChannelSelected;
-  final VoidCallback? onInboxSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -47,7 +42,6 @@ class ChannelSidebar extends ConsumerWidget {
           refreshFailed: viewState.refreshFailed,
           onRefresh: () => refreshChannelSidebar(ref),
           onChannelSelected: onChannelSelected,
-          onInboxSelected: onInboxSelected,
         ),
       ),
     );
@@ -88,7 +82,6 @@ class _SidebarContent extends StatelessWidget {
     required this.refreshFailed,
     required this.onRefresh,
     required this.onChannelSelected,
-    required this.onInboxSelected,
   });
 
   final ChannelSidebarSnapshot snapshot;
@@ -96,7 +89,6 @@ class _SidebarContent extends StatelessWidget {
   final bool refreshFailed;
   final RefreshCallback onRefresh;
   final VoidCallback? onChannelSelected;
-  final VoidCallback? onInboxSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -112,54 +104,17 @@ class _SidebarContent extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           ),
         Expanded(
-          child: Column(
-            children: <Widget>[
-              _InboxTile(onSelected: onInboxSelected),
-              const Divider(height: 1),
-              Expanded(
-                child: snapshot.sections.isEmpty
-                    ? const Center(child: Text(ChannelSidebarStrings.empty))
-                    : RefreshIndicator(
-                        onRefresh: onRefresh,
-                        child: _LazyChannelList(
-                          sections: snapshot.sections,
-                          onChannelSelected: onChannelSelected,
-                        ),
-                      ),
-              ),
-            ],
-          ),
+          child: snapshot.sections.isEmpty
+              ? const Center(child: Text(ChannelSidebarStrings.empty))
+              : RefreshIndicator(
+                  onRefresh: onRefresh,
+                  child: _LazyChannelList(
+                    sections: snapshot.sections,
+                    onChannelSelected: onChannelSelected,
+                  ),
+                ),
         ),
       ],
-    );
-  }
-}
-
-class _InboxTile extends ConsumerWidget {
-  const _InboxTile({this.onSelected});
-
-  final VoidCallback? onSelected;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bool selected = ref.watch(threadsDestinationProvider);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: ListTile(
-        dense: true,
-        selected: selected,
-        selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        leading: const Icon(Icons.forum_outlined, size: 18),
-        title: const Text(ChannelSidebarStrings.inbox),
-        onTap: () {
-          ref.read(threadsDestinationProvider.notifier).select();
-          ref.read(selectedChannelProvider.notifier).clear();
-          final ScaffoldState? scaffold = Scaffold.maybeOf(context);
-          if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();
-          onSelected?.call();
-        },
-      ),
     );
   }
 }

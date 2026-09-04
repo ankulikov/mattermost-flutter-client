@@ -39,6 +39,9 @@ List<InboxItem> groupDirectMessages(
         result.add(
           ThreadInboxItem(
             thread: candidate.thread,
+            channel: candidate.channel,
+            teamId: candidate.teamId,
+            rootAttentionReason: candidate.rootAttentionReason,
             reactivatesPostponed: candidate.hasNewExplicitMention,
           ),
         );

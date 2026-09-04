@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
@@ -56,7 +59,92 @@ void main() {
       expect(container.read(provider).value?.refreshFailed, isTrue);
     },
   );
+
+  test(
+    'mark read removes every non-thread item in the viewed channel',
+    () async {
+      final InboxPostCandidate first = _candidate('first');
+      final InboxPostCandidate second = _candidate('second');
+      final DirectMessageBundleInboxItem bundle = DirectMessageBundleInboxItem(
+        channelId: 'channel',
+        authorId: 'other',
+        automationClass: InboxAutomationClass.person,
+        messages: <InboxPostCandidate>[first, second],
+      );
+      final _InboxRepository repository = _InboxRepository(
+        <Future<InboxSnapshot> Function()>[
+          () async => InboxSnapshot(
+            newItems: <InboxItem>[
+              bundle,
+              ChannelPostInboxItem(candidate: _candidate('third')),
+            ],
+          ),
+        ],
+      );
+      final provider = _provider(repository);
+      final ProviderContainer container = ProviderContainer()
+        ..listen(provider, (_, _) {});
+      addTearDown(container.dispose);
+      await container.read(provider.future);
+
+      expect(await container.read(provider.notifier).markRead(bundle), isTrue);
+
+      expect(repository.markedRead, same(bundle));
+      expect(container.read(provider).value?.snapshot.newItems, isEmpty);
+    },
+  );
+
+  test('postponing one message retains the rest of its DM bundle', () async {
+    final InboxPostCandidate first = _candidate('first');
+    final InboxPostCandidate second = _candidate('second');
+    final DirectMessageBundleInboxItem bundle = DirectMessageBundleInboxItem(
+      channelId: 'channel',
+      authorId: 'other',
+      automationClass: InboxAutomationClass.person,
+      messages: <InboxPostCandidate>[first, second],
+    );
+    final _InboxRepository repository = _InboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(newItems: <InboxItem>[bundle]),
+      ],
+    );
+    final provider = _provider(repository);
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await container.read(provider.future);
+    final DirectMessageBundleInboxItem selected = DirectMessageBundleInboxItem(
+      channelId: 'channel',
+      authorId: 'other',
+      automationClass: InboxAutomationClass.person,
+      messages: <InboxPostCandidate>[second],
+    );
+
+    expect(await container.read(provider.notifier).postpone(selected), isTrue);
+
+    final InboxSnapshot snapshot = container.read(provider).value!.snapshot;
+    expect(snapshot.newItems.single.postIds, <String>['first']);
+    expect(snapshot.postponedItems.single.postIds, <String>['second']);
+  });
 }
+
+InboxPostCandidate _candidate(String id) => InboxPostCandidate(
+  post: Post(
+    id: id,
+    channelId: 'channel',
+    author: const PostAuthor(id: 'other', displayName: 'Other'),
+    sentAt: DateTime.utc(2026),
+    message: id,
+  ),
+  channel: const SidebarChannel(
+    id: 'channel',
+    teamId: 'team',
+    name: 'channel',
+    displayName: 'Channel',
+    kind: ChannelKind.directMessage,
+  ),
+  reason: InboxAttentionReason.allMessagesSubscription,
+);
 
 AsyncNotifierProvider<InboxController, InboxViewState> _provider(
   InboxRepository repository,
@@ -82,10 +170,19 @@ final class _InboxRepository extends InboxRepository {
   _InboxRepository(this.results);
   final List<Future<InboxSnapshot> Function()> results;
   var _index = 0;
+  InboxItem? markedRead;
 
   @override
   Future<InboxSnapshot> load({required AuthSession session}) =>
       results[_index++]();
+
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required InboxItem item,
+  }) async {
+    markedRead = item;
+  }
 }
 
 final class _PostponedRepository extends PostponedRepository {
