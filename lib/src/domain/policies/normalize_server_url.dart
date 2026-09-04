@@ -24,7 +24,10 @@ final class NormalizeServerUrl {
   bool _isAllowed(Uri uri) {
     final String host = uri.host.toLowerCase();
     final bool isLocalHost =
-        host == 'localhost' || host == '127.0.0.1' || host == '::1';
+        host == 'localhost' || host == '127.0.0.1' || host == '::1'
+            || host.startsWith('192.168')
+            || host.endsWith('.lan')
+            || host.startsWith('100.64'); // tailscale
     return uri.hasScheme &&
         host.isNotEmpty &&
         uri.userInfo.isEmpty &&
