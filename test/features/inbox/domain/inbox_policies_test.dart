@@ -5,12 +5,70 @@ import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/canonical_inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/policies/apply_inbox_post_change.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/canonicalize_inbox_candidates.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/classify_inbox_section.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/group_direct_messages.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/reconcile_queues.dart';
 
 void main() {
+  group('applyInboxPostChange', () {
+    test('deduplicates and regroups realtime direct messages', () {
+      final InboxPostCandidate first = _postCandidate(
+        id: 'first',
+        direct: true,
+        at: DateTime.utc(2026, 9, 4, 12),
+      );
+      final InboxPostCandidate second = _postCandidate(
+        id: 'second',
+        direct: true,
+        at: DateTime.utc(2026, 9, 4, 12, 1),
+      );
+      final InboxSnapshot initial = InboxSnapshot(
+        newItems: <InboxItem>[
+          DirectMessageBundleInboxItem(
+            channelId: 'dm',
+            authorId: 'other',
+            automationClass: InboxAutomationClass.person,
+            messages: <InboxPostCandidate>[first],
+          ),
+        ],
+      );
+
+      final InboxSnapshot added = applyInboxPostChange(
+        snapshot: initial,
+        postId: second.post.id,
+        candidate: second,
+      );
+      final InboxSnapshot duplicated = applyInboxPostChange(
+        snapshot: added,
+        postId: second.post.id,
+        candidate: second,
+      );
+
+      expect(duplicated.newItems, hasLength(1));
+      expect(duplicated.newItems.single.postIds, <String>['first', 'second']);
+    });
+
+    test('removes a deleted post but keeps postponed exclusivity', () {
+      final InboxPostCandidate first = _postCandidate(id: 'first');
+      final InboxPostCandidate postponed = _postCandidate(id: 'postponed');
+      final InboxSnapshot result = applyInboxPostChange(
+        snapshot: InboxSnapshot(
+          newItems: <InboxItem>[ChannelPostInboxItem(candidate: first)],
+          postponedItems: <InboxItem>[
+            ChannelPostInboxItem(candidate: postponed),
+          ],
+        ),
+        postId: first.post.id,
+        candidate: null,
+      );
+
+      expect(result.newItems, isEmpty);
+      expect(result.postponedItems.single.postIds, <String>['postponed']);
+    });
+  });
+
   group('classifyInboxSection', () {
     test('classifies channel mentions and automation messages', () {
       expect(

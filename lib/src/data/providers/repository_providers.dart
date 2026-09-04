@@ -119,5 +119,7 @@ final Provider<InboxRepository> inboxRepositoryProvider =
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         postponed: ref.watch(postponedRepositoryProvider),
+        webSocketGateway: ref.watch(webSocketGatewayProvider),
+        credentialStore: ref.watch(credentialStoreProvider),
       ),
     );

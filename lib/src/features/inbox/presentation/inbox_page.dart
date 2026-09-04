@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/classify_inbox_section.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
@@ -33,7 +34,18 @@ class _InboxPageState extends ConsumerState<InboxPage>
     final AsyncValue<InboxViewState> value = ref.watch(inboxProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text(InboxStrings.title),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Text(InboxStrings.title),
+            const SizedBox(width: 10),
+            _ConnectionIndicator(
+              status:
+                  value.value?.connectionStatus ??
+                  InboxConnectionStatus.disconnected,
+            ),
+          ],
+        ),
         actions: <Widget>[
           IconButton(
             tooltip: InboxStrings.refresh,
@@ -96,6 +108,37 @@ class _InboxPageState extends ConsumerState<InboxPage>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConnectionIndicator extends StatelessWidget {
+  const _ConnectionIndicator({required this.status});
+
+  final InboxConnectionStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool connected = status == InboxConnectionStatus.connected;
+    final String label = switch (status) {
+      InboxConnectionStatus.connecting => InboxStrings.connecting,
+      InboxConnectionStatus.connected => InboxStrings.connected,
+      InboxConnectionStatus.disconnected => InboxStrings.disconnected,
+    };
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        key: const ValueKey<String>('inbox-connection-indicator'),
+        label: label,
+        child: Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: connected ? Colors.green : Colors.red,
+            shape: BoxShape.circle,
+          ),
         ),
       ),
     );

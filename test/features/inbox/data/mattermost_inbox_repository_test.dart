@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
+import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
+import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -9,6 +14,7 @@ import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 
@@ -255,6 +261,226 @@ void main() {
     expect(api.readTeamId, 'source-team');
     expect(api.readTimestamp, now.millisecondsSinceEpoch);
   });
+
+  test(
+    'maps only current-username realtime mentions in known channels',
+    () async {
+      final _InboxApi api = _InboxApi(
+        teams: const <MattermostTeamDto>[
+          MattermostTeamDto(id: 'team', name: 'team', displayName: 'Team'),
+        ],
+        channels: const <MattermostChannelDto>[
+          MattermostChannelDto(
+            id: 'channel',
+            teamId: 'team',
+            type: 'O',
+            name: 'channel',
+            displayName: 'Channel',
+          ),
+        ],
+        members: const <MattermostChannelMemberDto>[
+          MattermostChannelMemberDto(channelId: 'channel', userId: 'me'),
+        ],
+        unread: const <MattermostPostDto>[],
+      );
+      final _Gateway gateway = _Gateway();
+      final MattermostInboxRepository repository = MattermostInboxRepository(
+        api: api,
+        messageMapper: const MattermostMessageMapper(),
+        postponed: const _Postponed(),
+        webSocketGateway: gateway,
+        credentialStore: _Credentials(session.serverUrl),
+      );
+      await repository.load(session: session);
+      final List<InboxRealtimeEvent> events = <InboxRealtimeEvent>[];
+      final StreamSubscription<InboxRealtimeEvent> subscription = repository
+          .watch(session: session)
+          .listen(events.add);
+      addTearDown(() async {
+        await gateway.close();
+        await subscription.cancel();
+      });
+      await _waitUntil(() => gateway.started);
+
+      expect(gateway.acceptsEvent?.call('posted'), isTrue);
+      expect(gateway.acceptsEvent?.call('typing'), isFalse);
+      expect(gateway.acceptsChannel?.call('channel'), isTrue);
+      expect(gateway.acceptsChannel?.call('unrelated'), isFalse);
+
+      gateway.add(
+        WebSocketEventSignal(
+          MattermostWebSocketEvent(
+            name: 'posted',
+            sequence: 1,
+            data: <String, Object?>{
+              'post': jsonEncode(<String, Object?>{
+                'id': 'realtime',
+                'user_id': 'other',
+                'channel_id': 'channel',
+                'message': 'hello @me',
+                'create_at': 1,
+              }),
+            },
+            broadcast: const <String, Object?>{'channel_id': 'channel'},
+          ),
+        ),
+      );
+      await _waitUntil(() => events.whereType<InboxPostChanged>().isNotEmpty);
+
+      final InboxPostChanged changed = events
+          .whereType<InboxPostChanged>()
+          .single;
+      expect(changed.postId, 'realtime');
+      expect(changed.candidate?.reason, InboxAttentionReason.directMention);
+
+      gateway.add(
+        WebSocketEventSignal(
+          MattermostWebSocketEvent(
+            name: 'posted',
+            sequence: 2,
+            data: <String, Object?>{
+              'post': jsonEncode(<String, Object?>{
+                'id': 'not-a-mention',
+                'user_id': 'other',
+                'channel_id': 'channel',
+                'message': 'hello everyone',
+                'create_at': 2,
+              }),
+            },
+            broadcast: const <String, Object?>{'channel_id': 'channel'},
+          ),
+        ),
+      );
+      await _waitUntil(() => events.whereType<InboxPostChanged>().length == 2);
+      expect(events.whereType<InboxPostChanged>().last.candidate, isNull);
+    },
+  );
+
+  test(
+    'requests HTTP recovery only after reconnect or a sequence gap',
+    () async {
+      final _Gateway gateway = _Gateway();
+      final _InboxApi api = _InboxApi(
+        teams: const <MattermostTeamDto>[
+          MattermostTeamDto(id: 'team', name: 'team', displayName: 'Team'),
+        ],
+        channels: const <MattermostChannelDto>[
+          MattermostChannelDto(
+            id: 'channel',
+            teamId: 'team',
+            type: 'O',
+            name: 'channel',
+            displayName: 'Channel',
+          ),
+        ],
+        members: const <MattermostChannelMemberDto>[
+          MattermostChannelMemberDto(channelId: 'channel', userId: 'me'),
+        ],
+        unread: const <MattermostPostDto>[],
+        failUserLookup: true,
+      );
+      final MattermostInboxRepository repository = MattermostInboxRepository(
+        api: api,
+        messageMapper: const MattermostMessageMapper(),
+        postponed: const _Postponed(),
+        webSocketGateway: gateway,
+        credentialStore: _Credentials(session.serverUrl),
+      );
+      await repository.load(session: session);
+      final List<InboxRealtimeEvent> events = <InboxRealtimeEvent>[];
+      final StreamSubscription<InboxRealtimeEvent> subscription = repository
+          .watch(session: session)
+          .listen(events.add);
+      addTearDown(() async {
+        await gateway.close();
+        await subscription.cancel();
+      });
+      await _waitUntil(() => gateway.started);
+
+      gateway.add(
+        const WebSocketConnectionSignal(
+          status: WebSocketConnectionStatus.connected,
+        ),
+      );
+      gateway.add(
+        WebSocketEventSignal(
+          MattermostWebSocketEvent(
+            name: 'posted',
+            sequence: 1,
+            data: <String, Object?>{
+              'post': jsonEncode(<String, Object?>{
+                'id': 'reply',
+                'root_id': 'root',
+                'user_id': 'other',
+                'channel_id': 'channel',
+                'message': 'reply',
+                'create_at': 1,
+              }),
+            },
+            broadcast: const <String, Object?>{'channel_id': 'channel'},
+          ),
+        ),
+      );
+      for (final String name in <String>[
+        'thread_updated',
+        'thread_read_changed',
+        'preference_changed',
+      ]) {
+        gateway.add(
+          WebSocketEventSignal(
+            MattermostWebSocketEvent(
+              name: name,
+              sequence: 2,
+              data: const <String, Object?>{},
+              broadcast: const <String, Object?>{},
+            ),
+          ),
+        );
+      }
+      gateway.add(
+        WebSocketEventSignal(
+          MattermostWebSocketEvent(
+            name: 'posted',
+            sequence: 3,
+            data: <String, Object?>{
+              'post': jsonEncode(<String, Object?>{
+                'id': 'mapping-fails',
+                'user_id': 'unknown-author',
+                'channel_id': 'channel',
+                'message': 'hello @me',
+                'create_at': 2,
+              }),
+            },
+            broadcast: const <String, Object?>{'channel_id': 'channel'},
+          ),
+        ),
+      );
+      gateway.add(
+        const WebSocketConnectionSignal(
+          status: WebSocketConnectionStatus.disconnected,
+        ),
+      );
+      await _waitUntil(
+        () => events.whereType<InboxConnectionChanged>().length == 2,
+      );
+
+      expect(events.whereType<InboxRefreshRequired>(), isEmpty);
+
+      gateway.add(
+        const WebSocketConnectionSignal(
+          status: WebSocketConnectionStatus.connected,
+          isReconnect: true,
+        ),
+      );
+      await _waitUntil(
+        () => events.whereType<InboxRefreshRequired>().length == 1,
+      );
+      gateway.add(const WebSocketSequenceGapSignal(expected: 3, actual: 4));
+      await _waitUntil(
+        () => events.whereType<InboxRefreshRequired>().length == 2,
+      );
+    },
+  );
 }
 
 _InboxApi _emptyApi() => _InboxApi(
@@ -315,11 +541,13 @@ final class _InboxApi extends Fake implements MattermostApi {
     required this.channels,
     required this.members,
     required this.unread,
+    this.failUserLookup = false,
   });
   final List<MattermostTeamDto> teams;
   final List<MattermostChannelDto> channels;
   final List<MattermostChannelMemberDto> members;
   final List<MattermostPostDto> unread;
+  final bool failUserLookup;
   final List<String> unreadChannelIds = <String>[];
   String? viewedChannelId;
   String? viewedUserId;
@@ -377,10 +605,12 @@ final class _InboxApi extends Fake implements MattermostApi {
   Future<List<MattermostPostDto>> getPostsByIds(List<String> postIds) async =>
       unread.where((it) => postIds.contains(it.id)).toList();
   @override
-  Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async =>
-      const <MattermostUserDto>[
-        MattermostUserDto(id: 'other', username: 'other'),
-      ];
+  Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async {
+    if (failUserLookup) throw StateError('profile lookup failed');
+    return const <MattermostUserDto>[
+      MattermostUserDto(id: 'other', username: 'other'),
+    ];
+  }
 
   @override
   Future<void> viewChannel({
@@ -422,4 +652,53 @@ final class _Postponed extends PostponedRepository {
     required AuthSession session,
     required List<PostponedReference> references,
   }) async {}
+}
+
+Future<void> _waitUntil(bool Function() condition) async {
+  for (var index = 0; index < 100; index++) {
+    if (condition()) return;
+    await Future<void>.delayed(Duration.zero);
+  }
+  fail('Condition was not reached');
+}
+
+final class _Gateway implements WebSocketGateway {
+  final StreamController<WebSocketGatewaySignal> _signals =
+      StreamController<WebSocketGatewaySignal>();
+  bool Function(String)? acceptsEvent;
+  bool Function(String)? acceptsChannel;
+  bool started = false;
+
+  @override
+  Stream<WebSocketGatewaySignal> watch({
+    required Uri serverUrl,
+    required String token,
+    required bool Function(String eventName) acceptsEvent,
+    required bool Function(String channelId) acceptsChannel,
+  }) {
+    this.acceptsEvent = acceptsEvent;
+    this.acceptsChannel = acceptsChannel;
+    started = true;
+    return _signals.stream;
+  }
+
+  void add(WebSocketGatewaySignal signal) => _signals.add(signal);
+
+  Future<void> close() => _signals.close();
+}
+
+final class _Credentials implements CredentialStore {
+  const _Credentials(this.serverUrl);
+
+  final Uri serverUrl;
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<({Uri serverUrl, String token})?> read() async =>
+      (serverUrl: serverUrl, token: 'test-credential');
+
+  @override
+  Future<void> save({required Uri serverUrl, required String token}) async {}
 }

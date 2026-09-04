@@ -1,7 +1,7 @@
 # Inbox и Postponed
 
-Статус: proposed  
-Дата исследования: 2026-09-03  
+Статус: realtime implemented
+Дата исследования: 2026-09-03
 Область: замена верхнеуровневого пункта Threads агрегированным Inbox
 
 ## Резюме решения
@@ -386,6 +386,17 @@ backoff; при ошибке item остается в Postponed и client-side s
 должен иметь централизованный error handler.
 
 ## Realtime и восстановление
+
+Текущая реализация использует отдельный transport-level `WebSocketGateway` с
+authentication challenge, sequence tracking и bounded exponential reconnect.
+Mattermost не предоставляет server-side action для подписки на подмножество
+событий, поэтому соединение получает пользовательский поток, но gateway
+пропускает выше только перечисленные Inbox event names, а content events —
+только для channel IDs из последнего REST snapshot. Первый connect обновляет
+только статус соединения. Полный HTTP recovery запускается исключительно после
+reconnect или пропуска `seq`; обычное событие и ошибка его локального mapping не
+делают здоровый stream недостоверным. Realtime mention MVP проверяет только
+`@username` текущего пользователя.
 
 `InboxRepository` строит атомарный REST snapshot, затем controller применяет
 события к этому snapshot:

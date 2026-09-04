@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,7 @@ import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
@@ -14,6 +17,64 @@ import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.da
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
+  testWidgets('shows red and green realtime connection indicators', (
+    WidgetTester tester,
+  ) async {
+    final StreamController<InboxRealtimeEvent> realtime =
+        StreamController<InboxRealtimeEvent>();
+    addTearDown(realtime.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(
+            _InboxRepository(InboxSnapshot(), realtime: realtime.stream),
+          ),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder indicator = find.byKey(
+      const ValueKey<String>('inbox-connection-indicator'),
+    );
+    expect(indicator, findsOneWidget);
+    expect(find.byTooltip('Inbox realtime is disconnected'), findsOneWidget);
+    expect(
+      tester
+          .widget<Container>(
+            find.descendant(of: indicator, matching: find.byType(Container)),
+          )
+          .decoration,
+      isA<BoxDecoration>().having(
+        (BoxDecoration decoration) => decoration.color,
+        'color',
+        Colors.red,
+      ),
+    );
+
+    realtime.add(const InboxConnectionChanged(InboxConnectionStatus.connected));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Inbox realtime is connected'), findsOneWidget);
+    expect(
+      tester
+          .widget<Container>(
+            find.descendant(of: indicator, matching: find.byType(Container)),
+          )
+          .decoration,
+      isA<BoxDecoration>().having(
+        (BoxDecoration decoration) => decoration.color,
+        'color',
+        Colors.green,
+      ),
+    );
+  });
+
   testWidgets(
     'renders sectioned list rows with icon actions and opens the tapped row',
     (WidgetTester tester) async {
@@ -171,13 +232,20 @@ SidebarChannel _channel({bool direct = false}) => SidebarChannel(
 );
 
 final class _InboxRepository extends InboxRepository {
-  _InboxRepository(this.snapshot);
+  _InboxRepository(
+    this.snapshot, {
+    this.realtime = const Stream<InboxRealtimeEvent>.empty(),
+  });
 
   final InboxSnapshot snapshot;
+  final Stream<InboxRealtimeEvent> realtime;
   InboxItem? markedRead;
 
   @override
   Future<InboxSnapshot> load({required AuthSession session}) async => snapshot;
+
+  @override
+  Stream<InboxRealtimeEvent> watch({required AuthSession session}) => realtime;
 
   @override
   Future<void> markRead({

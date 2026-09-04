@@ -5,6 +5,8 @@ import 'package:mattermost_flutter/src/data/cache/custom_emoji_cache.dart';
 import 'package:mattermost_flutter/src/data/database/database_provider.dart';
 import 'package:mattermost_flutter/src/data/database/user_profile_cache_dao.dart';
 import 'package:mattermost_flutter/src/data/platform/system_attachment_file_saver.dart';
+import 'package:mattermost_flutter/src/data/realtime/mattermost_websocket_gateway.dart';
+import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/data/storage/secure_credential_store.dart';
 import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
@@ -18,6 +20,9 @@ final Provider<MattermostApiClientFactory> mattermostApiClientFactoryProvider =
     Provider<MattermostApiClientFactory>(
       (Ref ref) => const MattermostClientFactory(),
     );
+
+final Provider<WebSocketGateway> webSocketGatewayProvider =
+    Provider<WebSocketGateway>((Ref ref) => MattermostWebSocketGateway());
 
 final Provider<UserProfileCache> userProfileCacheProvider =
     Provider<UserProfileCache>(

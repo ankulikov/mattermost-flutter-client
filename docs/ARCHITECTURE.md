@@ -123,10 +123,15 @@ display name находится в `domain/policies`; avatar initials наход
 Shift+Enter добавляет новую строку. Черновик очищается только после успешного
 REST-ответа и сохраняется вместе с неблокирующей ошибкой при неудаче.
 
-До появления WebSocket gateway собственный post из ответа сервера сразу
-добавляется в volatile state открытого канала или треда. Для reply также
-обновляются локальные reply count и last reply у root. Сообщения других
-пользователей в realtime пока не поступают.
+Собственный post из REST-ответа сразу добавляется в volatile state открытого
+канала или треда. Inbox дополнительно использует аутентифицированный
+`WebSocketGateway`: transport отвечает за reconnect и sequence gaps, data-слой
+фильтрует только Inbox-события и известные пользователю каналы, а domain policy
+сливает типизированные post-дельты с тем же canonicalization/grouping pipeline,
+который строит исторический REST snapshot. События здорового соединения никогда
+не запускают HTTP snapshot reload: неподдержанные thread/read/preference дельты
+изолируются, а полный network-first recovery выполняется только после reconnect
+или пропуска WebSocket sequence без потери уже показанного состояния.
 
 ## Треды
 
@@ -175,6 +180,13 @@ Bots & integrations, Direct Messages и Threads. Упоминание в нов�
 Direct Messages. Быстрое read для обычного поста и DM продвигает границу
 просмотра канала, а для CRT-треда обновляет thread read timestamp в команде,
 из которой этот тред был загружен.
+
+После успешного REST snapshot Inbox асинхронно открывает WebSocket и показывает
+в заголовке зеленый/красный индикатор состояния. Realtime mention в первой
+версии определяется только по `@username` текущего пользователя; DM/GM
+доставляются целиком, а обычные каналы дополнительно учитывают effective
+all-messages notification policy. Первый connect только обновляет индикатор;
+reconnect и пропуск `seq` запускают атомарную сверку с REST.
 
 ## Профили и аватары пользователей
 

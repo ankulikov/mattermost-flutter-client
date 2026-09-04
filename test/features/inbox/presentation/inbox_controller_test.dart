@@ -7,12 +7,113 @@ import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 
 void main() {
+  test('merges realtime posts and tracks connection state', () async {
+    final StreamController<InboxRealtimeEvent> realtime =
+        StreamController<InboxRealtimeEvent>();
+    addTearDown(realtime.close);
+    final InboxPostCandidate first = _candidate('first');
+    final InboxPostCandidate second = _candidate('second');
+    final _InboxRepository repository = _InboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(
+          newItems: <InboxItem>[
+            DirectMessageBundleInboxItem(
+              channelId: 'channel',
+              authorId: 'other',
+              automationClass: InboxAutomationClass.person,
+              messages: <InboxPostCandidate>[first],
+            ),
+          ],
+        ),
+      ],
+      realtime: realtime.stream,
+    );
+    final provider = _provider(repository);
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await container.read(provider.future);
+
+    realtime.add(const InboxConnectionChanged(InboxConnectionStatus.connected));
+    realtime.add(InboxPostChanged(postId: second.post.id, candidate: second));
+    realtime.add(InboxPostChanged(postId: second.post.id, candidate: second));
+    await Future<void>.delayed(Duration.zero);
+
+    final InboxViewState state = container.read(provider).requireValue;
+    expect(state.connectionStatus, InboxConnectionStatus.connected);
+    expect(state.snapshot.newItems, hasLength(1));
+    expect(state.snapshot.newItems.single.postIds, <String>['first', 'second']);
+    expect(repository.loadCalls, 1);
+  });
+
+  test(
+    'a realtime recovery request refreshes without dropping old data',
+    () async {
+      final StreamController<InboxRealtimeEvent> realtime =
+          StreamController<InboxRealtimeEvent>();
+      addTearDown(realtime.close);
+      final Completer<InboxSnapshot> refreshed = Completer<InboxSnapshot>();
+      final _InboxRepository repository = _InboxRepository(
+        <Future<InboxSnapshot> Function()>[
+          () async => InboxSnapshot(
+            newItems: <InboxItem>[
+              ChannelPostInboxItem(candidate: _candidate('old')),
+            ],
+          ),
+          () => refreshed.future,
+        ],
+        realtime: realtime.stream,
+      );
+      final provider = _provider(repository);
+      final ProviderContainer container = ProviderContainer()
+        ..listen(provider, (_, _) {});
+      addTearDown(container.dispose);
+      await container.read(provider.future);
+
+      realtime.add(const InboxRefreshRequired());
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(provider).requireValue.isRefreshing, isTrue);
+      expect(
+        container.read(provider).requireValue.snapshot.newItems.single.postIds,
+        <String>['old'],
+      );
+
+      final InboxPostCandidate duringRefresh = _candidate('during-refresh');
+      realtime.add(
+        InboxPostChanged(
+          postId: duringRefresh.post.id,
+          candidate: duringRefresh,
+        ),
+      );
+
+      refreshed.complete(
+        InboxSnapshot(
+          newItems: <InboxItem>[
+            ChannelPostInboxItem(candidate: _candidate('fresh')),
+          ],
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        container
+            .read(provider)
+            .requireValue
+            .snapshot
+            .newItems
+            .expand((InboxItem item) => item.postIds),
+        containsAll(<String>['fresh', 'during-refresh']),
+      );
+      expect(repository.loadCalls, 2);
+    },
+  );
+
   test(
     'refresh keeps the previous Inbox snapshot while request is pending',
     () async {
@@ -167,14 +268,24 @@ AsyncNotifierProvider<InboxController, InboxViewState> _provider(
 }
 
 final class _InboxRepository extends InboxRepository {
-  _InboxRepository(this.results);
+  _InboxRepository(
+    this.results, {
+    this.realtime = const Stream<InboxRealtimeEvent>.empty(),
+  });
   final List<Future<InboxSnapshot> Function()> results;
+  final Stream<InboxRealtimeEvent> realtime;
   var _index = 0;
+  var loadCalls = 0;
   InboxItem? markedRead;
 
   @override
-  Future<InboxSnapshot> load({required AuthSession session}) =>
-      results[_index++]();
+  Future<InboxSnapshot> load({required AuthSession session}) {
+    loadCalls++;
+    return results[_index++]();
+  }
+
+  @override
+  Stream<InboxRealtimeEvent> watch({required AuthSession session}) => realtime;
 
   @override
   Future<void> markRead({

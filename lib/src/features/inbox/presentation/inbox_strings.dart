@@ -8,6 +8,9 @@ abstract final class InboxStrings {
       'Could not refresh. Showing previously loaded Inbox.';
   static const String retry = 'Retry';
   static const String refresh = 'Refresh Inbox';
+  static const String connecting = 'Inbox realtime is connecting';
+  static const String connected = 'Inbox realtime is connected';
+  static const String disconnected = 'Inbox realtime is disconnected';
   static const String emptyNew = 'No new messages';
   static const String emptyPostponed = 'No postponed messages';
   static const String read = 'Mark as read';

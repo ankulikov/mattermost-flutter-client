@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
+import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
+import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -12,6 +15,7 @@ import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/canonicalize_inbox_candidates.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/classify_inbox_attention.dart';
@@ -21,19 +25,23 @@ import 'package:mattermost_flutter/src/features/inbox/domain/policies/reconcile_
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 
-/// REST-only, network-first Inbox snapshot builder.
+/// Network-first Inbox snapshot builder and realtime event mapper.
 ///
-/// Realtime events and sequence-gap recovery deliberately remain outside this
-/// MVP repository; a controller can replace this full snapshot atomically.
+/// Connection lifecycle stays in [WebSocketGateway], while this repository
+/// maps transport events into the same domain candidates used by REST.
 final class MattermostInboxRepository extends InboxRepository {
   MattermostInboxRepository({
     required MattermostApi api,
     required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
     required PostponedRepository postponed,
+    WebSocketGateway? webSocketGateway,
+    CredentialStore? credentialStore,
     DateTime Function()? now,
   }) : _api = api,
        _messageMapper = messageMapper,
        _postponed = postponed,
+       _webSocketGateway = webSocketGateway,
+       _credentialStore = credentialStore,
        _now = now ?? DateTime.now;
 
   static const int _authorBatchSize = 100;
@@ -42,11 +50,33 @@ final class MattermostInboxRepository extends InboxRepository {
   final MattermostApi _api;
   final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
   final PostponedRepository _postponed;
+  final WebSocketGateway? _webSocketGateway;
+  final CredentialStore? _credentialStore;
   final DateTime Function() _now;
+  _InboxRealtimeScope? _realtimeScope;
+
+  static const Set<String> _realtimeEventNames = <String>{
+    'posted',
+    'post_edited',
+    'post_deleted',
+    'post_unread',
+    'thread_updated',
+    'thread_follow_changed',
+    'thread_read_changed',
+    'channel_viewed',
+    'channel_member_updated',
+    'direct_added',
+    'group_added',
+    'user_updated',
+    'preference_changed',
+    'preferences_changed',
+    'preferences_deleted',
+  };
 
   @override
   Future<InboxSnapshot> load({required AuthSession session}) async {
     final DateTime builtAt = _now();
+    _rawUsersAreBots.clear();
     final MattermostUserDto currentUser = await _api.getCurrentUser();
     final List<MattermostTeamDto> teams = await _api.getTeamsForCurrentUser();
     final List<_TeamChannels> teamChannels = await Future.wait(
@@ -198,11 +228,205 @@ final class MattermostInboxRepository extends InboxRepository {
         InboxSourceSnapshot(threads: threadCandidates, posts: newCandidates),
       ),
     );
-    return reconcileQueues(
+    final InboxSnapshot result = reconcileQueues(
       newItems: newItems,
       postponedItems: postponedItems,
       builtAt: builtAt,
       hasIncompleteMentionReconstruction: incompleteMentions,
+    );
+    _realtimeScope = _InboxRealtimeScope(
+      currentUser: currentUser,
+      channels: <String, SidebarChannel>{
+        for (final MapEntry<String, MattermostChannelDto> entry
+            in channels.entries)
+          if (_mapKnownChannel(entry.value) case final SidebarChannel channel)
+            entry.key: channel,
+      },
+      members: Map<String, MattermostChannelMemberDto>.of(members),
+      authors: Map<String, UserSummary>.of(authors),
+    );
+    return result;
+  }
+
+  @override
+  Stream<InboxRealtimeEvent> watch({required AuthSession session}) async* {
+    final WebSocketGateway? gateway = _webSocketGateway;
+    final CredentialStore? credentialStore = _credentialStore;
+    if (gateway == null || credentialStore == null) return;
+    final ({Uri serverUrl, String token})? credentials = await credentialStore
+        .read();
+    if (credentials == null || credentials.serverUrl != session.serverUrl) {
+      yield const InboxConnectionChanged(InboxConnectionStatus.disconnected);
+      return;
+    }
+
+    await for (final WebSocketGatewaySignal signal in gateway.watch(
+      serverUrl: session.serverUrl,
+      token: credentials.token,
+      acceptsEvent: _realtimeEventNames.contains,
+      acceptsChannel: (String channelId) =>
+          _realtimeScope?.channels.containsKey(channelId) == true,
+    )) {
+      switch (signal) {
+        case WebSocketConnectionSignal(:final status, :final isReconnect):
+          yield InboxConnectionChanged(_mapConnectionStatus(status));
+          if (status == WebSocketConnectionStatus.connected && isReconnect) {
+            yield const InboxRefreshRequired();
+          }
+        case WebSocketSequenceGapSignal():
+          yield const InboxRefreshRequired();
+        case WebSocketEventSignal(:final event):
+          try {
+            final InboxRealtimeEvent? mapped = await _mapRealtimeEvent(
+              session,
+              event,
+            );
+            if (mapped != null) yield mapped;
+          } on Object {
+            // A malformed or currently unsupported event does not make the
+            // stream itself unreliable. Keep the healthy socket active; only
+            // reconnects and sequence gaps require an authoritative reload.
+          }
+      }
+    }
+  }
+
+  InboxConnectionStatus _mapConnectionStatus(
+    WebSocketConnectionStatus status,
+  ) => switch (status) {
+    WebSocketConnectionStatus.connecting => InboxConnectionStatus.connecting,
+    WebSocketConnectionStatus.connected => InboxConnectionStatus.connected,
+    WebSocketConnectionStatus.disconnected =>
+      InboxConnectionStatus.disconnected,
+  };
+
+  Future<InboxRealtimeEvent?> _mapRealtimeEvent(
+    AuthSession session,
+    MattermostWebSocketEvent event,
+  ) async {
+    switch (event.name) {
+      case 'posted':
+      case 'post_edited':
+        final MattermostPostDto? raw = _postFromEvent(event.data);
+        if (raw == null || raw.id.isEmpty) return null;
+        // A matching thread_updated event carries the aggregate needed to
+        // project replies. The reply itself must not trigger a REST reload.
+        if (raw.rootId.isNotEmpty) return null;
+        if (raw.userId == session.userId) return null;
+        return InboxPostChanged(
+          postId: raw.id,
+          candidate: await _mapRealtimePost(session, raw),
+        );
+      case 'post_deleted':
+        final MattermostPostDto? raw = _postFromEvent(event.data);
+        final Object? idValue = event.data['post_id'];
+        final String postId = raw?.id ?? (idValue is String ? idValue : '');
+        return postId.isEmpty
+            ? null
+            : InboxPostChanged(postId: postId, candidate: null);
+      case 'preference_changed':
+      case 'preferences_changed':
+      case 'preferences_deleted':
+        return null;
+      default:
+        return null;
+    }
+  }
+
+  Future<InboxPostCandidate?> _mapRealtimePost(
+    AuthSession session,
+    MattermostPostDto raw,
+  ) async {
+    final _InboxRealtimeScope? scope = _realtimeScope;
+    final SidebarChannel? channel = scope?.channels[raw.channelId];
+    final MattermostChannelMemberDto? member = scope?.members[raw.channelId];
+    if (scope == null || channel == null || member == null) return null;
+    if (raw.type.startsWith('system_') ||
+        raw.deleteAt != 0 ||
+        _isTrue(raw.props?.values['silent_notification'])) {
+      return null;
+    }
+
+    UserSummary? author = scope.authors[raw.userId];
+    if (author == null && raw.userId.isNotEmpty) {
+      final List<MattermostUserDto> users = await _api.getUsersByIds(<String>[
+        raw.userId,
+      ]);
+      if (users.isNotEmpty) {
+        final MattermostUserDto user = users.first;
+        author = mapUserSummary(user);
+        scope.authors[user.id] = author;
+        _rawUsersAreBots[user.id] = user.isBot;
+      }
+    }
+    final List<ChannelPost> mapped = _messageMapper.map(
+      posts: <MattermostPostDto>[raw],
+      users: author == null ? const <UserSummary>[] : <UserSummary>[author],
+      currentUserId: session.userId,
+      includeDeleted: true,
+    );
+    if (mapped.isEmpty) return null;
+    final InboxAttentionReason? reason = channel.isDialog
+        ? InboxAttentionReason.allMessagesSubscription
+        : _classifyRealtime(raw, scope.currentUser, member);
+    if (reason == null) return null;
+    return InboxPostCandidate(
+      post: mapped.single,
+      channel: channel,
+      reason: reason,
+      isSystem: raw.type.startsWith('system_'),
+      isSilentNotification: _isTrue(raw.props?.values['silent_notification']),
+      isFromBot: _rawUsersAreBots[raw.userId] == true,
+      isFromWebhook:
+          _isTrue(raw.props?.values['from_bot']) ||
+          _isTrue(raw.props?.values['from_webhook']),
+      isFromPlugin: _isTrue(raw.props?.values['from_plugin']),
+    );
+  }
+
+  InboxAttentionReason? _classifyRealtime(
+    MattermostPostDto post,
+    MattermostUserDto user,
+    MattermostChannelMemberDto member,
+  ) {
+    final MattermostChannelNotifyPropsDto notify =
+        member.notifyProps ?? const MattermostChannelNotifyPropsDto();
+    final UserNotifyPropsDto userNotify =
+        user.notifyProps ?? const UserNotifyPropsDto();
+    return classifyInboxAttention(
+      message: post.message,
+      username: user.username,
+      firstName: '',
+      mentionKeys: '',
+      firstNameEnabled: false,
+      channelMentionsEnabled: false,
+      ignoreChannelMentions: true,
+      allMessagesSubscription: resolvesToAllMessagesSubscription(
+        memberMarkUnread: notify.markUnread,
+        memberDesktop: notify.desktop,
+        memberPush: notify.push,
+        userDesktop: userNotify.desktop,
+        userPush: userNotify.push,
+      ),
+    );
+  }
+
+  MattermostPostDto? _postFromEvent(Map<String, Object?> data) {
+    final Object? rawPost = data['post'];
+    final Object? decoded;
+    try {
+      decoded = rawPost is String ? jsonDecode(rawPost) : rawPost;
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map<Object?, Object?>) return null;
+    return MattermostPostDto.fromJson(
+      decoded.map(
+        (Object? key, Object? value) => MapEntry<String, Object?>(
+          key is String ? key : key.toString(),
+          value,
+        ),
+      ),
     );
   }
 
@@ -546,4 +770,18 @@ final class _UnreadChannelPosts {
 
   final String channelId;
   final List<MattermostPostDto> posts;
+}
+
+final class _InboxRealtimeScope {
+  _InboxRealtimeScope({
+    required this.currentUser,
+    required this.channels,
+    required this.members,
+    required this.authors,
+  });
+
+  final MattermostUserDto currentUser;
+  final Map<String, SidebarChannel> channels;
+  final Map<String, MattermostChannelMemberDto> members;
+  final Map<String, UserSummary> authors;
 }
