@@ -12,12 +12,12 @@ import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 class ChannelSidebar extends ConsumerWidget {
   const ChannelSidebar({
     this.onChannelSelected,
-    this.onThreadsSelected,
+    this.onInboxSelected,
     super.key,
   });
 
   final VoidCallback? onChannelSelected;
-  final VoidCallback? onThreadsSelected;
+  final VoidCallback? onInboxSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -47,7 +47,7 @@ class ChannelSidebar extends ConsumerWidget {
           refreshFailed: viewState.refreshFailed,
           onRefresh: () => refreshChannelSidebar(ref),
           onChannelSelected: onChannelSelected,
-          onThreadsSelected: onThreadsSelected,
+          onInboxSelected: onInboxSelected,
         ),
       ),
     );
@@ -88,7 +88,7 @@ class _SidebarContent extends StatelessWidget {
     required this.refreshFailed,
     required this.onRefresh,
     required this.onChannelSelected,
-    required this.onThreadsSelected,
+    required this.onInboxSelected,
   });
 
   final ChannelSidebarSnapshot snapshot;
@@ -96,7 +96,7 @@ class _SidebarContent extends StatelessWidget {
   final bool refreshFailed;
   final RefreshCallback onRefresh;
   final VoidCallback? onChannelSelected;
-  final VoidCallback? onThreadsSelected;
+  final VoidCallback? onInboxSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +114,7 @@ class _SidebarContent extends StatelessWidget {
         Expanded(
           child: Column(
             children: <Widget>[
-              _ThreadsTile(onSelected: onThreadsSelected),
+              _InboxTile(onSelected: onInboxSelected),
               const Divider(height: 1),
               Expanded(
                 child: snapshot.sections.isEmpty
@@ -135,8 +135,8 @@ class _SidebarContent extends StatelessWidget {
   }
 }
 
-class _ThreadsTile extends ConsumerWidget {
-  const _ThreadsTile({this.onSelected});
+class _InboxTile extends ConsumerWidget {
+  const _InboxTile({this.onSelected});
 
   final VoidCallback? onSelected;
 
@@ -151,7 +151,7 @@ class _ThreadsTile extends ConsumerWidget {
         selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         leading: const Icon(Icons.forum_outlined, size: 18),
-        title: const Text(ChannelSidebarStrings.threads),
+        title: const Text(ChannelSidebarStrings.inbox),
         onTap: () {
           ref.read(threadsDestinationProvider.notifier).select();
           ref.read(selectedChannelProvider.notifier).clear();

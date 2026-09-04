@@ -48,6 +48,18 @@ final class DioMattermostApi implements MattermostApi {
   }
 
   @override
+  Future<List<MattermostChannelMemberDto>> getChannelMembersForUser({
+    required String userId,
+    required String teamId,
+  }) async {
+    final Response<Object?> response = await _get(
+      '/users/${Uri.encodeComponent(userId)}'
+      '/teams/${Uri.encodeComponent(teamId)}/channels/members',
+    );
+    return _dtoList(response.data, MattermostChannelMemberDto.fromJson);
+  }
+
+  @override
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async {
     if (userIds.isEmpty) return const <MattermostUserDto>[];
     final Response<Object?> response = await _post(
@@ -254,6 +266,34 @@ final class DioMattermostApi implements MattermostApi {
   }
 
   @override
+  Future<MattermostPostListDto> getUnreadPostsForChannel({
+    required String userId,
+    required String channelId,
+    int limitBefore = 0,
+    int limitAfter = 200,
+  }) async {
+    final Response<Object?> response = await _get(
+      '/users/${Uri.encodeComponent(userId)}'
+      '/channels/${Uri.encodeComponent(channelId)}/posts/unread',
+      queryParameters: <String, Object?>{
+        'limit_before': limitBefore,
+        'limit_after': limitAfter,
+      },
+    );
+    return MattermostPostListDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<MattermostPostDto>> getPostsByIds(List<String> postIds) async {
+    if (postIds.isEmpty) return const <MattermostPostDto>[];
+    final Response<Object?> response = await _post(
+      '/posts/ids',
+      data: jsonEncode(postIds),
+    );
+    return _dtoList(response.data, MattermostPostDto.fromJson);
+  }
+
+  @override
   Future<MattermostPostDto> createPost(
     MattermostCreatePostRequestDto post,
   ) async {
@@ -342,9 +382,81 @@ final class DioMattermostApi implements MattermostApi {
     required int timestamp,
   }) async {
     await _put(
-      '/users/$userId/teams/$teamId/threads/$threadId/read/$timestamp',
+      '/users/${Uri.encodeComponent(userId)}'
+      '/teams/${Uri.encodeComponent(teamId)}'
+      '/threads/${Uri.encodeComponent(threadId)}/read/$timestamp',
     );
   }
+
+  @override
+  Future<void> viewChannel({
+    required String userId,
+    required String channelId,
+    String? previousChannelId,
+  }) => _post(
+    '/channels/members/${Uri.encodeComponent(userId)}/view',
+    data: <String, Object?>{
+      'channel_id': channelId,
+      if (previousChannelId case final String value) 'prev_channel_id': value,
+    },
+  );
+
+  @override
+  Future<void> followThread({
+    required String userId,
+    required String teamId,
+    required String threadId,
+  }) => _put(_threadFollowingPath(userId, teamId, threadId));
+
+  @override
+  Future<void> unfollowThread({
+    required String userId,
+    required String teamId,
+    required String threadId,
+  }) => _delete(_threadFollowingPath(userId, teamId, threadId));
+
+  @override
+  Future<List<MattermostPreferenceDto>> getPreferencesByCategory({
+    required String userId,
+    required String category,
+  }) async {
+    final Response<Object?> response = await _get(
+      '/users/${Uri.encodeComponent(userId)}'
+      '/preferences/${Uri.encodeComponent(category)}',
+    );
+    return _dtoList(response.data, MattermostPreferenceDto.fromJson);
+  }
+
+  @override
+  Future<void> savePreferences({
+    required String userId,
+    required List<MattermostPreferenceDto> preferences,
+  }) => _put(
+    '/users/${Uri.encodeComponent(userId)}/preferences',
+    data: preferences
+        .map((MattermostPreferenceDto value) => value.toJson())
+        .toList(),
+  );
+
+  @override
+  Future<void> deletePreferences({
+    required String userId,
+    required List<MattermostPreferenceDto> preferences,
+  }) => _post(
+    '/users/${Uri.encodeComponent(userId)}/preferences/delete',
+    data: preferences
+        .map((MattermostPreferenceDto value) => value.toJson())
+        .toList(),
+  );
+
+  static String _threadFollowingPath(
+    String userId,
+    String teamId,
+    String threadId,
+  ) =>
+      '/users/${Uri.encodeComponent(userId)}'
+      '/teams/${Uri.encodeComponent(teamId)}'
+      '/threads/${Uri.encodeComponent(threadId)}/following';
 
   static Map<String, String>? _conditionalHeaders(String? etag) =>
       etag == null ? null : <String, String>{'If-None-Match': etag};
@@ -364,14 +476,22 @@ final class DioMattermostApi implements MattermostApi {
 
   Future<Response<Object?>> _post(String path, {Object? data}) =>
       _withCancellation(
-        (CancelToken? cancelToken) =>
-            _dio.post<Object?>(path, data: data, cancelToken: cancelToken),
+        (CancelToken? cancelToken) => _dio.post<Object?>(
+          path,
+          data: data,
+          cancelToken: cancelToken,
+          options: Options(contentType: Headers.jsonContentType),
+        ),
       );
 
   Future<Response<Object?>> _put(String path, {Object? data}) =>
       _withCancellation(
-        (CancelToken? cancelToken) =>
-            _dio.put<Object?>(path, data: data, cancelToken: cancelToken),
+        (CancelToken? cancelToken) => _dio.put<Object?>(
+          path,
+          data: data,
+          cancelToken: cancelToken,
+          options: Options(contentType: Headers.jsonContentType),
+        ),
       );
 
   Future<Response<Object?>> _delete(String path) => _withCancellation(

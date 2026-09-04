@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
@@ -14,7 +15,6 @@ import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_strings.dart';
 import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_strings.dart';
-import 'package:mattermost_flutter/src/ui/threads/widgets/followed_threads_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class BootstrapPage extends ConsumerStatefulWidget {
@@ -132,7 +132,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
               width: 280,
               child: ChannelSidebar(
                 onChannelSelected: _showSelectedChannelOnCompact,
-                onThreadsSelected: _showThreadsDestination,
+                onInboxSelected: _showThreadsDestination,
               ),
             ),
             const VerticalDivider(width: 1),
@@ -180,7 +180,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     } else {
       pane = ChannelSidebar(
         onChannelSelected: _showSelectedChannelOnCompact,
-        onThreadsSelected: _showThreadsDestination,
+        onInboxSelected: _showThreadsDestination,
       );
     }
 
@@ -287,7 +287,7 @@ class _DestinationRail extends StatelessWidget {
       NavigationRailDestination(
         icon: Icon(Icons.forum_outlined),
         selectedIcon: Icon(Icons.forum),
-        label: Text(ShellStrings.threads),
+        label: Text(ShellStrings.inbox),
       ),
     ],
   );
@@ -316,7 +316,7 @@ class _BottomDestinations extends StatelessWidget {
       NavigationDestination(
         icon: Icon(Icons.forum_outlined),
         selectedIcon: Icon(Icons.forum),
-        label: ShellStrings.threads,
+        label: ShellStrings.inbox,
       ),
     ],
   );
@@ -352,8 +352,7 @@ class _MainContent extends StatelessWidget {
                 for (final SidebarChannel channel in section.channels)
                   channel.id: channel,
             };
-        return FollowedThreadsPane(
-          team: sidebar!.team!,
+        return InboxPage(
           channelsById: channelsById,
           onSelectChannel: onSelectChannel,
         );

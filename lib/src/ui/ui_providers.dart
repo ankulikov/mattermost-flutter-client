@@ -7,6 +7,7 @@ import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
@@ -142,6 +143,15 @@ final followedThreadsProvider = AsyncNotifierProvider.autoDispose
         teamId,
         authSessionProvider,
         threadRepositoryProvider,
+      ),
+    );
+
+final AsyncNotifierProvider<InboxController, InboxViewState> inboxProvider =
+    AsyncNotifierProvider.autoDispose<InboxController, InboxViewState>(
+      () => InboxController(
+        authSessionProvider,
+        inboxRepositoryProvider,
+        postponedRepositoryProvider,
       ),
     );
 

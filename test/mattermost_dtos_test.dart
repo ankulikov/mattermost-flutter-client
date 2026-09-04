@@ -154,4 +154,49 @@ void main() {
     expect(result.threads.single.participants.single.username, 'ada');
     expect(result.threads.single.post!.message, 'Root');
   });
+
+  test(
+    'decodes Inbox membership, notification, preference and root counters',
+    () {
+      final MattermostChannelDto channel =
+          MattermostChannelDto.fromJson(<String, Object?>{
+            'id': 'channel-1',
+            'team_id': 'team-1',
+            'type': 'O',
+            'display_name': 'Town Square',
+            'name': 'town-square',
+            'total_msg_count': 10,
+            'total_msg_count_root': 7,
+          });
+      final MattermostChannelMemberDto member =
+          MattermostChannelMemberDto.fromJson(<String, Object?>{
+            'channel_id': 'channel-1',
+            'user_id': 'me',
+            'msg_count': 4,
+            'msg_count_root': 3,
+            'mention_count': 2,
+            'mention_count_root': 1,
+            'notify_props': <String, Object?>{
+              'desktop': 'all',
+              'push': 'default',
+              'mark_unread': 'all',
+              'ignore_channel_mentions': 'off',
+              'channel_auto_follow_threads': 'on',
+            },
+          });
+      final MattermostPreferenceDto preference =
+          MattermostPreferenceDto.fromJson(<String, Object?>{
+            'user_id': 'me',
+            'category': 'postponed_messages',
+            'name': 'post-1',
+            'value': '1',
+          });
+
+      expect(channel.totalMessageCountRoot, 7);
+      expect(member.msgCountRoot, 3);
+      expect(member.mentionCountRoot, 1);
+      expect(member.notifyProps?.channelAutoFollowThreads, 'on');
+      expect(preference.toJson()['category'], 'postponed_messages');
+    },
+  );
 }

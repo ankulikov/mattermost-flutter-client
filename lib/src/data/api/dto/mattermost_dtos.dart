@@ -171,6 +171,7 @@ final class UserNotifyPropsDto {
     this.desktopThreads = '',
     this.pushThreads = '',
     this.emailThreads = '',
+    this.channelMentionAutoFollowThreads = '',
   });
 
   factory UserNotifyPropsDto.fromJson(JsonMap json) => UserNotifyPropsDto(
@@ -185,6 +186,10 @@ final class UserNotifyPropsDto {
     desktopThreads: _string(json, 'desktop_threads'),
     pushThreads: _string(json, 'push_threads'),
     emailThreads: _string(json, 'email_threads'),
+    channelMentionAutoFollowThreads: _string(
+      json,
+      'channel_mention_auto_follow_threads',
+    ),
   );
 
   final String email;
@@ -198,6 +203,7 @@ final class UserNotifyPropsDto {
   final String desktopThreads;
   final String pushThreads;
   final String emailThreads;
+  final String channelMentionAutoFollowThreads;
 }
 
 final class UserPropsDto {
@@ -289,6 +295,7 @@ final class MattermostChannelDto {
     this.purpose = '',
     this.lastPostAt = 0,
     this.totalMessageCount = 0,
+    this.totalMessageCountRoot = 0,
     this.extraUpdateAt = 0,
     this.creatorId = '',
   });
@@ -306,6 +313,7 @@ final class MattermostChannelDto {
     purpose: _string(json, 'purpose'),
     lastPostAt: _int(json, 'last_post_at'),
     totalMessageCount: _int(json, 'total_msg_count'),
+    totalMessageCountRoot: _int(json, 'total_msg_count_root'),
     extraUpdateAt: _int(json, 'extra_update_at'),
     creatorId: _string(json, 'creator_id'),
   );
@@ -322,8 +330,114 @@ final class MattermostChannelDto {
   final String purpose;
   final int lastPostAt;
   final int totalMessageCount;
+  final int totalMessageCountRoot;
   final int extraUpdateAt;
   final String creatorId;
+}
+
+/// Membership state returned by
+/// `GET /users/{user_id}/teams/{team_id}/channels/members`.
+final class MattermostChannelMemberDto {
+  const MattermostChannelMemberDto({
+    required this.channelId,
+    required this.userId,
+    this.roles = '',
+    this.lastViewedAt = 0,
+    this.msgCount = 0,
+    this.msgCountRoot = 0,
+    this.mentionCount = 0,
+    this.mentionCountRoot = 0,
+    this.urgentMentionCount = 0,
+    this.notifyProps,
+  });
+
+  factory MattermostChannelMemberDto.fromJson(JsonMap json) =>
+      MattermostChannelMemberDto(
+        channelId: _string(json, 'channel_id'),
+        userId: _string(json, 'user_id'),
+        roles: _string(json, 'roles'),
+        lastViewedAt: _int(json, 'last_viewed_at'),
+        msgCount: _int(json, 'msg_count'),
+        msgCountRoot: _int(json, 'msg_count_root'),
+        mentionCount: _int(json, 'mention_count'),
+        mentionCountRoot: _int(json, 'mention_count_root'),
+        urgentMentionCount: _int(json, 'urgent_mention_count'),
+        notifyProps: _nested(
+          json,
+          'notify_props',
+          MattermostChannelNotifyPropsDto.fromJson,
+        ),
+      );
+
+  final String channelId;
+  final String userId;
+  final String roles;
+  final int lastViewedAt;
+  final int msgCount;
+  final int msgCountRoot;
+  final int mentionCount;
+  final int mentionCountRoot;
+  final int urgentMentionCount;
+  final MattermostChannelNotifyPropsDto? notifyProps;
+}
+
+/// Channel-scoped notification overrides carried by a channel membership.
+final class MattermostChannelNotifyPropsDto {
+  const MattermostChannelNotifyPropsDto({
+    this.desktop = '',
+    this.push = '',
+    this.email = '',
+    this.markUnread = '',
+    this.ignoreChannelMentions = '',
+    this.channelAutoFollowThreads = '',
+  });
+
+  factory MattermostChannelNotifyPropsDto.fromJson(JsonMap json) =>
+      MattermostChannelNotifyPropsDto(
+        desktop: _string(json, 'desktop'),
+        push: _string(json, 'push'),
+        email: _string(json, 'email'),
+        markUnread: _string(json, 'mark_unread'),
+        ignoreChannelMentions: _string(json, 'ignore_channel_mentions'),
+        channelAutoFollowThreads: _string(json, 'channel_auto_follow_threads'),
+      );
+
+  final String desktop;
+  final String push;
+  final String email;
+  final String markUnread;
+  final String ignoreChannelMentions;
+  final String channelAutoFollowThreads;
+}
+
+/// A single Mattermost user preference, usable for reads, upserts and deletes.
+final class MattermostPreferenceDto {
+  const MattermostPreferenceDto({
+    required this.userId,
+    required this.category,
+    required this.name,
+    required this.value,
+  });
+
+  factory MattermostPreferenceDto.fromJson(JsonMap json) =>
+      MattermostPreferenceDto(
+        userId: _string(json, 'user_id'),
+        category: _string(json, 'category'),
+        name: _string(json, 'name'),
+        value: _string(json, 'value'),
+      );
+
+  final String userId;
+  final String category;
+  final String name;
+  final String value;
+
+  JsonMap toJson() => <String, Object?>{
+    'user_id': userId,
+    'category': category,
+    'name': name,
+    'value': value,
+  };
 }
 
 /// Response from `/users/{user_id}/teams/{team_id}/channels/categories`.

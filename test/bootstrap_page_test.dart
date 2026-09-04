@@ -7,17 +7,21 @@ import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
-import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
-  Future<void> selectThreads(WidgetTester tester) async {
+  Future<void> selectInbox(WidgetTester tester) async {
     final Finder rail = find.byKey(
       const ValueKey<String>('shell-navigation-rail'),
     );
@@ -25,7 +29,7 @@ void main() {
         ? rail
         : find.byKey(const ValueKey<String>('shell-bottom-navigation'));
     await tester.tap(
-      find.descendant(of: navigation, matching: find.text('Threads')),
+      find.descendant(of: navigation, matching: find.text('Inbox')),
     );
     await tester.pumpAndSettle();
   }
@@ -172,7 +176,7 @@ void main() {
     expect(find.text('Ada Lovelace'), findsOneWidget);
   });
 
-  testWidgets('shows the unread reply count for followed threads', (
+  testWidgets('shows Inbox tabs and moves an item to Postponed', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -183,8 +187,9 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          threadRepositoryProvider.overrideWithValue(
-            const _FollowedThreadsTestRepository(),
+          inboxRepositoryProvider.overrideWithValue(_InboxTestRepository()),
+          postponedRepositoryProvider.overrideWithValue(
+            _PostponedTestRepository(),
           ),
         ],
         child: const MaterialApp(home: BootstrapPage()),
@@ -192,63 +197,30 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await selectThreads(tester);
+    await selectInbox(tester);
 
-    expect(find.text('Mentioned root'), findsOneWidget);
-    expect(find.text('Unread root'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('thread-unread-count-root-mention')),
-      findsOneWidget,
-    );
-    expect(find.text('3'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('thread-unread-count-root-unread')),
-      findsOneWidget,
-    );
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Inbox'), findsWidgets);
+    expect(find.text('New'), findsOneWidget);
+    expect(find.text('Postponed'), findsOneWidget);
+    expect(find.text('Inbox message'), findsOneWidget);
+    expect(find.text('Postpone'), findsOneWidget);
+
+    await tester.tap(find.text('Postpone'));
+    await tester.pumpAndSettle();
+    expect(find.text('No new messages'), findsOneWidget);
+
+    await tester.tap(find.text('Postponed'));
+    await tester.pumpAndSettle();
+    expect(find.text('Inbox message'), findsOneWidget);
+    expect(find.text('Remove'), findsOneWidget);
+
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    expect(find.text('No postponed messages'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('positions a followed thread at unread replies then marks read', (
-    WidgetTester tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1200, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final _ReadRecordingThreadRepository threads =
-        _ReadRecordingThreadRepository();
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          threadRepositoryProvider.overrideWithValue(threads),
-        ],
-        child: const MaterialApp(home: BootstrapPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await selectThreads(tester);
-    await tester.tap(find.text('Unread root'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('unread messages'), findsOneWidget);
-    expect(
-      tester.getBottomLeft(find.text('unread messages')).dy,
-      lessThan(tester.getTopLeft(find.text('This message was deleted')).dy),
-    );
-    expect(threads.markReadCalls, 1);
-    expect(threads.teamId, 'team-1');
-    expect(threads.rootPostId, 'root-unread');
-    expect(threads.timestamp, DateTime.fromMillisecondsSinceEpoch(123456));
-    expect(
-      find.byKey(const ValueKey<String>('thread-unread-count-root-unread')),
-      findsNothing,
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('shows threads on compact width with large text', (
+  testWidgets('shows Inbox on compact width with large text', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -259,9 +231,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_SignedInRepository()),
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          threadRepositoryProvider.overrideWithValue(
-            const _FollowedThreadsTestRepository(),
-          ),
+          inboxRepositoryProvider.overrideWithValue(_InboxTestRepository()),
         ],
         child: const MaterialApp(
           home: MediaQuery(
@@ -273,45 +243,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await selectThreads(tester);
+    await selectInbox(tester);
 
-    expect(find.text('Mentioned root'), findsOneWidget);
-    expect(find.text('Unread root'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('returns from a followed thread route on compact width', (
-    WidgetTester tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    addTearDown(() => appRouter.go('/'));
-    final _ReadRecordingThreadRepository threads =
-        _ReadRecordingThreadRepository();
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
-          threadRepositoryProvider.overrideWithValue(threads),
-        ],
-        child: const MattermostApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await selectThreads(tester);
-    await tester.tap(find.text('Unread root'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Thread'), findsOneWidget);
-    expect(find.text('Thread reply 1'), findsOneWidget);
-
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-
-    expect(find.text('Thread'), findsNothing);
-    expect(find.text('Unread root'), findsOneWidget);
+    expect(find.text('Inbox'), findsWidgets);
+    expect(find.text('New'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -970,44 +905,6 @@ final class _ThreadRepository extends ThreadRepository {
   }) async {}
 }
 
-final class _ReadRecordingThreadRepository extends ThreadRepository {
-  int markReadCalls = 0;
-  String? teamId;
-  String? rootPostId;
-  DateTime? timestamp;
-
-  @override
-  Future<MessageThread> load({
-    required AuthSession session,
-    required String rootPostId,
-  }) =>
-      const _ThreadRepository().load(session: session, rootPostId: rootPostId);
-
-  @override
-  Future<void> markRead({
-    required AuthSession session,
-    required String teamId,
-    required String rootPostId,
-    required DateTime timestamp,
-  }) async {
-    markReadCalls += 1;
-    this.teamId = teamId;
-    this.rootPostId = rootPostId;
-    this.timestamp = timestamp;
-  }
-
-  @override
-  Future<FollowedThreadsPage> loadFollowed({
-    required AuthSession session,
-    required String teamId,
-    String? before,
-  }) => const _FollowedThreadsTestRepository().loadFollowed(
-    session: session,
-    teamId: teamId,
-    before: before,
-  );
-}
-
 final class _RecordingPostRepository extends _DelayedPostRepository {
   _RecordingPostRepository() : super(delay: Duration.zero);
 
@@ -1192,49 +1089,50 @@ final class _SidebarRepository implements ChannelRepository {
       );
 }
 
-final class _FollowedThreadsTestRepository extends ThreadRepository {
-  const _FollowedThreadsTestRepository();
+final class _InboxTestRepository extends InboxRepository {
+  @override
+  Future<InboxSnapshot> load({required AuthSession session}) async {
+    const SidebarChannel channel = SidebarChannel(
+      id: 'town-square',
+      teamId: 'team-1',
+      name: 'town-square',
+      displayName: 'Town Square',
+      kind: ChannelKind.publicChannel,
+    );
+    final InboxPostCandidate candidate = InboxPostCandidate(
+      post: Post(
+        id: 'inbox-post',
+        channelId: channel.id,
+        author: const PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
+        sentAt: DateTime(2026, 9, 3, 12),
+        message: 'Inbox message',
+      ),
+      channel: channel,
+      reason: InboxAttentionReason.directMention,
+    );
+    return InboxSnapshot(
+      newItems: <InboxItem>[ChannelPostInboxItem(candidate: candidate)],
+    );
+  }
+}
+
+final class _PostponedTestRepository extends PostponedRepository {
+  @override
+  Future<PostponedReferencesSnapshot> load({
+    required AuthSession session,
+  }) async => PostponedReferencesSnapshot(const <PostponedReference>[]);
 
   @override
-  Future<FollowedThreadsPage> loadFollowed({
+  Future<void> remove({
     required AuthSession session,
-    required String teamId,
-    String? before,
-  }) async => FollowedThreadsPage(
-    total: 2,
-    totalUnreadThreads: 2,
-    totalUnreadMentions: 2,
-    items: <FollowedThread>[
-      FollowedThread(
-        root: ChannelPost(
-          id: 'root-mention',
-          channelId: 'town-square',
-          author: const PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
-          sentAt: DateTime(2026, 8, 24, 10),
-          message: 'Mentioned root',
-        ),
-        replyCount: 4,
-        lastReplyAt: DateTime(2026, 8, 25, 10),
-        lastViewedAt: DateTime(2026, 8, 24, 10),
-        unreadReplies: 3,
-        unreadMentions: 2,
-      ),
-      FollowedThread(
-        root: ChannelPost(
-          id: 'root-unread',
-          channelId: 'town-square',
-          author: const PostAuthor(id: 'grace', displayName: 'Grace Hopper'),
-          sentAt: DateTime(2026, 8, 24, 11),
-          message: 'Unread root',
-        ),
-        replyCount: 2,
-        lastReplyAt: DateTime(2026, 8, 25, 11),
-        lastViewedAt: DateTime(2026, 8, 24, 11),
-        unreadReplies: 1,
-        unreadMentions: 0,
-      ),
-    ],
-  );
+    required List<PostponedReference> references,
+  }) async {}
+
+  @override
+  Future<void> save({
+    required AuthSession session,
+    required List<PostponedReference> references,
+  }) async {}
 }
 
 final class _LargeSidebarRepository implements ChannelRepository {

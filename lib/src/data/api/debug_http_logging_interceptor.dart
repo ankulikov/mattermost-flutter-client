@@ -29,7 +29,7 @@ final class DebugHttpLoggingInterceptor extends Interceptor {
     'client_secret',
     'cookie',
     'email',
-    'first_name',
+    // 'first_name',
     'last_name',
     'message',
     'metadata',

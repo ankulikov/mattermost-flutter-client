@@ -295,6 +295,143 @@ void main() {
     );
   });
 
+  test('loads team channel memberships with Inbox counters', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"channel_id":"channel-1","user_id":"me",'
+          '"last_viewed_at":100,"msg_count":4,"msg_count_root":3,'
+          '"mention_count":2,"mention_count_root":1,'
+          '"notify_props":{"desktop":"all","mark_unread":"all"}}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostChannelMemberDto> members = await DioMattermostApi(
+      dio: dio,
+    ).getChannelMembersForUser(userId: 'me', teamId: 'team-1');
+
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/users/me/teams/team-1/channels/members');
+    expect(members.single.msgCountRoot, 3);
+    expect(members.single.mentionCountRoot, 1);
+    expect(members.single.notifyProps?.desktop, 'all');
+  });
+
+  test('loads the bounded posts around a channel unread boundary', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter();
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    await DioMattermostApi(dio: dio).getUnreadPostsForChannel(
+      userId: 'me',
+      channelId: 'channel-1',
+      limitBefore: 20,
+      limitAfter: 200,
+    );
+
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/users/me/channels/channel-1/posts/unread');
+    expect(adapter.request?.queryParameters, <String, Object?>{
+      'limit_before': 20,
+      'limit_after': 200,
+    });
+  });
+
+  test('hydrates postponed posts by IDs in one request', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"id":"post-1","user_id":"ada","channel_id":"dm-1",'
+          '"message":"Later"}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostPostDto> posts = await DioMattermostApi(
+      dio: dio,
+    ).getPostsByIds(<String>['post-1']);
+
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/posts/ids');
+    expect(adapter.request?.data, '["post-1"]');
+    expect(posts.single.message, 'Later');
+  });
+
+  test('reads, upserts, and deletes postponed preferences', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"user_id":"me","category":"postponed_messages",'
+          '"name":"post-1","value":"1"}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+    const MattermostPreferenceDto preference = MattermostPreferenceDto(
+      userId: 'me',
+      category: 'postponed_messages',
+      name: 'post-1',
+      value: '1',
+    );
+
+    final List<MattermostPreferenceDto> preferences = await api
+        .getPreferencesByCategory(userId: 'me', category: 'postponed_messages');
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/users/me/preferences/postponed_messages');
+    expect(preferences.single.name, 'post-1');
+
+    await api.savePreferences(
+      userId: 'me',
+      preferences: <MattermostPreferenceDto>[preference],
+    );
+    expect(adapter.request?.method, 'PUT');
+    expect(adapter.request?.path, '/users/me/preferences');
+    expect(adapter.request?.data, <Map<String, Object?>>[preference.toJson()]);
+
+    await api.deletePreferences(
+      userId: 'me',
+      preferences: <MattermostPreferenceDto>[preference],
+    );
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/users/me/preferences/delete');
+    expect(adapter.request?.data, <Map<String, Object?>>[preference.toJson()]);
+  });
+
+  test('views a channel and changes CRT following state', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter();
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    await api.viewChannel(
+      userId: 'me',
+      channelId: 'channel-1',
+      previousChannelId: 'channel-0',
+    );
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/channels/members/me/view');
+    expect(adapter.request?.data, <String, Object?>{
+      'channel_id': 'channel-1',
+      'prev_channel_id': 'channel-0',
+    });
+
+    await api.followThread(userId: 'me', teamId: 'team-1', threadId: 'root-1');
+    expect(adapter.request?.method, 'PUT');
+    expect(
+      adapter.request?.path,
+      '/users/me/teams/team-1/threads/root-1/following',
+    );
+
+    await api.unfollowThread(
+      userId: 'me',
+      teamId: 'team-1',
+      threadId: 'root-1',
+    );
+    expect(adapter.request?.method, 'DELETE');
+    expect(
+      adapter.request?.path,
+      '/users/me/teams/team-1/threads/root-1/following',
+    );
+  });
+
   test(
     'cancels an in-flight Dio request from its presentation scope',
     () async {

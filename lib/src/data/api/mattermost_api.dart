@@ -21,6 +21,13 @@ abstract interface class MattermostApi {
     required String teamId,
   });
 
+  /// Returns the current user's membership counters and notification settings
+  /// for every channel in [teamId].
+  Future<List<MattermostChannelMemberDto>> getChannelMembersForUser({
+    required String userId,
+    required String teamId,
+  });
+
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds);
 
   /// Returns users matching the supplied exact usernames.
@@ -85,6 +92,18 @@ abstract interface class MattermostApi {
     required int since,
   });
 
+  /// Returns posts around the oldest unread post in a channel. The response is
+  /// bounded by [limitBefore] and [limitAfter] on the respective sides.
+  Future<MattermostPostListDto> getUnreadPostsForChannel({
+    required String userId,
+    required String channelId,
+    int limitBefore = 0,
+    int limitAfter = 200,
+  });
+
+  /// Hydrates posts referenced by IDs, including postponed Inbox entries.
+  Future<List<MattermostPostDto>> getPostsByIds(List<String> postIds);
+
   /// Creates a channel post or a threaded reply through the REST API.
   Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post);
 
@@ -134,5 +153,45 @@ abstract interface class MattermostApi {
     required String teamId,
     required String threadId,
     required int timestamp,
+  });
+
+  /// Marks [channelId] viewed for [userId], advancing the server read state.
+  Future<void> viewChannel({
+    required String userId,
+    required String channelId,
+    String? previousChannelId,
+  });
+
+  /// Starts following a CRT thread for [userId].
+  Future<void> followThread({
+    required String userId,
+    required String teamId,
+    required String threadId,
+  });
+
+  /// Stops following a CRT thread for [userId].
+  Future<void> unfollowThread({
+    required String userId,
+    required String teamId,
+    required String threadId,
+  });
+
+  /// Returns preferences in one category, such as `postponed_messages`.
+  Future<List<MattermostPreferenceDto>> getPreferencesByCategory({
+    required String userId,
+    required String category,
+  });
+
+  /// Creates or updates preferences. Mattermost accepts at most 100 per call.
+  Future<void> savePreferences({
+    required String userId,
+    required List<MattermostPreferenceDto> preferences,
+  });
+
+  /// Deletes exact category/name preference entries. Mattermost accepts at
+  /// most 100 entries per call.
+  Future<void> deletePreferences({
+    required String userId,
+    required List<MattermostPreferenceDto> preferences,
   });
 }

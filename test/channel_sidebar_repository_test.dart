@@ -237,4 +237,7 @@ final class _FakeMattermostApi implements MattermostApi {
       usersByChannelId: <String, List<MattermostUserDto>>{},
     );
   }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
