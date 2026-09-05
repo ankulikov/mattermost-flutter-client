@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/use_cases/authenticate_with_session_token.dart';
@@ -44,6 +45,18 @@ void main() {
 final class _FakeAuthRepository implements AuthRepository {
   Uri? serverUrl;
   String? token;
+
+  @override
+  Future<AuthSession> authenticateWithPassword({
+    required Uri serverUrl,
+    required String loginId,
+    required String password,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<AuthenticationMethods> discoverAuthenticationMethods({
+    required Uri serverUrl,
+  }) => throw UnimplementedError();
 
   @override
   Future<AuthSession> authenticateWithSessionToken({

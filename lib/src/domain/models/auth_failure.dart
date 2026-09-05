@@ -5,6 +5,7 @@ enum AuthFailureKind {
   cancelled,
   ssoFailed,
   tokenMissing,
+  credentialsMissing,
   invalidCredentials,
   sessionExpired,
   network,

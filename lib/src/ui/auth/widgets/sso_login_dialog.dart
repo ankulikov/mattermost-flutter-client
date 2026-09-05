@@ -21,11 +21,15 @@ class _SsoLoginDialogState extends ConsumerState<SsoLoginDialog> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _serverController = TextEditingController();
   final TextEditingController _tokenController = TextEditingController();
+  final TextEditingController _loginController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   @override
   void dispose() {
     _serverController.dispose();
     _tokenController.dispose();
+    _loginController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -42,7 +46,8 @@ class _SsoLoginDialogState extends ConsumerState<SsoLoginDialog> {
     });
     final bool browserBusy =
         auth.phase == AuthPhase.authenticatingInBrowser ||
-        auth.phase == AuthPhase.validatingToken;
+        auth.phase == AuthPhase.validatingToken ||
+        auth.phase == AuthPhase.validatingPassword;
     final bool discoveryBusy = auth.phase == AuthPhase.discoveringServer;
     return PopScope(
       canPop: !browserBusy,
@@ -70,6 +75,9 @@ class _SsoLoginDialogState extends ConsumerState<SsoLoginDialog> {
                 onTokenLogin: ref
                     .read(authControllerProvider.notifier)
                     .chooseTokenLogin,
+                onPasswordLogin: ref
+                    .read(authControllerProvider.notifier)
+                    .choosePasswordLogin,
               ),
               AuthPhase.enteringToken => _TokenForm(
                 controller: _tokenController,
@@ -79,9 +87,19 @@ class _SsoLoginDialogState extends ConsumerState<SsoLoginDialog> {
                     .read(authControllerProvider.notifier)
                     .returnToMethodChooser,
               ),
+              AuthPhase.enteringPassword => _PasswordForm(
+                loginController: _loginController,
+                passwordController: _passwordController,
+                failure: auth.failure,
+                onSubmit: _authenticateWithPassword,
+                onBack: ref
+                    .read(authControllerProvider.notifier)
+                    .returnToMethodChooser,
+              ),
               AuthPhase.authenticatingInBrowser ||
-              AuthPhase.validatingToken => _BrowserProgress(
-                validating: auth.phase == AuthPhase.validatingToken,
+              AuthPhase.validatingToken ||
+              AuthPhase.validatingPassword => _BrowserProgress(
+                validating: auth.phase != AuthPhase.authenticatingInBrowser,
                 onCancel: () => unawaited(
                   ref.read(authControllerProvider.notifier).cancelSso(),
                 ),
@@ -124,6 +142,17 @@ class _SsoLoginDialogState extends ConsumerState<SsoLoginDialog> {
     _tokenController.clear();
     unawaited(
       ref.read(authControllerProvider.notifier).authenticateWithToken(token),
+    );
+  }
+
+  void _authenticateWithPassword() {
+    final String loginId = _loginController.text;
+    final String password = _passwordController.text;
+    _passwordController.clear();
+    unawaited(
+      ref
+          .read(authControllerProvider.notifier)
+          .authenticateWithPassword(loginId: loginId, password: password),
     );
   }
 }
@@ -217,12 +246,14 @@ class _SsoChooser extends StatelessWidget {
     required this.onAuthenticate,
     required this.onChangeServer,
     required this.onTokenLogin,
+    required this.onPasswordLogin,
   });
 
   final AuthState auth;
   final ValueChanged<SsoProvider> onAuthenticate;
   final VoidCallback onChangeServer;
   final VoidCallback onTokenLogin;
+  final VoidCallback onPasswordLogin;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -242,6 +273,17 @@ class _SsoChooser extends StatelessWidget {
           child: FilledButton(
             onPressed: () => onAuthenticate(option.provider),
             child: Text(option.displayLabel),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+      if (auth.passwordLoginEnabled) ...<Widget>[
+        Semantics(
+          button: true,
+          label: AuthStrings.loginWithPassword,
+          child: OutlinedButton(
+            onPressed: onPasswordLogin,
+            child: const Text(AuthStrings.loginWithPassword),
           ),
         ),
         const SizedBox(height: 8),
@@ -301,6 +343,78 @@ class _TokenForm extends StatelessWidget {
         decoration: const InputDecoration(
           labelText: AuthStrings.tokenLabel,
           hintText: AuthStrings.tokenHint,
+          border: OutlineInputBorder(),
+        ),
+        onSubmitted: (_) => onSubmit(),
+      ),
+      if (failure != null) ...<Widget>[
+        const SizedBox(height: 16),
+        _FailureMessage(failure!),
+      ],
+      const SizedBox(height: 24),
+      Wrap(
+        alignment: WrapAlignment.end,
+        spacing: 8,
+        runSpacing: 8,
+        children: <Widget>[
+          TextButton(onPressed: onBack, child: const Text(AuthStrings.back)),
+          FilledButton(
+            onPressed: onSubmit,
+            child: const Text(AuthStrings.signIn),
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+class _PasswordForm extends StatelessWidget {
+  const _PasswordForm({
+    required this.loginController,
+    required this.passwordController,
+    required this.failure,
+    required this.onSubmit,
+    required this.onBack,
+  });
+
+  final TextEditingController loginController;
+  final TextEditingController passwordController;
+  final AuthFailureKind? failure;
+  final VoidCallback onSubmit;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: <Widget>[
+      const Text(AuthStrings.passwordTitle, style: TextStyle(fontSize: 22)),
+      const SizedBox(height: 12),
+      const Text(AuthStrings.passwordDescription),
+      const SizedBox(height: 20),
+      TextField(
+        key: const ValueKey<String>('mattermost-login-id'),
+        controller: loginController,
+        autofocus: true,
+        keyboardType: TextInputType.emailAddress,
+        textInputAction: TextInputAction.next,
+        autofillHints: const <String>[AutofillHints.username],
+        decoration: const InputDecoration(
+          labelText: AuthStrings.loginLabel,
+          border: OutlineInputBorder(),
+        ),
+      ),
+      const SizedBox(height: 12),
+      TextField(
+        key: const ValueKey<String>('mattermost-password'),
+        controller: passwordController,
+        obscureText: true,
+        enableSuggestions: false,
+        autocorrect: false,
+        textInputAction: TextInputAction.done,
+        autofillHints: const <String>[AutofillHints.password],
+        decoration: const InputDecoration(
+          labelText: AuthStrings.passwordLabel,
           border: OutlineInputBorder(),
         ),
         onSubmitted: (_) => onSubmit(),
@@ -388,6 +502,7 @@ class _FailureMessage extends StatelessWidget {
     AuthFailureKind.ssoUnavailable => AuthStrings.ssoUnavailable,
     AuthFailureKind.browserUnavailable => AuthStrings.browserUnavailable,
     AuthFailureKind.tokenMissing => AuthStrings.tokenMissing,
+    AuthFailureKind.credentialsMissing => AuthStrings.credentialsMissing,
     AuthFailureKind.sessionExpired => AuthStrings.sessionExpired,
     AuthFailureKind.cancelled => '',
     AuthFailureKind.ssoFailed ||

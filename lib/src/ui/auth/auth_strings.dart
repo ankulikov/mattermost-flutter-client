@@ -7,12 +7,18 @@ abstract final class AuthStrings {
   static const String continueLabel = 'Продолжить';
   static const String chooseMethod = 'Выберите способ входа';
   static const String loginWithToken = 'Войти по токену';
+  static const String loginWithPassword = 'Войти по логину и паролю';
   static const String tokenTitle = 'Вход по токену';
   static const String tokenDescription =
       'Введите персональный токен доступа Mattermost.';
   static const String tokenLabel = 'Токен доступа';
   static const String tokenHint = 'Вставьте токен';
   static const String signIn = 'Войти';
+  static const String passwordTitle = 'Вход по логину и паролю';
+  static const String passwordDescription =
+      'Введите логин или адрес электронной почты и пароль Mattermost.';
+  static const String loginLabel = 'Логин или адрес электронной почты';
+  static const String passwordLabel = 'Пароль';
   static const String back = 'Назад';
   static const String loadingMethods = 'Проверяем сервер и способы входа…';
   static const String openingBrowser = 'Открываем защищённое окно входа…';
@@ -36,6 +42,7 @@ abstract final class AuthStrings {
       'Не удалось завершить единый вход. Попробуйте ещё раз.';
   static const String tokenMissing =
       'Сервер не завершил вход. Попробуйте ещё раз.';
+  static const String credentialsMissing = 'Введите логин и пароль.';
   static const String sessionExpired =
       'Сохранённая сессия истекла. Войдите снова.';
   static const String restoreFailed =

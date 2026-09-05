@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
@@ -230,6 +231,18 @@ Post _post({
 );
 
 final class _NoopAuthRepository implements AuthRepository {
+  @override
+  Future<AuthSession> authenticateWithPassword({
+    required Uri serverUrl,
+    required String loginId,
+    required String password,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<AuthenticationMethods> discoverAuthenticationMethods({
+    required Uri serverUrl,
+  }) => throw UnimplementedError();
+
   @override
   Future<AuthSession> authenticateWithSessionToken({
     required Uri serverUrl,

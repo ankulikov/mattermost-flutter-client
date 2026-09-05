@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
@@ -108,6 +109,32 @@ void main() {
     expect(repository.token, 'personal-access-token');
   });
 
+  test('authenticates with password when the server enables it', () async {
+    final _RecordingAuthRepository repository = _RecordingAuthRepository(
+      passwordLoginEnabled: true,
+    );
+    final ProviderContainer container = _container(repository: repository);
+    addTearDown(container.dispose);
+
+    final AuthController controller = container.read(
+      authControllerProvider.notifier,
+    );
+    await controller.discoverServer('https://chat.example.com');
+    controller.choosePasswordLogin();
+    await controller.authenticateWithPassword(
+      loginId: '  ada  ',
+      password: 'secret-password',
+    );
+
+    expect(container.read(authControllerProvider).phase, AuthPhase.signedIn);
+    expect(repository.loginId, 'ada');
+    expect(repository.password, 'secret-password');
+    expect(
+      container.read(authControllerProvider).toString(),
+      isNot(contains('secret-password')),
+    );
+  });
+
   test('keeps an expired saved-session reason for the signed-out UI', () async {
     final ProviderContainer container = _container(
       repository: _RecordingAuthRepository(
@@ -136,13 +163,29 @@ final class _RecordingAuthRepository implements AuthRepository {
     this.options = const <SsoOption>[
       SsoOption(provider: SsoProvider.saml, displayLabel: 'Company SSO'),
     ],
+    this.passwordLoginEnabled = false,
   });
 
   final AuthFailure? restoreFailure;
   final AuthFailure? ssoFailure;
   final List<SsoOption> options;
+  final bool passwordLoginEnabled;
   Uri? serverUrl;
   String? token;
+  String? loginId;
+  String? password;
+
+  @override
+  Future<AuthSession> authenticateWithPassword({
+    required Uri serverUrl,
+    required String loginId,
+    required String password,
+  }) async {
+    this.serverUrl = serverUrl;
+    this.loginId = loginId;
+    this.password = password;
+    return AuthSession(serverUrl: serverUrl, userId: 'user-1', username: 'ada');
+  }
 
   @override
   Future<AuthSession> authenticateWithSessionToken({
@@ -174,6 +217,14 @@ final class _RecordingAuthRepository implements AuthRepository {
   @override
   Future<List<SsoOption>> discoverSsoOptions({required Uri serverUrl}) async =>
       options;
+
+  @override
+  Future<AuthenticationMethods> discoverAuthenticationMethods({
+    required Uri serverUrl,
+  }) async => AuthenticationMethods(
+    ssoOptions: options,
+    passwordLoginEnabled: passwordLoginEnabled,
+  );
 
   @override
   Future<AuthSession?> restoreSession() async {

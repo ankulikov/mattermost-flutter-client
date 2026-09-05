@@ -452,6 +452,7 @@ class _SignedOutContent extends ConsumerWidget {
     AuthFailureKind.cancelled => '',
     AuthFailureKind.ssoFailed ||
     AuthFailureKind.tokenMissing ||
+    AuthFailureKind.credentialsMissing ||
     AuthFailureKind.invalidResponse => AuthStrings.ssoFailed,
   };
 }

@@ -14,12 +14,23 @@ abstract interface class MattermostServerDiscoveryClientFactory {
 abstract interface class MattermostServerDiscoveryClient {
   Future<MattermostClientConfigDto> getClientConfig();
 
+  /// Exchanges a password for a short-lived Mattermost session token.
+  Future<String> login({required String loginId, required String password});
+
   void close();
 }
 
 /// An unavailable discovery endpoint without exposing Dio to feature code.
 final class MattermostServerDiscoveryNetworkException implements Exception {
   const MattermostServerDiscoveryNetworkException();
+}
+
+enum MattermostServerLoginFailureKind { invalidCredentials, network }
+
+final class MattermostServerLoginException implements Exception {
+  const MattermostServerLoginException(this.kind);
+
+  final MattermostServerLoginFailureKind kind;
 }
 
 final class DioMattermostServerDiscoveryClientFactory
@@ -63,6 +74,34 @@ final class DioMattermostServerDiscoveryClient
       return MattermostClientConfigDto.fromJson(_jsonObject(response.data));
     } on DioException {
       throw const MattermostServerDiscoveryNetworkException();
+    }
+  }
+
+  @override
+  Future<String> login({
+    required String loginId,
+    required String password,
+  }) async {
+    try {
+      final Response<Object?> response = await _dio.post<Object?>(
+        '/users/login',
+        data: <String, String>{'login_id': loginId, 'password': password},
+      );
+      final String? token = response.headers.value('Token');
+      if (token == null || token.isEmpty) {
+        throw const FormatException('Missing session token in login response');
+      }
+      return token;
+    } on DioException catch (error) {
+      final int? status = error.response?.statusCode;
+      if (status == 400 || status == 401 || status == 403) {
+        throw const MattermostServerLoginException(
+          MattermostServerLoginFailureKind.invalidCredentials,
+        );
+      }
+      throw const MattermostServerLoginException(
+        MattermostServerLoginFailureKind.network,
+      );
     }
   }
 

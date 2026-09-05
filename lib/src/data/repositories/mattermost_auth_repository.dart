@@ -2,12 +2,14 @@ import 'package:dio/dio.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_client_factory.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_server_discovery.dart';
 import 'package:mattermost_flutter/src/data/platform/in_app_webview_sso_browser_gateway.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
 import 'package:mattermost_flutter/src/data/session/active_account_context.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_browser_result.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/policies/normalize_server_url.dart';
@@ -24,11 +26,15 @@ class MattermostAuthRepository implements AuthRepository {
     ActiveAccountContext? activeAccount,
     MattermostApiClientFactory clientFactory = const MattermostClientFactory(),
     ServerSsoDiscovery? serverSsoDiscovery,
+    MattermostServerDiscoveryClientFactory? serverLoginClientFactory,
     SsoBrowserGateway? ssoBrowserGateway,
   }) : _credentialStore = credentialStore,
        _activeAccount = activeAccount ?? ActiveAccountContext(),
        _clientFactory = clientFactory,
        _serverSsoDiscovery = serverSsoDiscovery ?? ApiServerSsoDiscovery(),
+       _serverLoginClientFactory =
+           serverLoginClientFactory ??
+           const DioMattermostServerDiscoveryClientFactory(),
        _ssoBrowserGateway =
            ssoBrowserGateway ?? InAppWebViewSsoBrowserGateway();
 
@@ -36,6 +42,7 @@ class MattermostAuthRepository implements AuthRepository {
   final ActiveAccountContext _activeAccount;
   final MattermostApiClientFactory _clientFactory;
   final ServerSsoDiscovery _serverSsoDiscovery;
+  final MattermostServerDiscoveryClientFactory _serverLoginClientFactory;
   final SsoBrowserGateway _ssoBrowserGateway;
 
   /// Compatibility projection; authenticated feature repositories receive the
@@ -44,7 +51,44 @@ class MattermostAuthRepository implements AuthRepository {
 
   @override
   Future<List<SsoOption>> discoverSsoOptions({required Uri serverUrl}) =>
-      _serverSsoDiscovery.discover(serverUrl);
+      _serverSsoDiscovery
+          .discover(serverUrl)
+          .then((AuthenticationMethods methods) => methods.ssoOptions);
+
+  @override
+  Future<AuthenticationMethods> discoverAuthenticationMethods({
+    required Uri serverUrl,
+  }) => _serverSsoDiscovery.discover(serverUrl);
+
+  @override
+  Future<AuthSession> authenticateWithPassword({
+    required Uri serverUrl,
+    required String loginId,
+    required String password,
+  }) async {
+    final MattermostServerDiscoveryClient client = _serverLoginClientFactory
+        .create(serverUrl: serverUrl);
+    try {
+      final String token = await client.login(
+        loginId: loginId,
+        password: password,
+      );
+      return await authenticateWithSessionToken(
+        serverUrl: serverUrl,
+        token: token,
+      );
+    } on MattermostServerLoginException catch (error) {
+      throw AuthFailure(switch (error.kind) {
+        MattermostServerLoginFailureKind.invalidCredentials =>
+          AuthFailureKind.invalidCredentials,
+        MattermostServerLoginFailureKind.network => AuthFailureKind.network,
+      });
+    } on FormatException {
+      throw const AuthFailure(AuthFailureKind.invalidResponse);
+    } finally {
+      client.close();
+    }
+  }
 
   @override
   Future<AuthSession> authenticateWithSso({

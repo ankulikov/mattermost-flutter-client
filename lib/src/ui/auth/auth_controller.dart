@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/policies/normalize_server_url.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
@@ -13,8 +14,10 @@ enum AuthPhase {
   discoveringServer,
   choosingSso,
   enteringToken,
+  enteringPassword,
   authenticatingInBrowser,
   validatingToken,
+  validatingPassword,
   signedIn,
 }
 
@@ -25,6 +28,7 @@ final class AuthState {
     this.session,
     this.serverUrl,
     this.ssoOptions = const <SsoOption>[],
+    this.passwordLoginEnabled = false,
     this.failure,
   });
 
@@ -32,6 +36,7 @@ final class AuthState {
   final AuthSession? session;
   final Uri? serverUrl;
   final List<SsoOption> ssoOptions;
+  final bool passwordLoginEnabled;
   final AuthFailureKind? failure;
 }
 
@@ -83,14 +88,15 @@ final class AuthController extends Notifier<AuthState> {
     final int attemptId = ++_attemptId;
     state = AuthState(phase: AuthPhase.discoveringServer, serverUrl: serverUrl);
     try {
-      final List<SsoOption> options = await ref
+      final AuthenticationMethods methods = await ref
           .read(_repositoryProvider)
-          .discoverSsoOptions(serverUrl: serverUrl);
+          .discoverAuthenticationMethods(serverUrl: serverUrl);
       if (!_isCurrent(attemptId)) return;
       state = AuthState(
         phase: AuthPhase.choosingSso,
         serverUrl: serverUrl,
-        ssoOptions: options,
+        ssoOptions: methods.ssoOptions,
+        passwordLoginEnabled: methods.passwordLoginEnabled,
       );
     } on AuthFailure catch (error) {
       if (!_isCurrent(attemptId)) return;
@@ -117,6 +123,7 @@ final class AuthController extends Notifier<AuthState> {
       phase: AuthPhase.enteringToken,
       serverUrl: serverUrl,
       ssoOptions: state.ssoOptions,
+      passwordLoginEnabled: state.passwordLoginEnabled,
     );
   }
 
@@ -128,6 +135,7 @@ final class AuthController extends Notifier<AuthState> {
       phase: AuthPhase.choosingSso,
       serverUrl: serverUrl,
       ssoOptions: state.ssoOptions,
+      passwordLoginEnabled: state.passwordLoginEnabled,
     );
   }
 
@@ -141,6 +149,7 @@ final class AuthController extends Notifier<AuthState> {
         phase: AuthPhase.enteringToken,
         serverUrl: serverUrl,
         ssoOptions: options,
+        passwordLoginEnabled: state.passwordLoginEnabled,
         failure: AuthFailureKind.tokenMissing,
       );
       return;
@@ -151,6 +160,7 @@ final class AuthController extends Notifier<AuthState> {
       phase: AuthPhase.validatingToken,
       serverUrl: serverUrl,
       ssoOptions: options,
+      passwordLoginEnabled: state.passwordLoginEnabled,
     );
     try {
       final AuthSession session = await ref
@@ -167,6 +177,69 @@ final class AuthController extends Notifier<AuthState> {
           phase: AuthPhase.enteringToken,
           serverUrl: serverUrl,
           ssoOptions: options,
+          passwordLoginEnabled: state.passwordLoginEnabled,
+          failure: error.kind,
+        );
+      }
+    }
+  }
+
+  void choosePasswordLogin() {
+    final Uri? serverUrl = state.serverUrl;
+    if (serverUrl == null || !state.passwordLoginEnabled) return;
+    _attemptId += 1;
+    state = AuthState(
+      phase: AuthPhase.enteringPassword,
+      serverUrl: serverUrl,
+      ssoOptions: state.ssoOptions,
+      passwordLoginEnabled: true,
+    );
+  }
+
+  Future<void> authenticateWithPassword({
+    required String loginId,
+    required String password,
+  }) async {
+    final Uri? serverUrl = state.serverUrl;
+    final List<SsoOption> options = state.ssoOptions;
+    final bool passwordLoginEnabled = state.passwordLoginEnabled;
+    final String normalizedLoginId = loginId.trim();
+    if (serverUrl == null || !passwordLoginEnabled) return;
+    if (normalizedLoginId.isEmpty || password.isEmpty) {
+      state = AuthState(
+        phase: AuthPhase.enteringPassword,
+        serverUrl: serverUrl,
+        ssoOptions: options,
+        passwordLoginEnabled: passwordLoginEnabled,
+        failure: AuthFailureKind.credentialsMissing,
+      );
+      return;
+    }
+
+    final int attemptId = ++_attemptId;
+    state = AuthState(
+      phase: AuthPhase.validatingPassword,
+      serverUrl: serverUrl,
+      ssoOptions: options,
+      passwordLoginEnabled: passwordLoginEnabled,
+    );
+    try {
+      final AuthSession session = await ref
+          .read(_repositoryProvider)
+          .authenticateWithPassword(
+            serverUrl: serverUrl,
+            loginId: normalizedLoginId,
+            password: password,
+          );
+      if (!_isCurrent(attemptId)) return;
+      state = AuthState(phase: AuthPhase.signedIn, session: session);
+    } on AuthFailure catch (error) {
+      if (_isCurrent(attemptId)) {
+        state = AuthState(
+          phase: AuthPhase.enteringPassword,
+          serverUrl: serverUrl,
+          ssoOptions: options,
+          passwordLoginEnabled: passwordLoginEnabled,
           failure: error.kind,
         );
       }
@@ -181,6 +254,7 @@ final class AuthController extends Notifier<AuthState> {
       state = AuthState(
         serverUrl: serverUrl,
         ssoOptions: options,
+        passwordLoginEnabled: state.passwordLoginEnabled,
         failure: AuthFailureKind.ssoUnavailable,
       );
       return;
@@ -191,6 +265,7 @@ final class AuthController extends Notifier<AuthState> {
       phase: AuthPhase.authenticatingInBrowser,
       serverUrl: serverUrl,
       ssoOptions: options,
+      passwordLoginEnabled: state.passwordLoginEnabled,
     );
     try {
       final AuthSession session = await ref
@@ -200,7 +275,12 @@ final class AuthController extends Notifier<AuthState> {
       state = AuthState(phase: AuthPhase.signedIn, session: session);
     } on AuthFailure catch (error) {
       if (_isCurrent(attemptId)) {
-        _returnToChooser(serverUrl, options, error.kind);
+        _returnToChooser(
+          serverUrl,
+          options,
+          state.passwordLoginEnabled,
+          error.kind,
+        );
       }
     }
   }
@@ -214,6 +294,7 @@ final class AuthController extends Notifier<AuthState> {
         phase: AuthPhase.choosingSso,
         serverUrl: serverUrl,
         ssoOptions: options,
+        passwordLoginEnabled: state.passwordLoginEnabled,
       );
     }
     await ref.read(_repositoryProvider).cancelSsoAuthentication();
@@ -230,12 +311,14 @@ final class AuthController extends Notifier<AuthState> {
   void _returnToChooser(
     Uri serverUrl,
     List<SsoOption> options,
+    bool passwordLoginEnabled,
     AuthFailureKind? failure,
   ) {
     state = AuthState(
       phase: AuthPhase.choosingSso,
       serverUrl: serverUrl,
       ssoOptions: options,
+      passwordLoginEnabled: passwordLoginEnabled,
       failure: failure == AuthFailureKind.cancelled ? null : failure,
     );
   }

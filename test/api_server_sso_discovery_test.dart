@@ -17,19 +17,20 @@ void main() {
     );
     final _Factory factory = _Factory(client);
 
-    final options = await ApiServerSsoDiscovery(
+    final methods = await ApiServerSsoDiscovery(
       clientFactory: factory,
     ).discover(Uri.parse('https://chat.example.com/mattermost'));
 
     expect(factory.serverUrl, Uri.parse('https://chat.example.com/mattermost'));
-    expect(options, hasLength(1));
-    expect(options.single.provider, SsoProvider.saml);
-    expect(options.single.displayLabel, 'Company SAML');
+    expect(methods.ssoOptions, hasLength(1));
+    expect(methods.ssoOptions.single.provider, SsoProvider.saml);
+    expect(methods.ssoOptions.single.displayLabel, 'Company SAML');
+    expect(methods.passwordLoginEnabled, isFalse);
     expect(client.closed, isTrue);
   });
 
   test('keeps both enabled methods in server order', () async {
-    final options = await ApiServerSsoDiscovery(
+    final methods = await ApiServerSsoDiscovery(
       clientFactory: _Factory(
         _Client.success(
           const MattermostClientConfigDto(
@@ -42,10 +43,10 @@ void main() {
       ),
     ).discover(Uri.parse('https://chat.example.com'));
 
-    expect(options.map((SsoOption option) => option.provider), <SsoProvider>[
-      SsoProvider.saml,
-      SsoProvider.openId,
-    ]);
+    expect(
+      methods.ssoOptions.map((SsoOption option) => option.provider),
+      <SsoProvider>[SsoProvider.saml, SsoProvider.openId],
+    );
   });
 
   test('returns no SSO methods when all methods are disabled', () async {
@@ -58,13 +59,34 @@ void main() {
       ),
     );
 
-    final options = await ApiServerSsoDiscovery(
+    final methods = await ApiServerSsoDiscovery(
       clientFactory: _Factory(client),
     ).discover(Uri.parse('https://chat.example.com'));
 
-    expect(options, isEmpty);
+    expect(methods.ssoOptions, isEmpty);
     expect(client.closed, isTrue);
   });
+
+  test(
+    'enables password login for email or username server settings',
+    () async {
+      final methods = await ApiServerSsoDiscovery(
+        clientFactory: _Factory(
+          _Client.success(
+            const MattermostClientConfigDto(
+              enableSaml: false,
+              samlLoginButtonText: '',
+              enableSignUpWithOpenId: false,
+              openIdButtonText: '',
+              enableSignInWithUsername: true,
+            ),
+          ),
+        ),
+      ).discover(Uri.parse('https://chat.example.com'));
+
+      expect(methods.passwordLoginEnabled, isTrue);
+    },
+  );
 
   test('maps a discovery transport failure without exposing Dio', () async {
     final _Client client = _Client.failure(
@@ -114,6 +136,10 @@ final class _Client implements MattermostServerDiscoveryClient {
     if (error != null) throw error!;
     return config!;
   }
+
+  @override
+  Future<String> login({required String loginId, required String password}) =>
+      throw UnimplementedError();
 
   @override
   void close() => closed = true;

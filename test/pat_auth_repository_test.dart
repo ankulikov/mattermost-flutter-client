@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_client_factory.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_server_discovery.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
@@ -62,6 +63,28 @@ void main() {
     expect(first.closed, isTrue);
     expect(repository.api, same(factory.clients.last.api));
     expect(factory.clients.last.closed, isFalse);
+  });
+
+  test('exchanges password credentials for a saved session token', () async {
+    final _CredentialStore store = _CredentialStore();
+    final _ServerLoginClient loginClient = _ServerLoginClient(token: 'session');
+    final MattermostAuthRepository repository = MattermostAuthRepository(
+      credentialStore: store,
+      clientFactory: _ClientFactory(),
+      serverLoginClientFactory: _ServerLoginFactory(loginClient),
+    );
+
+    final AuthSession session = await repository.authenticateWithPassword(
+      serverUrl: Uri.parse('https://chat.example.com'),
+      loginId: 'ada',
+      password: 'secret-password',
+    );
+
+    expect(session.username, 'ada');
+    expect(loginClient.loginId, 'ada');
+    expect(loginClient.password, 'secret-password');
+    expect(store.credentials?.token, 'session');
+    expect(loginClient.closed, isTrue);
   });
 
   test(
@@ -178,6 +201,42 @@ final class _ApiClient implements MattermostApiClient {
 
   @override
   void close() => closed = true;
+}
+
+final class _ServerLoginFactory
+    implements MattermostServerDiscoveryClientFactory {
+  _ServerLoginFactory(this.client);
+
+  final _ServerLoginClient client;
+
+  @override
+  MattermostServerDiscoveryClient create({required Uri serverUrl}) => client;
+}
+
+final class _ServerLoginClient implements MattermostServerDiscoveryClient {
+  _ServerLoginClient({required this.token});
+
+  final String token;
+  String? loginId;
+  String? password;
+  bool closed = false;
+
+  @override
+  void close() => closed = true;
+
+  @override
+  Future<MattermostClientConfigDto> getClientConfig() =>
+      throw UnimplementedError();
+
+  @override
+  Future<String> login({
+    required String loginId,
+    required String password,
+  }) async {
+    this.loginId = loginId;
+    this.password = password;
+    return token;
+  }
 }
 
 final class _AuthApi implements MattermostApi {

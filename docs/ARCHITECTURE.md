@@ -301,6 +301,10 @@ sync metadata. Schema version 8 добавляет `cached_user_profiles`, вл�
 - Все user-facing строки локализуются вне widgets; поддерживаются keyboard,
   semantics, scalable text и light/dark themes.
 - Токены хранятся только в secure storage и не попадают в Drift или логи.
+- До входа auth workflow запрашивает `/config/client`: кнопка логина и пароля
+  доступна только когда сервер включает вход по email или username. Пароль
+  передаётся только в `POST /users/login`; полученный в заголовке session token
+  проверяется и сохраняется тем же потоком, что SSO и персональный токен.
 - Интерактивный SSO проходит через domain-контракт `SsoBrowserGateway`.
   Нативный browser adapter принимает только `MMAUTHTOKEN`, прочитанный native
   Cookie Manager после возврата на выбранный Mattermost origin; UI не получает

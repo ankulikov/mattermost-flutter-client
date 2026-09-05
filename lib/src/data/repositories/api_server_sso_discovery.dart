@@ -1,6 +1,7 @@
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_server_discovery.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
+import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/services/server_sso_discovery.dart';
 
@@ -14,7 +15,7 @@ final class ApiServerSsoDiscovery implements ServerSsoDiscovery {
   final MattermostServerDiscoveryClientFactory _clientFactory;
 
   @override
-  Future<List<SsoOption>> discover(Uri serverUrl) async {
+  Future<AuthenticationMethods> discover(Uri serverUrl) async {
     final MattermostServerDiscoveryClient client = _clientFactory.create(
       serverUrl: serverUrl,
     );
@@ -32,7 +33,11 @@ final class ApiServerSsoDiscovery implements ServerSsoDiscovery {
             displayLabel: config.openIdButtonText,
           ),
       ];
-      return List<SsoOption>.unmodifiable(options);
+      return AuthenticationMethods(
+        ssoOptions: List<SsoOption>.unmodifiable(options),
+        passwordLoginEnabled:
+            config.enableSignInWithEmail || config.enableSignInWithUsername,
+      );
     } on AuthFailure {
       rethrow;
     } on MattermostServerDiscoveryNetworkException {

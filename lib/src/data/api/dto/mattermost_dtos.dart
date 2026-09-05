@@ -15,6 +15,8 @@ final class MattermostClientConfigDto {
     required this.samlLoginButtonText,
     required this.enableSignUpWithOpenId,
     required this.openIdButtonText,
+    this.enableSignInWithEmail = false,
+    this.enableSignInWithUsername = false,
   });
 
   factory MattermostClientConfigDto.fromJson(JsonMap json) =>
@@ -23,12 +25,16 @@ final class MattermostClientConfigDto {
         samlLoginButtonText: _string(json, 'SamlLoginButtonText'),
         enableSignUpWithOpenId: _bool(json, 'EnableSignUpWithOpenId'),
         openIdButtonText: _string(json, 'OpenIdButtonText'),
+        enableSignInWithEmail: _bool(json, 'EnableSignInWithEmail'),
+        enableSignInWithUsername: _bool(json, 'EnableSignInWithUsername'),
       );
 
   final bool enableSaml;
   final String samlLoginButtonText;
   final bool enableSignUpWithOpenId;
   final String openIdButtonText;
+  final bool enableSignInWithEmail;
+  final bool enableSignInWithUsername;
 }
 
 final class MattermostUserDto {

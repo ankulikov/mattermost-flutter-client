@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/app/app.dart';
 import 'package:mattermost_flutter/src/app/router.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
@@ -874,6 +875,18 @@ void main() {
 
 final class _SignedOutRepository implements AuthRepository {
   @override
+  Future<AuthSession> authenticateWithPassword({
+    required Uri serverUrl,
+    required String loginId,
+    required String password,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<AuthenticationMethods> discoverAuthenticationMethods({
+    required Uri serverUrl,
+  }) => throw UnimplementedError();
+
+  @override
   Future<AuthSession> authenticateWithSessionToken({
     required Uri serverUrl,
     required String token,
@@ -1118,6 +1131,18 @@ final class _AutoPagingPostRepository extends PostRepository {
 }
 
 final class _SignedInRepository implements AuthRepository {
+  @override
+  Future<AuthSession> authenticateWithPassword({
+    required Uri serverUrl,
+    required String loginId,
+    required String password,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<AuthenticationMethods> discoverAuthenticationMethods({
+    required Uri serverUrl,
+  }) => throw UnimplementedError();
+
   @override
   Future<AuthSession> authenticateWithSessionToken({
     required Uri serverUrl,
