@@ -44,9 +44,7 @@ final Provider<AuthRepository> authRepositoryProvider =
 
 final Provider<UserRepository> userRepositoryProvider =
     Provider<UserRepository>((Ref ref) {
-      final session = ref.watch(
-        activeAccountContextProvider.select((context) => context.session),
-      );
+      final session = ref.watch(activeAccountSessionProvider);
       if (session == null) {
         throw StateError('No active Mattermost account for user repository');
       }
