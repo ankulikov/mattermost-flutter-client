@@ -131,6 +131,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final Container inboxIndicator = tester.widget<Container>(
+      find.byKey(const ValueKey<String>('inbox-navigation-indicator')),
+    );
+    expect(inboxIndicator.decoration, isA<BoxDecoration>());
+
     await tester.tap(find.text('Town Square'));
     await tester.pumpAndSettle();
     expect(find.text('Message for town-square'), findsOneWidget);

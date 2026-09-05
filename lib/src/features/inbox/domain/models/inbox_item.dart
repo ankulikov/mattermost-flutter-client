@@ -120,5 +120,21 @@ final class InboxSnapshot {
   final DateTime? builtAt;
   final bool hasIncompleteMentionReconstruction;
 
-  int get badgeCount => newItems.length + postponedItems.length;
+  /// Whether Inbox should draw attention in the app navigation.
+  ///
+  /// Postponed items are intentionally excluded: they were explicitly removed
+  /// from the new-message queue by the user.
+  bool get hasNewItems => newItems.isNotEmpty;
+
+  /// Counts individual messages as they are presented in an Inbox tab.
+  ///
+  /// A direct-message bundle can contain several messages, while a thread is
+  /// represented by its root post and therefore counts as one item here.
+  int get newMessageCount => _messageCount(newItems);
+  int get postponedMessageCount => _messageCount(postponedItems);
+
+  int _messageCount(Iterable<InboxItem> items) => items.fold<int>(
+    0,
+    (int count, InboxItem item) => count + item.postIds.length,
+  );
 }

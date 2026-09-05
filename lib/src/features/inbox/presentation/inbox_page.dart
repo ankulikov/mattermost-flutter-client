@@ -56,9 +56,17 @@ class _InboxPageState extends ConsumerState<InboxPage>
         ],
         bottom: TabBar(
           controller: _tabs,
-          tabs: const <Tab>[
-            Tab(text: InboxStrings.newItems),
-            Tab(text: InboxStrings.postponed),
+          tabs: <Widget>[
+            _InboxTab(
+              label: InboxStrings.newItems,
+              count: value.value?.snapshot.newMessageCount ?? 0,
+              countKey: const ValueKey<String>('inbox-new-count'),
+            ),
+            _InboxTab(
+              label: InboxStrings.postponed,
+              count: value.value?.snapshot.postponedMessageCount ?? 0,
+              countKey: const ValueKey<String>('inbox-postponed-count'),
+            ),
           ],
         ),
       ),
@@ -112,6 +120,39 @@ class _InboxPageState extends ConsumerState<InboxPage>
       ),
     );
   }
+}
+
+class _InboxTab extends StatelessWidget {
+  const _InboxTab({
+    required this.label,
+    required this.count,
+    required this.countKey,
+  });
+
+  final String label;
+  final int count;
+  final Key countKey;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: InboxStrings.tabWithMessageCount(label, count),
+    child: Tab(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(label),
+            const SizedBox(width: 8),
+            Badge(
+              label: Text('$count', key: countKey),
+              child: const SizedBox(width: 20, height: 20),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _ConnectionIndicator extends StatelessWidget {

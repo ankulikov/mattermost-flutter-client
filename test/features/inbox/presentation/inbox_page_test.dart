@@ -14,6 +14,7 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_re
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
@@ -120,6 +121,53 @@ void main() {
       expect(opened, same(items.first));
     },
   );
+
+  testWidgets('shows exact message counts on both Inbox tabs', (
+    WidgetTester tester,
+  ) async {
+    final List<InboxItem> items = _items();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(
+            _InboxRepository(
+              InboxSnapshot(
+                newItems: items,
+                postponedItems: <InboxItem>[items.first, items[2]],
+              ),
+            ),
+          ),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey<String>('inbox-new-count')))
+          .data,
+      '5',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey<String>('inbox-postponed-count')),
+          )
+          .data,
+      '3',
+    );
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey<String>('inbox-new-count')))
+          .left,
+      greaterThan(tester.getRect(find.text(InboxStrings.newItems)).right),
+    );
+  });
 
   testWidgets('read action marks the item without opening its row', (
     WidgetTester tester,

@@ -55,6 +55,11 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
         sidebar: sidebar,
       );
     }
+    final bool inboxHasNewItems = ref.watch(
+      inboxProvider.select(
+        (value) => value.value?.snapshot.hasNewItems ?? false,
+      ),
+    );
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -64,6 +69,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
             selectedChannel: selectedChannel,
             threadsSelected: threadsSelected,
             sidebar: sidebar,
+            inboxHasNewItems: inboxHasNewItems,
           );
         }
         return _buildDesktop(
@@ -71,6 +77,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
           selectedChannel: selectedChannel,
           threadsSelected: threadsSelected,
           sidebar: sidebar,
+          inboxHasNewItems: inboxHasNewItems,
           expanded: constraints.maxWidth >= AppBreakpoints.expanded,
         );
       },
@@ -118,6 +125,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     required SidebarChannel? selectedChannel,
     required bool threadsSelected,
     required ChannelSidebarSnapshot? sidebar,
+    required bool inboxHasNewItems,
     required bool expanded,
   }) {
     final Widget mainContent = _MainContent(
@@ -134,6 +142,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
           children: <Widget>[
             _DestinationRail(
               selectedIndex: threadsSelected ? 1 : 0,
+              inboxHasNewItems: inboxHasNewItems,
               onDestinationSelected: _selectDestination,
             ),
             const VerticalDivider(width: 1),
@@ -172,6 +181,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     required SidebarChannel? selectedChannel,
     required bool threadsSelected,
     required ChannelSidebarSnapshot? sidebar,
+    required bool inboxHasNewItems,
   }) {
     final bool showChannel =
         _showCompactChannel && !threadsSelected && selectedChannel != null;
@@ -217,6 +227,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
                 ? null
                 : _BottomDestinations(
                     selectedIndex: threadsSelected ? 1 : 0,
+                    inboxHasNewItems: inboxHasNewItems,
                     onDestinationSelected: _selectDestination,
                   ),
           ),
@@ -275,10 +286,12 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
 class _DestinationRail extends StatelessWidget {
   const _DestinationRail({
     required this.selectedIndex,
+    required this.inboxHasNewItems,
     required this.onDestinationSelected,
   });
 
   final int selectedIndex;
+  final bool inboxHasNewItems;
   final ValueChanged<int> onDestinationSelected;
 
   @override
@@ -290,16 +303,16 @@ class _DestinationRail extends StatelessWidget {
     minWidth: 82,
     backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
     onDestinationSelected: onDestinationSelected,
-    destinations: const <NavigationRailDestination>[
-      NavigationRailDestination(
+    destinations: <NavigationRailDestination>[
+      const NavigationRailDestination(
         icon: Icon(Icons.home_outlined),
         selectedIcon: Icon(Icons.home),
         label: Text(ShellStrings.channels),
       ),
       NavigationRailDestination(
-        icon: Icon(Icons.forum_outlined),
-        selectedIcon: Icon(Icons.forum),
-        label: Text(ShellStrings.inbox),
+        icon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
+        selectedIcon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
+        label: const Text(ShellStrings.inbox),
       ),
     ],
   );
@@ -308,10 +321,12 @@ class _DestinationRail extends StatelessWidget {
 class _BottomDestinations extends StatelessWidget {
   const _BottomDestinations({
     required this.selectedIndex,
+    required this.inboxHasNewItems,
     required this.onDestinationSelected,
   });
 
   final int selectedIndex;
+  final bool inboxHasNewItems;
   final ValueChanged<int> onDestinationSelected;
 
   @override
@@ -319,18 +334,49 @@ class _BottomDestinations extends StatelessWidget {
     key: const ValueKey<String>('shell-bottom-navigation'),
     selectedIndex: selectedIndex,
     onDestinationSelected: onDestinationSelected,
-    destinations: const <NavigationDestination>[
-      NavigationDestination(
+    destinations: <NavigationDestination>[
+      const NavigationDestination(
         icon: Icon(Icons.home_outlined),
         selectedIcon: Icon(Icons.home),
         label: ShellStrings.channels,
       ),
       NavigationDestination(
-        icon: Icon(Icons.forum_outlined),
-        selectedIcon: Icon(Icons.forum),
+        icon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
+        selectedIcon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
         label: ShellStrings.inbox,
       ),
     ],
+  );
+}
+
+class _InboxNavigationIcon extends StatelessWidget {
+  const _InboxNavigationIcon({required this.hasNewItems});
+
+  final bool hasNewItems;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: hasNewItems ? ShellStrings.inboxHasNewMessages : ShellStrings.inbox,
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: <Widget>[
+        const Icon(Icons.forum_outlined),
+        if (hasNewItems)
+          PositionedDirectional(
+            top: -2,
+            end: -2,
+            child: Container(
+              key: const ValueKey<String>('inbox-navigation-indicator'),
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.error,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+      ],
+    ),
   );
 }
 

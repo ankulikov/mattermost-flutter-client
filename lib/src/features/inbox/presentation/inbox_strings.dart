@@ -24,6 +24,8 @@ abstract final class InboxStrings {
   static const String directMessages = 'Direct Messages';
   static const String threads = 'Threads';
   static const String thread = 'Thread';
+  static String tabWithMessageCount(String tab, int count) =>
+      '$tab, ${messages(count)}';
   static String messages(int count) =>
       count == 1 ? '1 message' : '$count messages';
   static String replies(int count) => count == 1 ? '1 reply' : '$count replies';
