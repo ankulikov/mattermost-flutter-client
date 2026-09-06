@@ -108,6 +108,9 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
           onThreadRead: (DateTime timestamp) => ref
               .read(followedThreadsProvider(widget.team.id).notifier)
               .recordThreadRead(rootPostId: selected.id, timestamp: timestamp),
+          onThreadUnfollowed: (String rootPostId) => ref
+              .read(followedThreadsProvider(widget.team.id).notifier)
+              .removeUnfollowedThread(rootPostId),
           onClose: () => setState(() => _selectedThreadId = null),
         );
         if (showSideThread) {
@@ -161,6 +164,9 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
         onThreadRead: (DateTime timestamp) => ref
             .read(followedThreadsProvider(widget.team.id).notifier)
             .recordThreadRead(rootPostId: thread.id, timestamp: timestamp),
+        onThreadUnfollowed: (String rootPostId) => ref
+            .read(followedThreadsProvider(widget.team.id).notifier)
+            .removeUnfollowedThread(rootPostId),
       ),
     );
   }

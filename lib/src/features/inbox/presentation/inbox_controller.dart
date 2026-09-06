@@ -176,6 +176,29 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   Future<bool> postpone(InboxItem item) => _move(item, toPostponed: true);
   Future<bool> remove(InboxItem item) => _move(item, toPostponed: false);
 
+  /// Removes an unfollowed CRT thread from both volatile Inbox queues.
+  void removeUnfollowedThread(String rootPostId) {
+    final InboxViewState? current = state.value;
+    if (current == null) return;
+    List<InboxItem> withoutThread(Iterable<InboxItem> items) => items
+        .where(
+          (InboxItem item) =>
+              item is! ThreadInboxItem || item.thread.id != rootPostId,
+        )
+        .toList(growable: false);
+    state = AsyncData(
+      current.copyWith(
+        snapshot: InboxSnapshot(
+          newItems: withoutThread(current.snapshot.newItems),
+          postponedItems: withoutThread(current.snapshot.postponedItems),
+          builtAt: current.snapshot.builtAt,
+          hasIncompleteMentionReconstruction:
+              current.snapshot.hasIncompleteMentionReconstruction,
+        ),
+      ),
+    );
+  }
+
   Future<bool> markRead(InboxItem item) async {
     final InboxViewState? current = state.value;
     final AuthSession? session = _session;

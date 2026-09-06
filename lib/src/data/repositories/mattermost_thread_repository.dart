@@ -185,6 +185,41 @@ final class MattermostThreadRepository extends ThreadRepository {
     );
   }
 
+  @override
+  Future<bool> isFollowing({
+    required AuthSession session,
+    required String teamId,
+    required String rootPostId,
+  }) async =>
+      await _api.getUserThread(
+        userId: session.userId,
+        teamId: teamId,
+        threadId: rootPostId,
+      ) !=
+      null;
+
+  @override
+  Future<void> follow({
+    required AuthSession session,
+    required String teamId,
+    required String rootPostId,
+  }) => _api.followThread(
+    userId: session.userId,
+    teamId: teamId,
+    threadId: rootPostId,
+  );
+
+  @override
+  Future<void> unfollow({
+    required AuthSession session,
+    required String teamId,
+    required String rootPostId,
+  }) => _api.unfollowThread(
+    userId: session.userId,
+    teamId: teamId,
+    threadId: rootPostId,
+  );
+
   static DateTime _dateOrEpoch(int milliseconds) =>
       DateTime.fromMillisecondsSinceEpoch(milliseconds);
 

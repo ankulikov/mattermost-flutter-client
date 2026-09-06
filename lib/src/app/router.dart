@@ -41,6 +41,7 @@ final GoRouter appRouter = GoRouter(
                 onSelectChannel: arguments.onSelectChannel,
                 onReplySent: arguments.onReplySent,
                 onThreadRead: arguments.onThreadRead,
+                onThreadUnfollowed: arguments.onThreadUnfollowed,
                 onClose: context.pop,
               ),
             ),

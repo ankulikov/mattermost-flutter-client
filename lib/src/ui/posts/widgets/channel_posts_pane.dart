@@ -144,6 +144,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
           rootPostId: rootPostId,
           channel: channel,
           serverUrl: serverUrl,
+          teamId: channel.teamId,
           onSelectChannel: widget.onSelectChannel,
           onReplySent: (ChannelPost reply) => ref
               .read(channelPostsProvider(channel.id).notifier)
@@ -180,6 +181,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
       rootPostId: rootPostId,
       channel: channel,
       serverUrl: serverUrl,
+      teamId: channel.teamId,
       onSelectChannel: widget.onSelectChannel == null
           ? null
           : (String name) {

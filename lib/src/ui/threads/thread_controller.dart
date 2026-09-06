@@ -5,6 +5,8 @@ import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 
 final class ThreadViewState {
   const ThreadViewState({
@@ -13,6 +15,9 @@ final class ThreadViewState {
     this.refreshFailed = false,
     this.isMarkingRead = false,
     this.markReadFailed = false,
+    this.isFollowing = false,
+    this.isUpdatingFollow = false,
+    this.followUpdateFailed = false,
   });
 
   final MessageThread thread;
@@ -20,6 +25,9 @@ final class ThreadViewState {
   final bool refreshFailed;
   final bool isMarkingRead;
   final bool markReadFailed;
+  final bool isFollowing;
+  final bool isUpdatingFollow;
+  final bool followUpdateFailed;
 
   ThreadViewState copyWith({
     MessageThread? thread,
@@ -27,12 +35,18 @@ final class ThreadViewState {
     bool? refreshFailed,
     bool? isMarkingRead,
     bool? markReadFailed,
+    bool? isFollowing,
+    bool? isUpdatingFollow,
+    bool? followUpdateFailed,
   }) => ThreadViewState(
     thread: thread ?? this.thread,
     isRefreshing: isRefreshing ?? this.isRefreshing,
     refreshFailed: refreshFailed ?? this.refreshFailed,
     isMarkingRead: isMarkingRead ?? this.isMarkingRead,
     markReadFailed: markReadFailed ?? this.markReadFailed,
+    isFollowing: isFollowing ?? this.isFollowing,
+    isUpdatingFollow: isUpdatingFollow ?? this.isUpdatingFollow,
+    followUpdateFailed: followUpdateFailed ?? this.followUpdateFailed,
   );
 }
 
@@ -42,12 +56,18 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     this._sessionProvider,
     this._repositoryProvider,
     this._postRepositoryProvider,
+    this._postponedProvider,
+    this.teamId,
+    this.allowsFollowing,
   );
 
   final String rootPostId;
   final Provider<AuthSession?> _sessionProvider;
   final Provider<ThreadRepository> _repositoryProvider;
   final Provider<PostRepository> _postRepositoryProvider;
+  final Provider<PostponedRepository> _postponedProvider;
+  final String teamId;
+  final bool allowsFollowing;
   late RequestCancellation _cancellation;
   AuthSession? _session;
   ThreadRepository? _repository;
@@ -71,10 +91,19 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     final ThreadRepository repository = ref.watch(_repositoryProvider);
     _session = session;
     _repository = repository;
-    final MessageThread thread = await cancellation.run(
-      () => repository.load(session: session, rootPostId: rootPostId),
+    final (MessageThread thread, bool isFollowing) = await cancellation.run(
+      () async => (
+        await repository.load(session: session, rootPostId: rootPostId),
+        !allowsFollowing || teamId.isEmpty
+            ? false
+            : await repository.isFollowing(
+                session: session,
+                teamId: teamId,
+                rootPostId: rootPostId,
+              ),
+      ),
     );
-    return ThreadViewState(thread: thread);
+    return ThreadViewState(thread: thread, isFollowing: isFollowing);
   }
 
   Future<void> retry() async {
@@ -192,6 +221,90 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
       return false;
     } finally {
       _markReadRunning = false;
+    }
+  }
+
+  Future<bool> toggleFollowing() async {
+    final AuthSession? session = _session;
+    final ThreadRepository? repository = _repository;
+    final ThreadViewState? current = state.value;
+    if (session == null ||
+        repository == null ||
+        current == null ||
+        !allowsFollowing ||
+        teamId.isEmpty ||
+        current.isUpdatingFollow) {
+      return false;
+    }
+    final bool follow = !current.isFollowing;
+    state = AsyncData(
+      current.copyWith(isUpdatingFollow: true, followUpdateFailed: false),
+    );
+    try {
+      if (follow) {
+        await _cancellation.run(
+          () => repository.follow(
+            session: session,
+            teamId: teamId,
+            rootPostId: rootPostId,
+          ),
+        );
+      } else {
+        await _cancellation.run(
+          () => repository.unfollow(
+            session: session,
+            teamId: teamId,
+            rootPostId: rootPostId,
+          ),
+        );
+        try {
+          await _cancellation.run(
+            () => ref
+                .read(_postponedProvider)
+                .remove(
+                  session: session,
+                  references: <PostponedReference>[
+                    PostponedReference(
+                      postId: rootPostId,
+                      kind: PostponedReferenceKind.thread,
+                      addedAt: DateTime.now().toUtc(),
+                    ),
+                  ],
+                ),
+          );
+        } on Object {
+          final ThreadViewState? latest = state.value;
+          if (latest != null) {
+            state = AsyncData(
+              latest.copyWith(
+                isFollowing: false,
+                isUpdatingFollow: false,
+                followUpdateFailed: true,
+              ),
+            );
+          }
+          return true;
+        }
+      }
+      final ThreadViewState? latest = state.value;
+      if (latest != null) {
+        state = AsyncData(
+          latest.copyWith(
+            isFollowing: follow,
+            isUpdatingFollow: false,
+            followUpdateFailed: false,
+          ),
+        );
+      }
+      return true;
+    } on Object {
+      final ThreadViewState? latest = state.value;
+      if (!_cancellation.isCancelled && latest != null) {
+        state = AsyncData(
+          latest.copyWith(isUpdatingFollow: false, followUpdateFailed: true),
+        );
+      }
+      return false;
     }
   }
 

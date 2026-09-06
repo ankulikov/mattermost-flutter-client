@@ -18,6 +18,7 @@ final class ThreadRouteArguments {
     this.onSelectChannel,
     this.onReplySent,
     this.onThreadRead,
+    this.onThreadUnfollowed,
   });
 
   final String rootPostId;
@@ -29,6 +30,7 @@ final class ThreadRouteArguments {
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<ChannelPost>? onReplySent;
   final ValueChanged<DateTime>? onThreadRead;
+  final ValueChanged<String>? onThreadUnfollowed;
 }
 
 abstract final class ThreadRoute {

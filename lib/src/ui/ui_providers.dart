@@ -127,13 +127,22 @@ final channelPostsProvider = AsyncNotifierProvider.autoDispose
       ),
     );
 
+typedef ThreadRequest = ({
+  String rootPostId,
+  String teamId,
+  bool allowsFollowing,
+});
+
 final threadProvider = AsyncNotifierProvider.autoDispose
-    .family<ThreadController, ThreadViewState, String>(
-      (String rootPostId) => ThreadController(
-        rootPostId,
+    .family<ThreadController, ThreadViewState, ThreadRequest>(
+      (ThreadRequest request) => ThreadController(
+        request.rootPostId,
         authSessionProvider,
         threadRepositoryProvider,
         postRepositoryProvider,
+        postponedRepositoryProvider,
+        request.teamId,
+        request.allowsFollowing,
       ),
     );
 

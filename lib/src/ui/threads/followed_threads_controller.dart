@@ -189,6 +189,30 @@ final class FollowedThreadsController
     );
   }
 
+  void removeUnfollowedThread(String rootPostId) {
+    final FollowedThreadsViewState? current = state.value;
+    if (current == null) return;
+    final FollowedThread? removed = current.items
+        .where((FollowedThread item) => item.id == rootPostId)
+        .firstOrNull;
+    if (removed == null) return;
+    state = AsyncData(
+      current.copyWith(
+        items: List<FollowedThread>.unmodifiable(
+          current.items.where((FollowedThread item) => item.id != rootPostId),
+        ),
+        total: current.total > 0 ? current.total - 1 : 0,
+        totalUnreadThreads: removed.isUnread && current.totalUnreadThreads > 0
+            ? current.totalUnreadThreads - 1
+            : current.totalUnreadThreads,
+        totalUnreadMentions:
+            current.totalUnreadMentions - removed.unreadMentions > 0
+            ? current.totalUnreadMentions - removed.unreadMentions
+            : 0,
+      ),
+    );
+  }
+
   static FollowedThreadsViewState _stateFromPage(FollowedThreadsPage page) =>
       FollowedThreadsViewState(
         items: page.items,

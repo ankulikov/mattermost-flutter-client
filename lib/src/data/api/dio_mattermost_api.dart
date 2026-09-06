@@ -416,6 +416,25 @@ final class DioMattermostApi implements MattermostApi {
   }) => _delete(_threadFollowingPath(userId, teamId, threadId));
 
   @override
+  Future<MattermostUserThreadDto?> getUserThread({
+    required String userId,
+    required String teamId,
+    required String threadId,
+  }) async {
+    try {
+      final Response<Object?> response = await _get(
+        '/users/${Uri.encodeComponent(userId)}'
+        '/teams/${Uri.encodeComponent(teamId)}'
+        '/threads/${Uri.encodeComponent(threadId)}',
+      );
+      return MattermostUserThreadDto.fromJson(_object(response.data));
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  @override
   Future<List<MattermostPreferenceDto>> getPreferencesByCategory({
     required String userId,
     required String category,

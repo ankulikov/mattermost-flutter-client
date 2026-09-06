@@ -176,6 +176,13 @@ abstract interface class MattermostApi {
     required String threadId,
   });
 
+  /// Returns the user's CRT thread state, or `null` when it is not followed.
+  Future<MattermostUserThreadDto?> getUserThread({
+    required String userId,
+    required String teamId,
+    required String threadId,
+  }) => throw UnimplementedError();
+
   /// Returns preferences in one category, such as `postponed_messages`.
   Future<List<MattermostPreferenceDto>> getPreferencesByCategory({
     required String userId,

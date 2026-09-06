@@ -11,6 +11,9 @@ abstract final class ThreadStrings {
   static const String replies = 'Replies';
   static const String unreadMessages = 'unread messages';
   static const String markReadFailed = 'Could not mark this thread as read';
+  static const String follow = 'Follow';
+  static const String following = 'Following';
+  static const String followUpdateFailed = 'Could not update thread following.';
 
   static String replyCount(int count) =>
       count == 1 ? '1 reply' : '$count replies';

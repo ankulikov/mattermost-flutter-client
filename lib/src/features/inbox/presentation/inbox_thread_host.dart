@@ -145,6 +145,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
                   unreadReplies: target.unreadReplies,
                   positionAtEndWhenRead: target.positionAtEndWhenRead,
                   onSelectChannel: widget.onSelectChannel,
+                  onThreadUnfollowed: _removeUnfollowedThread,
                   onClose: () => setState(() => _selectedTarget = null),
                 ),
             ],
@@ -173,6 +174,14 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
               widget.onSelectChannel!(name);
               if (context.mounted) Navigator.of(context).pop();
             },
+      onThreadUnfollowed: _removeUnfollowedThread,
     ),
   );
+
+  void _removeUnfollowedThread(String rootPostId) {
+    ref.read(inboxProvider.notifier).removeUnfollowedThread(rootPostId);
+    if (mounted && _selectedTarget?.rootPostId == rootPostId) {
+      setState(() => _selectedTarget = null);
+    }
+  }
 }

@@ -24,6 +24,7 @@ class ThreadPane extends ConsumerStatefulWidget {
     this.onSelectChannel,
     this.onReplySent,
     this.onThreadRead,
+    this.onThreadUnfollowed,
     super.key,
   });
 
@@ -37,6 +38,7 @@ class ThreadPane extends ConsumerStatefulWidget {
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<ChannelPost>? onReplySent;
   final ValueChanged<DateTime>? onThreadRead;
+  final ValueChanged<String>? onThreadUnfollowed;
 
   @override
   ConsumerState<ThreadPane> createState() => _ThreadPaneState();
@@ -57,22 +59,29 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
   @override
   Widget build(BuildContext context) {
     final AsyncValue<ThreadViewState> value = ref.watch(
-      threadProvider(widget.rootPostId),
+      threadProvider(_request),
     );
+    final ThreadViewState? displayedState = value.asData?.value;
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _ThreadHeader(channel: widget.channel, onClose: widget.onClose),
+          _ThreadHeader(
+            channel: widget.channel,
+            onClose: widget.onClose,
+            showsFollowButton: _request.allowsFollowing,
+            isFollowing: displayedState?.isFollowing,
+            isUpdatingFollow: displayedState?.isUpdatingFollow ?? false,
+            onToggleFollowing: _toggleFollowing,
+          ),
           const Divider(height: 1),
           Expanded(
             child: value.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, _) => _ThreadError(
-                onRetry: () => ref
-                    .read(threadProvider(widget.rootPostId).notifier)
-                    .retry(),
+                onRetry: () =>
+                    ref.read(threadProvider(_request).notifier).retry(),
               ),
               data: (ThreadViewState state) {
                 final ChannelPost? root = state.thread.root;
@@ -82,9 +91,8 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                 if (root == null) {
                   return _ThreadError(
                     message: ThreadStrings.missingRoot,
-                    onRetry: () => ref
-                        .read(threadProvider(widget.rootPostId).notifier)
-                        .retry(),
+                    onRetry: () =>
+                        ref.read(threadProvider(_request).notifier).retry(),
                   );
                 }
                 _scheduleInitialPosition(state);
@@ -102,9 +110,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                         actions: <Widget>[
                           TextButton(
                             onPressed: () => ref
-                                .read(
-                                  threadProvider(widget.rootPostId).notifier,
-                                )
+                                .read(threadProvider(_request).notifier)
                                 .retry(),
                             child: const Text(ThreadStrings.retry),
                           ),
@@ -173,6 +179,11 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                         ],
                       ),
                     ),
+                    if (state.followUpdateFailed)
+                      const MaterialBanner(
+                        content: Text(ThreadStrings.followUpdateFailed),
+                        actions: <Widget>[],
+                      ),
                     MessageComposer(
                       key: ValueKey<String>(
                         'thread-composer-${widget.rootPostId}',
@@ -206,7 +217,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
         if (dividerContext != null) {
           unawaited(Scrollable.ensureVisible(dividerContext, alignment: 0));
         }
-        if (widget.teamId != null) unawaited(_markRead(state));
+        if (_request.teamId.isNotEmpty) unawaited(_markRead(state));
         return;
       }
       if (widget.positionAtEndWhenRead && _scrollController.hasClients) {
@@ -216,18 +227,18 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
   }
 
   Future<void> _markRead(ThreadViewState state) async {
-    final String? teamId = widget.teamId;
+    final String teamId = _request.teamId;
     final DateTime? loadedAt = state.thread.loadedAt;
-    if (teamId == null || loadedAt == null) return;
+    if (teamId.isEmpty || loadedAt == null) return;
     final bool marked = await ref
-        .read(threadProvider(widget.rootPostId).notifier)
+        .read(threadProvider(_request).notifier)
         .markRead(teamId: teamId);
     if (mounted && marked) widget.onThreadRead?.call(loadedAt);
   }
 
   Future<void> _sendReply(String message, String pendingPostId) async {
     final ChannelPost sent = await ref
-        .read(threadProvider(widget.rootPostId).notifier)
+        .read(threadProvider(_request).notifier)
         .sendText(
           channelId: widget.channel.id,
           message: message,
@@ -248,11 +259,33 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
 
   Future<void> _toggleReaction(ChannelPost post, PostReaction reaction) async {
     final bool succeeded = await ref
-        .read(threadProvider(widget.rootPostId).notifier)
+        .read(threadProvider(_request).notifier)
         .toggleReaction(postId: post.id, emojiName: reaction.emojiName);
     if (!succeeded && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(ThreadStrings.reactionFailed)),
+      );
+    }
+  }
+
+  ThreadRequest get _request => (
+    rootPostId: widget.rootPostId,
+    teamId: widget.teamId ?? widget.channel.teamId,
+    allowsFollowing: widget.channel.kind != ChannelKind.directMessage,
+  );
+
+  Future<void> _toggleFollowing() async {
+    final bool wasFollowing =
+        ref.read(threadProvider(_request)).asData?.value.isFollowing ?? false;
+    final bool succeeded = await ref
+        .read(threadProvider(_request).notifier)
+        .toggleFollowing();
+    if (!mounted) return;
+    if (succeeded && wasFollowing) {
+      widget.onThreadUnfollowed?.call(widget.rootPostId);
+    } else if (!succeeded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(ThreadStrings.followUpdateFailed)),
       );
     }
   }
@@ -289,10 +322,21 @@ class _UnreadMessagesDivider extends StatelessWidget {
 }
 
 class _ThreadHeader extends StatelessWidget {
-  const _ThreadHeader({required this.channel, required this.onClose});
+  const _ThreadHeader({
+    required this.channel,
+    required this.onClose,
+    required this.showsFollowButton,
+    required this.isFollowing,
+    required this.isUpdatingFollow,
+    required this.onToggleFollowing,
+  });
 
   final SidebarChannel channel;
   final VoidCallback onClose;
+  final bool showsFollowButton;
+  final bool? isFollowing;
+  final bool isUpdatingFollow;
+  final Future<void> Function() onToggleFollowing;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -318,6 +362,22 @@ class _ThreadHeader extends StatelessWidget {
             ],
           ),
         ),
+        if (showsFollowButton)
+          TextButton(
+            onPressed: isFollowing == null || isUpdatingFollow
+                ? null
+                : () => unawaited(onToggleFollowing()),
+            child: isUpdatingFollow
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    isFollowing == true
+                        ? ThreadStrings.following
+                        : ThreadStrings.follow,
+                  ),
+          ),
         IconButton(
           tooltip: ThreadStrings.close,
           onPressed: onClose,
