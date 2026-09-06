@@ -10,6 +10,7 @@ import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_attachments.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_strings.dart';
@@ -493,65 +494,68 @@ class _PostRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        top: continuesAuthor ? 2 : 8,
-        bottom: continuesAuthor ? 2 : 4,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          if (continuesAuthor)
-            const SizedBox(width: 44)
-          else
-            MessageAvatar(author: post.author),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                if (!continuesAuthor) ...<Widget>[
-                  MessageAuthorLine(author: post.author, sentAt: post.sentAt),
-                  const SizedBox(height: 5),
-                ],
-                MessageBody(
-                  post: post,
-                  serverUrl: serverUrl,
-                  onSelectChannel: onSelectChannel,
-                ),
-                if (post.attachments.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 8),
-                  MessageAttachments(attachments: post.attachments),
-                ],
-                if (post.reactions.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 8),
-                  MessageReactions(
+    return MessageInteractionSurface(
+      onOpenThread: () => onOpenThread(post),
+      child: Padding(
+        padding: EdgeInsets.only(
+          top: continuesAuthor ? 2 : 8,
+          bottom: continuesAuthor ? 2 : 4,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            if (continuesAuthor)
+              const SizedBox(width: 44)
+            else
+              MessageAvatar(author: post.author),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  if (!continuesAuthor) ...<Widget>[
+                    MessageAuthorLine(author: post.author, sentAt: post.sentAt),
+                    const SizedBox(height: 5),
+                  ],
+                  MessageBody(
                     post: post,
-                    semanticsLabel: ChannelPostsStrings.reactions,
-                    onToggle: (PostReaction reaction) =>
-                        onToggleReaction(post, reaction),
+                    serverUrl: serverUrl,
+                    onSelectChannel: onSelectChannel,
                   ),
-                ],
-                if (post.replyCount > 0) ...<Widget>[
-                  const SizedBox(height: 6),
-                  Semantics(
-                    button: true,
-                    label: ThreadStrings.replyCount(post.replyCount),
-                    child: TextButton.icon(
-                      onPressed: () => onOpenThread(post),
-                      icon: const Icon(Icons.forum_outlined, size: 18),
-                      label: Text(_threadSummary(context, post)),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        minimumSize: const Size(44, 44),
+                  if (post.attachments.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 8),
+                    MessageAttachments(attachments: post.attachments),
+                  ],
+                  if (post.reactions.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 8),
+                    MessageReactions(
+                      post: post,
+                      semanticsLabel: ChannelPostsStrings.reactions,
+                      onToggle: (PostReaction reaction) =>
+                          onToggleReaction(post, reaction),
+                    ),
+                  ],
+                  if (post.replyCount > 0) ...<Widget>[
+                    const SizedBox(height: 6),
+                    Semantics(
+                      button: true,
+                      label: ThreadStrings.replyCount(post.replyCount),
+                      child: TextButton.icon(
+                        onPressed: () => onOpenThread(post),
+                        icon: const Icon(Icons.forum_outlined, size: 18),
+                        label: Text(_threadSummary(context, post)),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          minimumSize: const Size(44, 44),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
