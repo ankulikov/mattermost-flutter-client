@@ -151,4 +151,32 @@ void main() {
       }
     },
   );
+
+  test('creates recent emoji storage when upgrading schema 10', () async {
+    final Directory directory = await Directory.systemTemp.createTemp(
+      'mattermost-recent-emojis-',
+    );
+    final File file = File('${directory.path}/cache.sqlite');
+    sqlite.sqlite3.open(file.path)
+      ..execute('PRAGMA user_version = 10')
+      ..close();
+
+    final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+    try {
+      final List<String> tables = await database
+          .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(tables, contains('recent_emojis'));
+      final List<String> columns = await database
+          .customSelect('PRAGMA table_info(recent_emojis)')
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(columns, contains('last_used_at'));
+      expect(columns, isNot(contains('position')));
+    } finally {
+      await database.close();
+      await directory.delete(recursive: true);
+    }
+  });
 }

@@ -35,16 +35,32 @@ class CachedUserProfiles extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, userId};
 }
 
+/// Per-account MRU reaction names. Content and post identifiers are not stored.
+@TableIndex.sql(
+  'CREATE INDEX recent_emojis_account_last_used_at_idx '
+  'ON recent_emojis (account_id, last_used_at DESC)',
+)
+class RecentEmojis extends Table {
+  TextColumn get accountId => text()();
+
+  TextColumn get emojiName => text()();
+
+  IntColumn get lastUsedAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, emojiName};
+}
+
 /// Drift persists only explicitly owned durable data. Channel navigation,
 /// posts, threads, and paging state remain volatile.
-@DriftDatabase(tables: <Type>[CachedUserProfiles])
+@DriftDatabase(tables: <Type>[CachedUserProfiles, RecentEmojis])
 final class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -79,6 +95,9 @@ final class AppDatabase extends _$AppDatabase {
           'cached_user_profiles_account_username_idx '
           'ON cached_user_profiles (account_id, username COLLATE NOCASE)',
         );
+      }
+      if (from < 11) {
+        await migrator.createTable(recentEmojis);
       }
     },
   );

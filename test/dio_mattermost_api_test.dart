@@ -185,6 +185,39 @@ void main() {
     expect(emoji.id, 'emoji-1');
   });
 
+  test(
+    'lists and searches custom emoji with the documented contract',
+    () async {
+      final _RecordingAdapter adapter = _RecordingAdapter(
+        body:
+            '[{"id":"emoji-1","creator_id":"ada","name":"party_parrot",'
+            '"create_at":1,"update_at":2,"delete_at":0}]',
+      );
+      final Dio dio = Dio(
+        BaseOptions(baseUrl: 'https://chat.example.com/api/v4'),
+      )..httpClientAdapter = adapter;
+      final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+      final List<MattermostEmojiDto> page = await api.getCustomEmojis(page: 2);
+      expect(adapter.request?.method, 'GET');
+      expect(adapter.request?.path, '/emoji');
+      expect(adapter.request?.queryParameters, <String, Object?>{
+        'page': 2,
+        'per_page': 90,
+        'sort': 'name',
+      });
+      expect(page.single.name, 'party_parrot');
+
+      final List<MattermostEmojiDto> search = await api.searchCustomEmojis(
+        'party',
+      );
+      expect(adapter.request?.method, 'POST');
+      expect(adapter.request?.path, '/emoji/search');
+      expect(adapter.request?.data, <String, Object?>{'term': 'party'});
+      expect(search.single.id, 'emoji-1');
+    },
+  );
+
   test('downloads an authenticated custom emoji image', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       bytes: Uint8List.fromList(<int>[4, 5, 6]),

@@ -615,14 +615,293 @@ class CachedUserProfilesCompanion extends UpdateCompanion<CachedUserProfile> {
   }
 }
 
+class $RecentEmojisTable extends RecentEmojis
+    with TableInfo<$RecentEmojisTable, RecentEmoji> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RecentEmojisTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<String> accountId = GeneratedColumn<String>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _emojiNameMeta = const VerificationMeta(
+    'emojiName',
+  );
+  @override
+  late final GeneratedColumn<String> emojiName = GeneratedColumn<String>(
+    'emoji_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastUsedAtMeta = const VerificationMeta(
+    'lastUsedAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastUsedAt = GeneratedColumn<int>(
+    'last_used_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [accountId, emojiName, lastUsedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'recent_emojis';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RecentEmoji> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('emoji_name')) {
+      context.handle(
+        _emojiNameMeta,
+        emojiName.isAcceptableOrUnknown(data['emoji_name']!, _emojiNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_emojiNameMeta);
+    }
+    if (data.containsKey('last_used_at')) {
+      context.handle(
+        _lastUsedAtMeta,
+        lastUsedAt.isAcceptableOrUnknown(
+          data['last_used_at']!,
+          _lastUsedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastUsedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountId, emojiName};
+  @override
+  RecentEmoji map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RecentEmoji(
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_id'],
+      )!,
+      emojiName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}emoji_name'],
+      )!,
+      lastUsedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_used_at'],
+      )!,
+    );
+  }
+
+  @override
+  $RecentEmojisTable createAlias(String alias) {
+    return $RecentEmojisTable(attachedDatabase, alias);
+  }
+}
+
+class RecentEmoji extends DataClass implements Insertable<RecentEmoji> {
+  final String accountId;
+  final String emojiName;
+  final int lastUsedAt;
+  const RecentEmoji({
+    required this.accountId,
+    required this.emojiName,
+    required this.lastUsedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_id'] = Variable<String>(accountId);
+    map['emoji_name'] = Variable<String>(emojiName);
+    map['last_used_at'] = Variable<int>(lastUsedAt);
+    return map;
+  }
+
+  RecentEmojisCompanion toCompanion(bool nullToAbsent) {
+    return RecentEmojisCompanion(
+      accountId: Value(accountId),
+      emojiName: Value(emojiName),
+      lastUsedAt: Value(lastUsedAt),
+    );
+  }
+
+  factory RecentEmoji.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RecentEmoji(
+      accountId: serializer.fromJson<String>(json['accountId']),
+      emojiName: serializer.fromJson<String>(json['emojiName']),
+      lastUsedAt: serializer.fromJson<int>(json['lastUsedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountId': serializer.toJson<String>(accountId),
+      'emojiName': serializer.toJson<String>(emojiName),
+      'lastUsedAt': serializer.toJson<int>(lastUsedAt),
+    };
+  }
+
+  RecentEmoji copyWith({
+    String? accountId,
+    String? emojiName,
+    int? lastUsedAt,
+  }) => RecentEmoji(
+    accountId: accountId ?? this.accountId,
+    emojiName: emojiName ?? this.emojiName,
+    lastUsedAt: lastUsedAt ?? this.lastUsedAt,
+  );
+  RecentEmoji copyWithCompanion(RecentEmojisCompanion data) {
+    return RecentEmoji(
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      emojiName: data.emojiName.present ? data.emojiName.value : this.emojiName,
+      lastUsedAt: data.lastUsedAt.present
+          ? data.lastUsedAt.value
+          : this.lastUsedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecentEmoji(')
+          ..write('accountId: $accountId, ')
+          ..write('emojiName: $emojiName, ')
+          ..write('lastUsedAt: $lastUsedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(accountId, emojiName, lastUsedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RecentEmoji &&
+          other.accountId == this.accountId &&
+          other.emojiName == this.emojiName &&
+          other.lastUsedAt == this.lastUsedAt);
+}
+
+class RecentEmojisCompanion extends UpdateCompanion<RecentEmoji> {
+  final Value<String> accountId;
+  final Value<String> emojiName;
+  final Value<int> lastUsedAt;
+  final Value<int> rowid;
+  const RecentEmojisCompanion({
+    this.accountId = const Value.absent(),
+    this.emojiName = const Value.absent(),
+    this.lastUsedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RecentEmojisCompanion.insert({
+    required String accountId,
+    required String emojiName,
+    required int lastUsedAt,
+    this.rowid = const Value.absent(),
+  }) : accountId = Value(accountId),
+       emojiName = Value(emojiName),
+       lastUsedAt = Value(lastUsedAt);
+  static Insertable<RecentEmoji> custom({
+    Expression<String>? accountId,
+    Expression<String>? emojiName,
+    Expression<int>? lastUsedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountId != null) 'account_id': accountId,
+      if (emojiName != null) 'emoji_name': emojiName,
+      if (lastUsedAt != null) 'last_used_at': lastUsedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RecentEmojisCompanion copyWith({
+    Value<String>? accountId,
+    Value<String>? emojiName,
+    Value<int>? lastUsedAt,
+    Value<int>? rowid,
+  }) {
+    return RecentEmojisCompanion(
+      accountId: accountId ?? this.accountId,
+      emojiName: emojiName ?? this.emojiName,
+      lastUsedAt: lastUsedAt ?? this.lastUsedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountId.present) {
+      map['account_id'] = Variable<String>(accountId.value);
+    }
+    if (emojiName.present) {
+      map['emoji_name'] = Variable<String>(emojiName.value);
+    }
+    if (lastUsedAt.present) {
+      map['last_used_at'] = Variable<int>(lastUsedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecentEmojisCompanion(')
+          ..write('accountId: $accountId, ')
+          ..write('emojiName: $emojiName, ')
+          ..write('lastUsedAt: $lastUsedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $CachedUserProfilesTable cachedUserProfiles =
       $CachedUserProfilesTable(this);
+  late final $RecentEmojisTable recentEmojis = $RecentEmojisTable(this);
   late final Index cachedUserProfilesAccountUsernameIdx = Index(
     'cached_user_profiles_account_username_idx',
     'CREATE INDEX cached_user_profiles_account_username_idx ON cached_user_profiles (account_id, username COLLATE NOCASE)',
+  );
+  late final Index recentEmojisAccountLastUsedAtIdx = Index(
+    'recent_emojis_account_last_used_at_idx',
+    'CREATE INDEX recent_emojis_account_last_used_at_idx ON recent_emojis (account_id, last_used_at DESC)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -630,7 +909,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     cachedUserProfiles,
+    recentEmojis,
     cachedUserProfilesAccountUsernameIdx,
+    recentEmojisAccountLastUsedAtIdx,
   ];
 }
 
@@ -944,10 +1225,176 @@ typedef $$CachedUserProfilesTableProcessedTableManager =
       CachedUserProfile,
       PrefetchHooks Function()
     >;
+typedef $$RecentEmojisTableCreateCompanionBuilder =
+    RecentEmojisCompanion Function({
+      required String accountId,
+      required String emojiName,
+      required int lastUsedAt,
+      Value<int> rowid,
+    });
+typedef $$RecentEmojisTableUpdateCompanionBuilder =
+    RecentEmojisCompanion Function({
+      Value<String> accountId,
+      Value<String> emojiName,
+      Value<int> lastUsedAt,
+      Value<int> rowid,
+    });
+
+class $$RecentEmojisTableFilterComposer
+    extends Composer<_$AppDatabase, $RecentEmojisTable> {
+  $$RecentEmojisTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get emojiName => $composableBuilder(
+    column: $table.emojiName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastUsedAt => $composableBuilder(
+    column: $table.lastUsedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RecentEmojisTableOrderingComposer
+    extends Composer<_$AppDatabase, $RecentEmojisTable> {
+  $$RecentEmojisTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get emojiName => $composableBuilder(
+    column: $table.emojiName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastUsedAt => $composableBuilder(
+    column: $table.lastUsedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RecentEmojisTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RecentEmojisTable> {
+  $$RecentEmojisTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<String> get emojiName =>
+      $composableBuilder(column: $table.emojiName, builder: (column) => column);
+
+  GeneratedColumn<int> get lastUsedAt => $composableBuilder(
+    column: $table.lastUsedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$RecentEmojisTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RecentEmojisTable,
+          RecentEmoji,
+          $$RecentEmojisTableFilterComposer,
+          $$RecentEmojisTableOrderingComposer,
+          $$RecentEmojisTableAnnotationComposer,
+          $$RecentEmojisTableCreateCompanionBuilder,
+          $$RecentEmojisTableUpdateCompanionBuilder,
+          (
+            RecentEmoji,
+            BaseReferences<_$AppDatabase, $RecentEmojisTable, RecentEmoji>,
+          ),
+          RecentEmoji,
+          PrefetchHooks Function()
+        > {
+  $$RecentEmojisTableTableManager(_$AppDatabase db, $RecentEmojisTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RecentEmojisTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RecentEmojisTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RecentEmojisTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> accountId = const Value.absent(),
+                Value<String> emojiName = const Value.absent(),
+                Value<int> lastUsedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RecentEmojisCompanion(
+                accountId: accountId,
+                emojiName: emojiName,
+                lastUsedAt: lastUsedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountId,
+                required String emojiName,
+                required int lastUsedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => RecentEmojisCompanion.insert(
+                accountId: accountId,
+                emojiName: emojiName,
+                lastUsedAt: lastUsedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RecentEmojisTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RecentEmojisTable,
+      RecentEmoji,
+      $$RecentEmojisTableFilterComposer,
+      $$RecentEmojisTableOrderingComposer,
+      $$RecentEmojisTableAnnotationComposer,
+      $$RecentEmojisTableCreateCompanionBuilder,
+      $$RecentEmojisTableUpdateCompanionBuilder,
+      (
+        RecentEmoji,
+        BaseReferences<_$AppDatabase, $RecentEmojisTable, RecentEmoji>,
+      ),
+      RecentEmoji,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
   $$CachedUserProfilesTableTableManager get cachedUserProfiles =>
       $$CachedUserProfilesTableTableManager(_db, _db.cachedUserProfiles);
+  $$RecentEmojisTableTableManager get recentEmojis =>
+      $$RecentEmojisTableTableManager(_db, _db.recentEmojis);
 }

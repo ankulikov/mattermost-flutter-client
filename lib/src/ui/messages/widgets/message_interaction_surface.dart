@@ -3,18 +3,26 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_actions_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/emoji_picker.dart';
 
 /// Adapts a message row to touch and precise pointer interactions.
 class MessageInteractionSurface extends StatefulWidget {
   const MessageInteractionSurface({
     required this.onOpenThread,
     required this.child,
+    this.onToggleReaction,
+    this.emojiRepositoryFactory,
+    this.accountId = '',
     super.key,
   });
 
-  final VoidCallback onOpenThread;
+  final VoidCallback? onOpenThread;
   final Widget child;
+  final Future<bool> Function(String emojiName)? onToggleReaction;
+  final CustomEmojiRepository Function()? emojiRepositoryFactory;
+  final String accountId;
 
   @override
   State<MessageInteractionSurface> createState() =>
@@ -54,14 +62,69 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
   void _handleLongPress() {
     if (_activeTouchPointer == null) return;
     unawaited(HapticFeedback.lightImpact());
-    unawaited(
-      showModalBottomSheet<void>(
-        context: context,
-        showDragHandle: true,
-        isScrollControlled: true,
-        builder: (BuildContext context) => const _MessageActionsBottomSheet(),
-      ),
+    unawaited(_showActionsSheet());
+  }
+
+  Future<void> _showActionsSheet() async {
+    final _MessageSheetResult? result =
+        await showModalBottomSheet<_MessageSheetResult>(
+          context: context,
+          showDragHandle: true,
+          isScrollControlled: true,
+          builder: (BuildContext context) => const _MessageActionsBottomSheet(),
+        );
+    if (!mounted || result == null) return;
+    if (result.openPicker) {
+      await _openTouchPicker();
+    } else if (result.emojiName case final String name) {
+      await _submitReaction(name);
+    }
+  }
+
+  Future<void> _openTouchPicker() async {
+    final CustomEmojiRepository? repository = widget.emojiRepositoryFactory
+        ?.call();
+    if (repository == null || widget.accountId.isEmpty) return;
+    final String? selected = await showEmojiPickerBottomSheet(
+      context: context,
+      repository: repository,
+      accountId: widget.accountId,
     );
+    if (selected != null && mounted) await _submitReaction(selected);
+  }
+
+  Future<void> _openPointerPicker(BuildContext anchorContext) async {
+    final CustomEmojiRepository? repository = widget.emojiRepositoryFactory
+        ?.call();
+    if (repository == null || widget.accountId.isEmpty) return;
+    final RenderBox? box = anchorContext.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final Offset origin = box.localToGlobal(Offset.zero);
+    final String? selected = await showEmojiPickerPopover(
+      context: context,
+      anchor: origin & box.size,
+      repository: repository,
+      accountId: widget.accountId,
+    );
+    if (selected != null && mounted) await _submitReaction(selected);
+  }
+
+  Future<void> _submitReaction(String emojiName) async {
+    final Future<bool> Function(String emojiName)? toggle =
+        widget.onToggleReaction;
+    if (toggle == null) return;
+    final bool succeeded = await toggle(emojiName);
+    final CustomEmojiRepository? repository = widget.emojiRepositoryFactory
+        ?.call();
+    if (!succeeded || repository == null || widget.accountId.isEmpty) return;
+    try {
+      await repository.rememberRecent(
+        accountId: widget.accountId,
+        emojiName: emojiName,
+      );
+    } on Object {
+      // Reaction success is authoritative; MRU persistence is best effort.
+    }
   }
 
   @override
@@ -113,6 +176,8 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
                           end: 8,
                           child: _QuickMessageActions(
                             compact: constraints.maxWidth < 420,
+                            onEmojiSelected: _submitReaction,
+                            onOpenPicker: _openPointerPicker,
                           ),
                         ),
                     ],
@@ -126,9 +191,15 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
 }
 
 class _QuickMessageActions extends StatelessWidget {
-  const _QuickMessageActions({required this.compact});
+  const _QuickMessageActions({
+    required this.compact,
+    required this.onEmojiSelected,
+    required this.onOpenPicker,
+  });
 
   final bool compact;
+  final Future<void> Function(String) onEmojiSelected;
+  final Future<void> Function(BuildContext) onOpenPicker;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -145,11 +216,16 @@ class _QuickMessageActions extends StatelessWidget {
               in compact
                   ? const <String>['👍']
                   : const <String>['👍', '😀', '✅'])
-            _EmojiAction(emoji: emoji),
-          IconButton(
-            tooltip: MessageActionsStrings.addReaction,
-            onPressed: _mockAction,
-            icon: const Icon(Icons.add_reaction_outlined),
+            _EmojiAction(
+              emoji: emoji,
+              onPressed: () => unawaited(onEmojiSelected(_emojiName(emoji))),
+            ),
+          Builder(
+            builder: (BuildContext anchorContext) => IconButton(
+              tooltip: MessageActionsStrings.addReaction,
+              onPressed: () => unawaited(onOpenPicker(anchorContext)),
+              icon: const Icon(Icons.add_reaction_outlined),
+            ),
           ),
           if (!compact)
             IconButton(
@@ -176,14 +252,15 @@ class _QuickMessageActions extends StatelessWidget {
 }
 
 class _EmojiAction extends StatelessWidget {
-  const _EmojiAction({required this.emoji});
+  const _EmojiAction({required this.emoji, required this.onPressed});
 
   final String emoji;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) => IconButton(
     tooltip: emoji,
-    onPressed: _mockAction,
+    onPressed: onPressed,
     icon: Text(emoji, style: const TextStyle(fontSize: 20)),
   );
 }
@@ -214,10 +291,17 @@ class _MessageActionsBottomSheet extends StatelessWidget {
                   '🔥',
                   '❤️',
                 ])
-                  _EmojiAction(emoji: emoji),
+                  _EmojiAction(
+                    emoji: emoji,
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop(_MessageSheetResult.emoji(_emojiName(emoji))),
+                  ),
                 IconButton(
                   tooltip: MessageActionsStrings.addReaction,
-                  onPressed: _mockAction,
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pop(const _MessageSheetResult.picker()),
                   icon: const Icon(Icons.add_reaction_outlined),
                 ),
               ],
@@ -235,6 +319,15 @@ class _MessageActionsBottomSheet extends StatelessWidget {
       ),
     ),
   );
+}
+
+final class _MessageSheetResult {
+  const _MessageSheetResult.emoji(this.emojiName) : openPicker = false;
+
+  const _MessageSheetResult.picker() : emojiName = null, openPicker = true;
+
+  final String? emojiName;
+  final bool openPicker;
 }
 
 enum _MessageAction {
@@ -302,6 +395,16 @@ List<PopupMenuEntry<_MessageAction>> _menuItems() =>
         .toList(growable: false);
 
 void _mockAction() {}
+
+String _emojiName(String emoji) => switch (emoji) {
+  '👍' => 'thumbsup',
+  '😀' => 'grinning',
+  '✅' => 'white_check_mark',
+  '😂' => 'joy',
+  '🔥' => 'fire',
+  '❤️' => 'heart',
+  _ => emoji,
+};
 
 bool _isTouch(PointerDeviceKind kind) =>
     kind == PointerDeviceKind.touch ||

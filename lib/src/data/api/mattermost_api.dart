@@ -50,6 +50,15 @@ abstract interface class MattermostApi {
   /// Resolves custom emoji metadata by its exact shortcode name.
   Future<MattermostEmojiDto> getCustomEmojiByName(String name);
 
+  /// Returns a name-sorted page of custom emoji metadata.
+  Future<List<MattermostEmojiDto>> getCustomEmojis({
+    int page = 0,
+    int perPage = 90,
+  });
+
+  /// Searches custom emoji names. The server returns at most 200 entries.
+  Future<List<MattermostEmojiDto>> searchCustomEmojis(String term);
+
   /// Returns the authenticated user's view of a custom emoji image.
   Future<MattermostImageDto> getCustomEmojiImage(String emojiId);
 

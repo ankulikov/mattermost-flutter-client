@@ -1,4 +1,5 @@
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 
 final class PostAuthor {
   const PostAuthor({
@@ -141,7 +142,7 @@ Post toggleCurrentUserReaction(Post post, String emojiName) {
     return post.withReactions(<PostReaction>[
       ...post.reactions,
       PostReaction(
-        emoji: ':$emojiName:',
+        emoji: mattermostSystemEmojis[emojiName] ?? ':$emojiName:',
         emojiName: emojiName,
         count: 1,
         reactedByCurrentUser: true,

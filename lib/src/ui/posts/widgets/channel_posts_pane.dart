@@ -3,9 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
-import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
+import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_attachments.dart';
@@ -49,11 +50,8 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
   @override
   Widget build(BuildContext context) {
     final SidebarChannel channel = widget.channel;
-    final Uri? serverUrl = ref.watch(
-      authControllerProvider.select(
-        (AuthState value) => value.session?.serverUrl,
-      ),
-    );
+    final AuthSession? session = ref.watch(authSessionProvider);
+    final Uri? serverUrl = session?.serverUrl;
     final AsyncValue<ChannelPostsViewState> posts = ref.watch(
       channelPostsProvider(channel.id),
     );
@@ -115,9 +113,12 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                         ),
                       );
                     },
-                    onToggleReaction:
-                        (ChannelPost post, PostReaction reaction) =>
-                            _toggleReaction(context, post, reaction),
+                    onToggleReaction: (ChannelPost post, String emojiName) =>
+                        _toggleReaction(context, post, emojiName),
+                    emojiRepositoryFactory: session == null
+                        ? null
+                        : () => ref.read(customEmojiRepositoryProvider),
+                    accountId: session?.durableDataScopeId ?? '',
                     onSelectChannel: widget.onSelectChannel,
                   );
                 },
@@ -195,19 +196,20 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
     ),
   );
 
-  Future<void> _toggleReaction(
+  Future<bool> _toggleReaction(
     BuildContext context,
     ChannelPost post,
-    PostReaction reaction,
+    String emojiName,
   ) async {
     final bool succeeded = await ref
         .read(channelPostsProvider(widget.channel.id).notifier)
-        .toggleReaction(postId: post.id, emojiName: reaction.emojiName);
+        .toggleReaction(postId: post.id, emojiName: emojiName);
     if (!succeeded && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(ChannelPostsStrings.reactionFailed)),
       );
     }
+    return succeeded;
   }
 }
 
@@ -315,6 +317,8 @@ class _PostList extends StatefulWidget {
     required this.onLoadOlder,
     required this.onOpenThread,
     required this.onToggleReaction,
+    required this.emojiRepositoryFactory,
+    required this.accountId,
     required this.onSelectChannel,
   });
 
@@ -326,7 +330,9 @@ class _PostList extends StatefulWidget {
   final bool autoLoadOlder;
   final Future<void> Function() onLoadOlder;
   final ValueChanged<ChannelPost> onOpenThread;
-  final Future<void> Function(ChannelPost, PostReaction) onToggleReaction;
+  final Future<bool> Function(ChannelPost, String) onToggleReaction;
+  final CustomEmojiRepository Function()? emojiRepositoryFactory;
+  final String accountId;
   final ValueChanged<String>? onSelectChannel;
 
   @override
@@ -466,6 +472,8 @@ class _PostListState extends State<_PostList> {
             continuesAuthor: continuesAuthor,
             onOpenThread: widget.onOpenThread,
             onToggleReaction: widget.onToggleReaction,
+            emojiRepositoryFactory: widget.emojiRepositoryFactory,
+            accountId: widget.accountId,
             onSelectChannel: widget.onSelectChannel,
           );
         },
@@ -481,6 +489,8 @@ class _PostRow extends StatelessWidget {
     required this.continuesAuthor,
     required this.onOpenThread,
     required this.onToggleReaction,
+    required this.emojiRepositoryFactory,
+    required this.accountId,
     required this.onSelectChannel,
     super.key,
   });
@@ -489,13 +499,18 @@ class _PostRow extends StatelessWidget {
   final Uri? serverUrl;
   final bool continuesAuthor;
   final ValueChanged<ChannelPost> onOpenThread;
-  final Future<void> Function(ChannelPost, PostReaction) onToggleReaction;
+  final Future<bool> Function(ChannelPost, String) onToggleReaction;
+  final CustomEmojiRepository Function()? emojiRepositoryFactory;
+  final String accountId;
   final ValueChanged<String>? onSelectChannel;
 
   @override
   Widget build(BuildContext context) {
     return MessageInteractionSurface(
       onOpenThread: () => onOpenThread(post),
+      onToggleReaction: (String emojiName) => onToggleReaction(post, emojiName),
+      emojiRepositoryFactory: emojiRepositoryFactory,
+      accountId: accountId,
       child: Padding(
         padding: EdgeInsets.only(
           top: continuesAuthor ? 2 : 8,
@@ -532,7 +547,7 @@ class _PostRow extends StatelessWidget {
                       post: post,
                       semanticsLabel: ChannelPostsStrings.reactions,
                       onToggle: (PostReaction reaction) =>
-                          onToggleReaction(post, reaction),
+                          onToggleReaction(post, reaction.emojiName),
                     ),
                   ],
                   if (post.replyCount > 0) ...<Widget>[

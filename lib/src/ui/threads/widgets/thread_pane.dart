@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_attachments.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_strings.dart';
@@ -58,6 +61,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
 
   @override
   Widget build(BuildContext context) {
+    final AuthSession? session = ref.watch(authSessionProvider);
     final AsyncValue<ThreadViewState> value = ref.watch(
       threadProvider(_request),
     );
@@ -139,7 +143,13 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                             serverUrl: widget.serverUrl,
                             onSelectChannel: widget.onSelectChannel,
                             onToggleReaction: (PostReaction reaction) =>
-                                _toggleReaction(root, reaction),
+                                _toggleReaction(root, reaction.emojiName),
+                            onAddReaction: (String emojiName) =>
+                                _toggleReaction(root, emojiName),
+                            emojiRepositoryFactory: session == null
+                                ? null
+                                : () => ref.read(customEmojiRepositoryProvider),
+                            accountId: session?.durableDataScopeId ?? '',
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -171,8 +181,19 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                 onToggleReaction: (PostReaction reaction) =>
                                     _toggleReaction(
                                       state.thread.replies[index],
-                                      reaction,
+                                      reaction.emojiName,
                                     ),
+                                onAddReaction: (String emojiName) =>
+                                    _toggleReaction(
+                                      state.thread.replies[index],
+                                      emojiName,
+                                    ),
+                                emojiRepositoryFactory: session == null
+                                    ? null
+                                    : () => ref.read(
+                                        customEmojiRepositoryProvider,
+                                      ),
+                                accountId: session?.durableDataScopeId ?? '',
                               ),
                             ),
                           ],
@@ -257,15 +278,16 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
     });
   }
 
-  Future<void> _toggleReaction(ChannelPost post, PostReaction reaction) async {
+  Future<bool> _toggleReaction(ChannelPost post, String emojiName) async {
     final bool succeeded = await ref
         .read(threadProvider(_request).notifier)
-        .toggleReaction(postId: post.id, emojiName: reaction.emojiName);
+        .toggleReaction(postId: post.id, emojiName: emojiName);
     if (!succeeded && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(ThreadStrings.reactionFailed)),
       );
     }
+    return succeeded;
   }
 
   ThreadRequest get _request => (
@@ -394,48 +416,60 @@ class _ThreadPost extends StatelessWidget {
     required this.serverUrl,
     required this.onSelectChannel,
     required this.onToggleReaction,
+    required this.onAddReaction,
+    required this.emojiRepositoryFactory,
+    required this.accountId,
   });
 
   final ChannelPost post;
   final Uri? serverUrl;
   final ValueChanged<String>? onSelectChannel;
   final Future<void> Function(PostReaction reaction) onToggleReaction;
+  final Future<bool> Function(String emojiName) onAddReaction;
+  final CustomEmojiRepository Function()? emojiRepositoryFactory;
+  final String accountId;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        MessageAvatar(author: post.author),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              MessageAuthorLine(author: post.author, sentAt: post.sentAt),
-              const SizedBox(height: 4),
-              MessageBody(
-                post: post,
-                serverUrl: serverUrl,
-                onSelectChannel: onSelectChannel,
-                deletedMessage: ThreadStrings.deletedMessage,
-              ),
-              if (post.attachments.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 8),
-                MessageAttachments(attachments: post.attachments),
-              ],
-              if (post.reactions.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 8),
-                MessageReactions(
+    return MessageInteractionSurface(
+      onOpenThread: null,
+      onToggleReaction: onAddReaction,
+      emojiRepositoryFactory: emojiRepositoryFactory,
+      accountId: accountId,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          MessageAvatar(author: post.author),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                MessageAuthorLine(author: post.author, sentAt: post.sentAt),
+                const SizedBox(height: 4),
+                MessageBody(
                   post: post,
-                  semanticsLabel: ThreadStrings.reactions,
-                  onToggle: onToggleReaction,
+                  serverUrl: serverUrl,
+                  onSelectChannel: onSelectChannel,
+                  deletedMessage: ThreadStrings.deletedMessage,
                 ),
+                if (post.attachments.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  MessageAttachments(attachments: post.attachments),
+                ],
+                if (post.reactions.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  MessageReactions(
+                    post: post,
+                    semanticsLabel: ThreadStrings.reactions,
+                    onToggle: onToggleReaction,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

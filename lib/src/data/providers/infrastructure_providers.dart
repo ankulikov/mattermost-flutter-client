@@ -3,6 +3,7 @@ import 'package:mattermost_flutter/src/data/api/mattermost_client_factory.dart';
 import 'package:mattermost_flutter/src/data/cache/avatar_cache.dart';
 import 'package:mattermost_flutter/src/data/cache/custom_emoji_cache.dart';
 import 'package:mattermost_flutter/src/data/database/database_provider.dart';
+import 'package:mattermost_flutter/src/data/database/recent_emoji_cache.dart';
 import 'package:mattermost_flutter/src/data/database/user_profile_cache_dao.dart';
 import 'package:mattermost_flutter/src/data/platform/system_attachment_file_saver.dart';
 import 'package:mattermost_flutter/src/data/realtime/mattermost_websocket_gateway.dart';
@@ -34,6 +35,11 @@ final Provider<UserAvatarCache> userAvatarCacheProvider =
 
 final Provider<CustomEmojiCache> customEmojiCacheProvider =
     Provider<CustomEmojiCache>((Ref ref) => FlutterCustomEmojiCache());
+
+final Provider<RecentEmojiCache> recentEmojiCacheProvider =
+    Provider<RecentEmojiCache>(
+      (Ref ref) => DriftRecentEmojiCache(ref.watch(appDatabaseProvider)),
+    );
 
 final Provider<AttachmentFileSaver> attachmentFileSaverProvider =
     Provider<AttachmentFileSaver>(

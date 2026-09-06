@@ -27,12 +27,13 @@ Future<void> main(List<String> arguments) async {
   final String contents = inputPath == null
       ? await _download(_pinnedEmojiJsonUrl)
       : await File(inputPath).readAsString();
-  final Map<String, String> emojis = _parseEmojiJson(contents);
+  final _EmojiCatalog emojis = _parseEmojiJson(contents);
   final File output = File(outputPath);
   await output.parent.create(recursive: true);
   await output.writeAsString(_render(emojis));
   stdout.writeln(
-    'Generated ${emojis.length} system emoji aliases at $outputPath',
+    'Generated ${emojis.aliases.length} system emoji aliases and '
+    '${emojis.entries.length} catalog entries at $outputPath',
   );
 }
 
@@ -72,13 +73,14 @@ Future<String> _download(String url) async {
   }
 }
 
-Map<String, String> _parseEmojiJson(String contents) {
+_EmojiCatalog _parseEmojiJson(String contents) {
   final Object? decoded = jsonDecode(contents);
   if (decoded is! List<Object?>) {
     throw const FormatException('emoji.json must contain a JSON array');
   }
 
   final Map<String, String> aliases = <String, String>{};
+  final List<_EmojiEntry> entries = <_EmojiEntry>[];
   for (final Object? item in decoded) {
     if (item is! Map<Object?, Object?>) {
       throw const FormatException('emoji.json entries must be objects');
@@ -94,6 +96,8 @@ Map<String, String> _parseEmojiJson(String contents) {
           in (item['short_names'] as List<Object?>? ?? const <Object?>[]))
         if (name is String) name,
     };
+    if (names.isEmpty) continue;
+    final String name = item['short_name'] as String? ?? names.first;
     for (final String name in names) {
       if (!_shortcodePattern.hasMatch(name)) {
         throw FormatException('Unsupported emoji shortcode: $name');
@@ -104,21 +108,32 @@ Map<String, String> _parseEmojiJson(String contents) {
       }
       aliases[name] = emoji;
     }
+    entries.add(
+      _EmojiEntry(
+        name: name,
+        unicode: emoji,
+        category: category,
+        aliases: List<String>.unmodifiable(names),
+      ),
+    );
   }
   if (aliases.isEmpty) {
     throw const FormatException(
       'emoji.json did not contain system emoji aliases',
     );
   }
-  return Map<String, String>.unmodifiable(aliases);
+  return _EmojiCatalog(
+    aliases: Map<String, String>.unmodifiable(aliases),
+    entries: List<_EmojiEntry>.unmodifiable(entries),
+  );
 }
 
 String _unicodeFromUnified(String unified) => String.fromCharCodes(
   unified.split('-').map((String codePoint) => int.parse(codePoint, radix: 16)),
 );
 
-String _render(Map<String, String> emojis) {
-  final List<MapEntry<String, String>> entries = emojis.entries.toList()
+String _render(_EmojiCatalog emojis) {
+  final List<MapEntry<String, String>> aliases = emojis.aliases.entries.toList()
     ..sort(
       (MapEntry<String, String> a, MapEntry<String, String> b) =>
           a.key.compareTo(b.key),
@@ -130,15 +145,59 @@ String _render(Map<String, String> emojis) {
 // $_pinnedEmojiJsonUrl
 // Run: dart run tool/generate_mattermost_system_emojis.dart
 
+import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+
 /// Mattermost system emoji shortcodes mapped to their Unicode text.
 const Map<String, String> mattermostSystemEmojis = <String, String>{
   // dart format off
 ''',
   );
-  for (final MapEntry<String, String> entry in entries) {
+  for (final MapEntry<String, String> entry in aliases) {
     output.writeln("  '${entry.key}': '${entry.value}',");
   }
   output.writeln('  // dart format on');
   output.writeln('};');
+  output.writeln();
+  output.writeln(
+    '/// Canonical system emoji entries in Mattermost category order.',
+  );
+  output.writeln(
+    'const List<SystemEmojiDefinition> mattermostSystemEmojiCatalog = '
+    '<SystemEmojiDefinition>[',
+  );
+  output.writeln('  // dart format off');
+  for (final _EmojiEntry entry in emojis.entries) {
+    final String aliases = entry.aliases
+        .map((String value) => "'$value'")
+        .join(', ');
+    output.writeln(
+      "  SystemEmojiDefinition(name: '${entry.name}', unicode: "
+      "'${entry.unicode}', category: '${entry.category}', aliases: "
+      "<String>[$aliases]),",
+    );
+  }
+  output.writeln('  // dart format on');
+  output.writeln('];');
   return output.toString();
+}
+
+final class _EmojiCatalog {
+  const _EmojiCatalog({required this.aliases, required this.entries});
+
+  final Map<String, String> aliases;
+  final List<_EmojiEntry> entries;
+}
+
+final class _EmojiEntry {
+  const _EmojiEntry({
+    required this.name,
+    required this.unicode,
+    required this.category,
+    required this.aliases,
+  });
+
+  final String name;
+  final String unicode;
+  final String category;
+  final List<String> aliases;
 }

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/cache/custom_emoji_cache.dart';
+import 'package:mattermost_flutter/src/data/database/recent_emoji_cache.dart';
 import 'package:mattermost_flutter/src/data/repositories/api_custom_emoji_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 
@@ -17,6 +18,7 @@ void main() {
       final ApiCustomEmojiRepository repository = ApiCustomEmojiRepository(
         api: api,
         cache: cache,
+        recentCache: _MemoryRecentEmojiCache(),
       );
 
       final Future<CustomEmojiContent> first = repository.getByName(
@@ -61,6 +63,7 @@ void main() {
     final ApiCustomEmojiRepository repository = ApiCustomEmojiRepository(
       api: api,
       cache: _MemoryEmojiCache(),
+      recentCache: _MemoryRecentEmojiCache(),
     );
 
     await repository.getByName(
@@ -72,6 +75,70 @@ void main() {
     expect(api.requestedName, 'party_parrot');
     expect(api.requestedImageId, 'emoji-1');
   });
+
+  test(
+    'coalesces and briefly caches normalized custom emoji searches',
+    () async {
+      final _EmojiApi api = _EmojiApi();
+      final ApiCustomEmojiRepository repository = ApiCustomEmojiRepository(
+        api: api,
+        cache: _MemoryEmojiCache(),
+        recentCache: _MemoryRecentEmojiCache(),
+      );
+
+      final results = await Future.wait(<Future<List<CustomEmojiReference>>>[
+        repository.search(accountId: 'account', term: ' Party '),
+        repository.search(accountId: 'account', term: 'party'),
+      ]);
+      final List<CustomEmojiReference> cached = await repository.search(
+        accountId: 'account',
+        term: 'PARTY',
+      );
+
+      expect(api.searchCalls, 1);
+      expect(results.first.single.name, 'party_parrot');
+      expect(cached.single.id, 'emoji-1');
+    },
+  );
+
+  test('records recent emoji per account through the durable cache', () async {
+    final _MemoryRecentEmojiCache recent = _MemoryRecentEmojiCache();
+    final ApiCustomEmojiRepository repository = ApiCustomEmojiRepository(
+      api: _EmojiApi(),
+      cache: _MemoryEmojiCache(),
+      recentCache: recent,
+    );
+
+    await repository.rememberRecent(accountId: 'a', emojiName: 'thumbsup');
+    await repository.rememberRecent(accountId: 'a', emojiName: 'joy');
+    await repository.rememberRecent(accountId: 'a', emojiName: 'thumbsup');
+
+    expect(await repository.getRecent(accountId: 'a'), <String>[
+      'thumbsup',
+      'joy',
+    ]);
+    expect(await repository.getRecent(accountId: 'b'), isEmpty);
+  });
+}
+
+final class _MemoryRecentEmojiCache implements RecentEmojiCache {
+  final Map<String, List<String>> values = <String, List<String>>{};
+
+  @override
+  Future<List<String>> read(String accountId) async =>
+      values[accountId] ?? const <String>[];
+
+  @override
+  Future<void> remember({
+    required String accountId,
+    required String emojiName,
+  }) async {
+    final List<String> previous = values[accountId] ?? const <String>[];
+    values[accountId] = <String>[
+      emojiName,
+      ...previous.where((String value) => value != emojiName),
+    ].take(maximumRecentEmojis).toList(growable: false);
+  }
 }
 
 final class _MemoryEmojiCache implements CustomEmojiCache {
@@ -100,8 +167,24 @@ final class _EmojiApi extends Fake implements MattermostApi {
   final Completer<void> _release = Completer<void>();
   int metadataCalls = 0;
   int imageCalls = 0;
+  int searchCalls = 0;
   String? requestedName;
   String? requestedImageId;
+
+  @override
+  Future<List<MattermostEmojiDto>> searchCustomEmojis(String term) async {
+    searchCalls += 1;
+    return const <MattermostEmojiDto>[
+      MattermostEmojiDto(
+        id: 'emoji-1',
+        creatorId: 'ada',
+        name: 'party_parrot',
+        createAt: 1,
+        updateAt: 42,
+        deleteAt: 0,
+      ),
+    ];
+  }
 
   void complete() {
     if (!_release.isCompleted) _release.complete();

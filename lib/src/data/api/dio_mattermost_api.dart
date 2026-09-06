@@ -130,6 +130,31 @@ final class DioMattermostApi implements MattermostApi {
   }
 
   @override
+  Future<List<MattermostEmojiDto>> getCustomEmojis({
+    int page = 0,
+    int perPage = 90,
+  }) async {
+    final Response<Object?> response = await _get(
+      '/emoji',
+      queryParameters: <String, Object?>{
+        'page': page,
+        'per_page': perPage,
+        'sort': 'name',
+      },
+    );
+    return _dtoList(response.data, MattermostEmojiDto.fromJson);
+  }
+
+  @override
+  Future<List<MattermostEmojiDto>> searchCustomEmojis(String term) async {
+    final Response<Object?> response = await _post(
+      '/emoji/search',
+      data: <String, Object?>{'term': term},
+    );
+    return _dtoList(response.data, MattermostEmojiDto.fromJson);
+  }
+
+  @override
   Future<MattermostImageDto> getCustomEmojiImage(String emojiId) async {
     final Response<List<int>> response = await _withCancellation(
       (CancelToken? cancelToken) => _dio.get<List<int>>(

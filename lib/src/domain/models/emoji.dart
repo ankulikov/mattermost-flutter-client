@@ -1,5 +1,21 @@
 import 'dart:typed_data';
 
+/// One built-in Mattermost emoji and the aliases accepted by the server.
+final class SystemEmojiDefinition {
+  const SystemEmojiDefinition({
+    required this.name,
+    required this.unicode,
+    required this.category,
+    required this.aliases,
+  });
+
+  /// Canonical shortcode shown by the picker and sent to the reactions API.
+  final String name;
+  final String unicode;
+  final String category;
+  final List<String> aliases;
+}
+
 /// Metadata embedded by Mattermost in posts that reference a custom emoji.
 final class CustomEmojiReference {
   const CustomEmojiReference({

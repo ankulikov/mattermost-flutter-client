@@ -69,6 +69,7 @@ final Provider<CustomEmojiRepository> customEmojiRepositoryProvider =
       (Ref ref) => ApiCustomEmojiRepository(
         api: ref.watch(activeMattermostApiProvider),
         cache: ref.watch(customEmojiCacheProvider),
+        recentCache: ref.watch(recentEmojiCacheProvider),
       ),
     );
 
