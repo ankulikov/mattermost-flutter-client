@@ -5,17 +5,33 @@ import 'dart:math';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-final class MattermostWebSocketGateway implements WebSocketGateway {
+final class MattermostWebSocketGateway
+    implements ReconnectableWebSocketGateway {
   MattermostWebSocketGateway({
     WebSocketConnector? connector,
     Duration Function(int attempt)? retryDelay,
+    Stream<void> reconnectSignals = const Stream<void>.empty(),
+    this.connectionTimeout = const Duration(seconds: 15),
     this.authenticationTimeout = const Duration(seconds: 15),
   }) : _connector = connector ?? _connect,
-       _retryDelay = retryDelay ?? _defaultRetryDelay;
+       _retryDelay = retryDelay ?? _defaultRetryDelay,
+       _reconnectSignals = reconnectSignals;
 
   final WebSocketConnector _connector;
   final Duration Function(int attempt) _retryDelay;
+  final Stream<void> _reconnectSignals;
+  final Set<void Function()> _reconnectCallbacks = <void Function()>{};
+  final Duration connectionTimeout;
   final Duration authenticationTimeout;
+
+  @override
+  void reconnect() {
+    for (final void Function() callback in List<void Function()>.of(
+      _reconnectCallbacks,
+    )) {
+      callback();
+    }
+  }
 
   @override
   Stream<WebSocketGatewaySignal> watch({
@@ -28,6 +44,13 @@ final class MattermostWebSocketGateway implements WebSocketGateway {
     final Completer<void> stopped = Completer<void>();
     WebSocketConnection? activeConnection;
     StreamSubscription<Object?>? activeSubscription;
+    StreamSubscription<void>? reconnectSubscription;
+    Completer<void>? reconnectRequested;
+
+    void requestReconnect() {
+      final Completer<void>? current = reconnectRequested;
+      if (current != null && !current.isCompleted) current.complete();
+    }
 
     Future<void> closeActive() async {
       try {
@@ -46,6 +69,12 @@ final class MattermostWebSocketGateway implements WebSocketGateway {
 
     Future<void> stop() async {
       if (!stopped.isCompleted) stopped.complete();
+      _reconnectCallbacks.remove(requestReconnect);
+      try {
+        await reconnectSubscription?.cancel();
+      } on Object {
+        // A platform connectivity stream may already be unavailable.
+      }
       await closeActive();
     }
 
@@ -53,6 +82,8 @@ final class MattermostWebSocketGateway implements WebSocketGateway {
       var attempt = 0;
       var hasConnected = false;
       while (!stopped.isCompleted) {
+        final Completer<void> reconnect = Completer<void>();
+        reconnectRequested = reconnect;
         _add(
           controller,
           stopped,
@@ -68,8 +99,15 @@ final class MattermostWebSocketGateway implements WebSocketGateway {
             _webSocketUri(serverUrl),
           );
           activeConnection = connection;
-          await connection.ready;
+          await Future.any(<Future<void>>[
+            connection.ready,
+            stopped.future,
+            reconnect.future,
+          ]).timeout(connectionTimeout);
           if (stopped.isCompleted) break;
+          if (reconnect.isCompleted) {
+            throw StateError('WebSocket reconnect requested');
+          }
           activeSubscription = connection.messages.listen(
             (Object? raw) {
               try {
@@ -132,6 +170,9 @@ final class MattermostWebSocketGateway implements WebSocketGateway {
               (_) => throw StateError('Socket closed before authentication'),
             ),
             stopped.future,
+            reconnect.future.then<void>(
+              (_) => throw StateError('WebSocket reconnect requested'),
+            ),
           ]).timeout(authenticationTimeout);
           if (stopped.isCompleted) break;
           if (!authenticated.isCompleted) {
@@ -147,7 +188,11 @@ final class MattermostWebSocketGateway implements WebSocketGateway {
           );
           hasConnected = true;
           attempt = 0;
-          await Future.any(<Future<void>>[disconnected.future, stopped.future]);
+          await Future.any(<Future<void>>[
+            disconnected.future,
+            stopped.future,
+            reconnect.future,
+          ]);
         } on Object {
           // Connection/authentication failures use the same bounded reconnect
           // path. No token, payload or personal data is logged here.
@@ -166,13 +211,24 @@ final class MattermostWebSocketGateway implements WebSocketGateway {
         await Future.any(<Future<void>>[
           Future<void>.delayed(_retryDelay(attempt)),
           stopped.future,
+          reconnect.future,
         ]);
       }
       if (!controller.isClosed) await controller.close();
     }
 
     controller = StreamController<WebSocketGatewaySignal>(
-      onListen: () => unawaited(run()),
+      onListen: () {
+        _reconnectCallbacks.add(requestReconnect);
+        reconnectSubscription = _reconnectSignals.listen(
+          (_) => requestReconnect(),
+          onError: (Object error, StackTrace stackTrace) {
+            // Connectivity is only an optimization. Socket close/error and
+            // bounded retry remain authoritative when the plugin is missing.
+          },
+        );
+        unawaited(run());
+      },
       onCancel: stop,
     );
     return controller.stream;

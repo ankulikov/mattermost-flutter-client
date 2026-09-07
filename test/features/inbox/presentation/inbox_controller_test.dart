@@ -43,6 +43,14 @@ void main() {
 
     realtime.add(const InboxConnectionChanged(InboxConnectionStatus.connected));
     realtime.add(InboxPostChanged(postId: second.post.id, candidate: second));
+    await Future<void>.delayed(Duration.zero);
+
+    final InboxInAppNotification? notification = container
+        .read(provider)
+        .requireValue
+        .inAppNotification;
+    expect(notification?.id, 'second');
+
     realtime.add(InboxPostChanged(postId: second.post.id, candidate: second));
     await Future<void>.delayed(Duration.zero);
 
@@ -50,7 +58,37 @@ void main() {
     expect(state.connectionStatus, InboxConnectionStatus.connected);
     expect(state.snapshot.newItems, hasLength(1));
     expect(state.snapshot.newItems.single.postIds, <String>['first', 'second']);
+    expect(state.inAppNotification, same(notification));
     expect(repository.loadCalls, 1);
+  });
+
+  test('resume reconnects realtime and reconciles missed events', () async {
+    final _InboxRepository repository = _InboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(),
+        () async => InboxSnapshot(
+          newItems: <InboxItem>[
+            ChannelPostInboxItem(candidate: _candidate('missed')),
+          ],
+        ),
+      ],
+    );
+    final provider = _provider(repository);
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await container.read(provider.future);
+
+    container.read(provider.notifier).handleAppResumed();
+    await _waitUntil(() => repository.loadCalls == 2);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.reconnectCalls, 1);
+    expect(
+      container.read(provider).requireValue.snapshot.newItems.single.postIds,
+      <String>['missed'],
+    );
+    expect(container.read(provider).requireValue.inAppNotification, isNull);
   });
 
   test(
@@ -276,6 +314,7 @@ final class _InboxRepository extends InboxRepository {
   final Stream<InboxRealtimeEvent> realtime;
   var _index = 0;
   var loadCalls = 0;
+  var reconnectCalls = 0;
   InboxItem? markedRead;
 
   @override
@@ -288,12 +327,23 @@ final class _InboxRepository extends InboxRepository {
   Stream<InboxRealtimeEvent> watch({required AuthSession session}) => realtime;
 
   @override
+  void reconnectRealtime() => reconnectCalls++;
+
+  @override
   Future<void> markRead({
     required AuthSession session,
     required InboxItem item,
   }) async {
     markedRead = item;
   }
+}
+
+Future<void> _waitUntil(bool Function() condition) async {
+  for (var index = 0; index < 100; index++) {
+    if (condition()) return;
+    await Future<void>.delayed(Duration.zero);
+  }
+  fail('Condition was not reached');
 }
 
 final class _PostponedRepository extends PostponedRepository {

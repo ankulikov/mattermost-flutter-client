@@ -13,6 +13,10 @@ abstract class InboxRepository {
   Stream<InboxRealtimeEvent> watch({required AuthSession session}) =>
       const Stream<InboxRealtimeEvent>.empty();
 
+  /// Requests a fresh realtime transport after an app/network lifecycle gap.
+  /// Offline and test repositories may keep the default no-op behavior.
+  void reconnectRealtime() {}
+
   /// Advances the server read boundary represented by [item].
   Future<void> markRead({
     required AuthSession session,

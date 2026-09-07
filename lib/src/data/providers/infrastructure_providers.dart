@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_client_factory.dart';
 import 'package:mattermost_flutter/src/data/cache/avatar_cache.dart';
@@ -23,7 +24,17 @@ final Provider<MattermostApiClientFactory> mattermostApiClientFactoryProvider =
     );
 
 final Provider<WebSocketGateway> webSocketGatewayProvider =
-    Provider<WebSocketGateway>((Ref ref) => MattermostWebSocketGateway());
+    Provider<WebSocketGateway>(
+      (Ref ref) => MattermostWebSocketGateway(
+        reconnectSignals: Connectivity().onConnectivityChanged
+            .where(
+              (List<ConnectivityResult> results) => results.any(
+                (ConnectivityResult it) => it != ConnectivityResult.none,
+              ),
+            )
+            .map((List<ConnectivityResult> _) {}),
+      ),
+    );
 
 final Provider<UserProfileCache> userProfileCacheProvider =
     Provider<UserProfileCache>(

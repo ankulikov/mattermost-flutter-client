@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_thread_host.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
@@ -26,15 +27,44 @@ class BootstrapPage extends ConsumerStatefulWidget {
   ConsumerState<BootstrapPage> createState() => _BootstrapPageState();
 }
 
-class _BootstrapPageState extends ConsumerState<BootstrapPage> {
+class _BootstrapPageState extends ConsumerState<BootstrapPage>
+    with WidgetsBindingObserver {
   bool _showCompactChannel = false;
+  late final ProviderSubscription<InboxInAppNotification?>
+  _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _notificationSubscription = ref.listenManual<InboxInAppNotification?>(
+      inboxProvider.select(
+        (AsyncValue<InboxViewState> value) => value.value?.inAppNotification,
+      ),
+      (InboxInAppNotification? previous, InboxInAppNotification? next) {
+        if (next != null && previous?.id != next.id) {
+          _showInboxNotification(next);
+        }
+      },
+    );
     unawaited(
       Future<void>(() => ref.read(authControllerProvider.notifier).restore()),
     );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _notificationSubscription.close();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        ref.read(authControllerProvider).phase == AuthPhase.signedIn) {
+      ref.read(inboxProvider.notifier).handleAppResumed();
+    }
   }
 
   @override
@@ -60,7 +90,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
         (value) => value.value?.snapshot.hasNewItems ?? false,
       ),
     );
-
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         if (constraints.maxWidth < AppBreakpoints.compact) {
@@ -256,6 +285,31 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     if (_showCompactChannel) {
       setState(() => _showCompactChannel = false);
     }
+  }
+
+  void _showInboxNotification(InboxInAppNotification notification) {
+    final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(
+      context,
+    );
+    if (messenger == null) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          key: const ValueKey<String>('inbox-in-app-notification'),
+          content: Text(
+            ShellStrings.inboxNotification(
+              author: notification.candidate.post.author.displayName,
+              channel: notification.candidate.channel.displayName,
+              message: notification.candidate.post.message,
+            ),
+          ),
+          action: SnackBarAction(
+            label: ShellStrings.openInbox,
+            onPressed: _showThreadsDestination,
+          ),
+        ),
+      );
   }
 
   void _showSelectedChannelOnCompact() {

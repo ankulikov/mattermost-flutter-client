@@ -101,6 +101,56 @@ void main() {
     expect(states.last.status, WebSocketConnectionStatus.connected);
     expect(states.last.isReconnect, isTrue);
   });
+
+  test('replaces an active connection when reconnect is requested', () async {
+    final List<_Connection> connections = <_Connection>[
+      _Connection(),
+      _Connection(),
+    ];
+    var nextConnection = 0;
+    final MattermostWebSocketGateway gateway = MattermostWebSocketGateway(
+      connector: (_) => connections[nextConnection++],
+      retryDelay: (_) => Duration.zero,
+    );
+    final List<WebSocketGatewaySignal> signals = <WebSocketGatewaySignal>[];
+    final StreamSubscription<WebSocketGatewaySignal> subscription = gateway
+        .watch(
+          serverUrl: Uri.parse('https://chat.example'),
+          token: 'token',
+          acceptsEvent: (_) => false,
+          acceptsChannel: (_) => false,
+        )
+        .listen(signals.add);
+    addTearDown(subscription.cancel);
+
+    await _waitUntil(() => connections.first.sent.isNotEmpty);
+    connections.first.add(<String, Object?>{'status': 'OK', 'seq_reply': 1});
+    await _waitUntil(
+      () => signals.whereType<WebSocketConnectionSignal>().any(
+        (WebSocketConnectionSignal it) =>
+            it.status == WebSocketConnectionStatus.connected,
+      ),
+    );
+
+    gateway.reconnect();
+    await _waitUntil(() => connections.last.sent.isNotEmpty);
+    connections.last.add(<String, Object?>{'status': 'OK', 'seq_reply': 1});
+    await _waitUntil(
+      () => signals.whereType<WebSocketConnectionSignal>().any(
+        (WebSocketConnectionSignal it) => it.isReconnect,
+      ),
+    );
+
+    expect(nextConnection, 2);
+    expect(
+      signals.whereType<WebSocketConnectionSignal>().last.status,
+      WebSocketConnectionStatus.connected,
+    );
+    expect(
+      signals.whereType<WebSocketConnectionSignal>().last.isReconnect,
+      isTrue,
+    );
+  });
 }
 
 Map<String, Object?> _event(

@@ -291,6 +291,12 @@ final class MattermostInboxRepository extends InboxRepository {
     }
   }
 
+  @override
+  void reconnectRealtime() {
+    final WebSocketGateway? gateway = _webSocketGateway;
+    if (gateway is ReconnectableWebSocketGateway) gateway.reconnect();
+  }
+
   InboxConnectionStatus _mapConnectionStatus(
     WebSocketConnectionStatus status,
   ) => switch (status) {

@@ -156,7 +156,7 @@ final followedThreadsProvider = AsyncNotifierProvider.autoDispose
     );
 
 final AsyncNotifierProvider<InboxController, InboxViewState> inboxProvider =
-    AsyncNotifierProvider.autoDispose<InboxController, InboxViewState>(
+    AsyncNotifierProvider<InboxController, InboxViewState>(
       () => InboxController(
         authSessionProvider,
         inboxRepositoryProvider,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +16,7 @@ import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart'
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
@@ -319,6 +322,91 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No postponed messages'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('shows an Inbox notification while Channels stays open', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _RealtimeInboxTestRepository inbox = _RealtimeInboxTestRepository();
+    addTearDown(inbox.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          inboxRepositoryProvider.overrideWithValue(inbox),
+          postponedRepositoryProvider.overrideWithValue(
+            _PostponedTestRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Town Square'), findsOneWidget);
+    expect(inbox.watchCalls, 1);
+
+    inbox.addPost('realtime', 'A realtime Inbox message');
+    await tester.pumpAndSettle();
+
+    final ProviderContainer container = ProviderScope.containerOf(
+      tester.element(find.byType(BootstrapPage)),
+    );
+    expect(
+      container.read(inboxProvider).value?.inAppNotification?.id,
+      'realtime',
+    );
+
+    expect(
+      find.byKey(const ValueKey<String>('inbox-in-app-notification')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Ada Lovelace · Town Square\nA realtime Inbox message'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('inbox-navigation-indicator')),
+      findsOneWidget,
+    );
+    expect(find.text('Town Square'), findsOneWidget);
+
+    await tester.tap(find.text('Open Inbox'));
+    await tester.pumpAndSettle();
+    expect(find.text('A realtime Inbox message'), findsOneWidget);
+    expect(inbox.watchCalls, 1);
+  });
+
+  testWidgets('resume reconnects and refreshes the app-owned Inbox', (
+    WidgetTester tester,
+  ) async {
+    final _RealtimeInboxTestRepository inbox = _RealtimeInboxTestRepository();
+    addTearDown(inbox.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          inboxRepositoryProvider.overrideWithValue(inbox),
+          postponedRepositoryProvider.overrideWithValue(
+            _PostponedTestRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(inbox.loadCalls, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(inbox.reconnectCalls, 1);
+    expect(inbox.loadCalls, 2);
   });
 
   testWidgets('shows Inbox on compact width with large text', (
@@ -1246,6 +1334,63 @@ final class _InboxTestRepository extends InboxRepository {
       newItems: <InboxItem>[ChannelPostInboxItem(candidate: candidate)],
     );
   }
+}
+
+final class _RealtimeInboxTestRepository extends InboxRepository {
+  final StreamController<InboxRealtimeEvent> _events =
+      StreamController<InboxRealtimeEvent>();
+  var loadCalls = 0;
+  var reconnectCalls = 0;
+  var watchCalls = 0;
+
+  @override
+  Future<InboxSnapshot> load({required AuthSession session}) async {
+    loadCalls++;
+    return InboxSnapshot();
+  }
+
+  @override
+  Stream<InboxRealtimeEvent> watch({required AuthSession session}) {
+    watchCalls++;
+    return _events.stream;
+  }
+
+  @override
+  void reconnectRealtime() => reconnectCalls++;
+
+  void addPost(String id, String message) {
+    const SidebarChannel channel = SidebarChannel(
+      id: 'town-square',
+      teamId: 'team-1',
+      name: 'town-square',
+      displayName: 'Town Square',
+      kind: ChannelKind.publicChannel,
+    );
+    _events.add(
+      InboxPostChanged(
+        postId: id,
+        candidate: InboxPostCandidate(
+          post: Post(
+            id: id,
+            channelId: channel.id,
+            author: const PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
+            sentAt: DateTime(2026, 9, 7, 12),
+            message: message,
+          ),
+          channel: channel,
+          reason: InboxAttentionReason.directMention,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required InboxItem item,
+  }) async {}
+
+  Future<void> dispose() => _events.close();
 }
 
 final class _PostponedTestRepository extends PostponedRepository {

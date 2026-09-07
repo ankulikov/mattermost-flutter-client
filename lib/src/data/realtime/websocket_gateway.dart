@@ -70,6 +70,13 @@ abstract interface class WebSocketGateway {
   });
 }
 
+/// Optional capability for transports that can replace an active connection
+/// without making feature subscriptions recreate their streams.
+abstract interface class ReconnectableWebSocketGateway
+    implements WebSocketGateway {
+  void reconnect();
+}
+
 /// Small injectable boundary around a concrete WebSocket implementation.
 abstract interface class WebSocketConnection {
   Future<void> get ready;

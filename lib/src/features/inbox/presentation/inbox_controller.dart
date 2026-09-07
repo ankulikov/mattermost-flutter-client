@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
@@ -10,29 +11,42 @@ import 'package:mattermost_flutter/src/features/inbox/domain/policies/apply_inbo
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 
+/// One foreground-only notification produced by a newly received Inbox post.
+final class InboxInAppNotification {
+  const InboxInAppNotification({required this.candidate});
+
+  final InboxPostCandidate candidate;
+
+  String get id => candidate.post.id;
+}
+
 final class InboxViewState {
   const InboxViewState({
     required this.snapshot,
     this.isRefreshing = false,
     this.refreshFailed = false,
     this.connectionStatus = InboxConnectionStatus.disconnected,
+    this.inAppNotification,
   });
 
   final InboxSnapshot snapshot;
   final bool isRefreshing;
   final bool refreshFailed;
   final InboxConnectionStatus connectionStatus;
+  final InboxInAppNotification? inAppNotification;
 
   InboxViewState copyWith({
     InboxSnapshot? snapshot,
     bool? isRefreshing,
     bool? refreshFailed,
     InboxConnectionStatus? connectionStatus,
+    InboxInAppNotification? inAppNotification,
   }) => InboxViewState(
     snapshot: snapshot ?? this.snapshot,
     isRefreshing: isRefreshing ?? this.isRefreshing,
     refreshFailed: refreshFailed ?? this.refreshFailed,
     connectionStatus: connectionStatus ?? this.connectionStatus,
+    inAppNotification: inAppNotification ?? this.inAppNotification,
   );
 }
 
@@ -46,7 +60,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   final Provider<AuthSession?> _sessionProvider;
   final Provider<InboxRepository> _inboxProvider;
   final Provider<PostponedRepository> _postponedProvider;
-  late final RequestCancellation _cancellation;
+  RequestCancellation? _cancellation;
   AuthSession? _session;
   InboxRepository? _inbox;
   PostponedRepository? _postponed;
@@ -55,51 +69,92 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       <InboxPostChanged>[];
   bool _busy = false;
   bool _realtimeRefreshQueued = false;
+  var _buildGeneration = 0;
 
   @override
   Future<InboxViewState> build() async {
-    _cancellation = RequestCancellation();
+    final int generation = ++_buildGeneration;
+    _cancellation?.cancel();
+    final RequestCancellation cancellation = RequestCancellation();
+    _cancellation = cancellation;
+    unawaited(_realtimeSubscription?.cancel());
+    _realtimeSubscription = null;
+    _pendingRealtimePostChanges.clear();
+    _busy = false;
+    _realtimeRefreshQueued = false;
     ref.onDispose(() {
-      _cancellation.cancel();
-      unawaited(_realtimeSubscription?.cancel());
+      cancellation.cancel();
+      if (generation == _buildGeneration) {
+        _buildGeneration += 1;
+        unawaited(_realtimeSubscription?.cancel());
+      }
     });
-    _session = ref.watch(_sessionProvider);
-    if (_session == null) {
+    final AuthSession? session = ref.watch(_sessionProvider);
+    _session = session;
+    if (session == null) {
+      _inbox = null;
+      _postponed = null;
       return InboxViewState(snapshot: InboxSnapshot());
     }
     _inbox = ref.watch(_inboxProvider);
     _postponed = ref.watch(_postponedProvider);
     final InboxViewState result = InboxViewState(
-      snapshot: await _cancellation.run(() => _inbox!.load(session: _session!)),
+      snapshot: await cancellation.run(() => _inbox!.load(session: session)),
     );
-    unawaited(_listenRealtimeAfterBuild(session: _session!, inbox: _inbox!));
+    unawaited(
+      _listenRealtimeAfterBuild(
+        session: session,
+        inbox: _inbox!,
+        generation: generation,
+      ),
+    );
     return result;
   }
 
   Future<void> _listenRealtimeAfterBuild({
     required AuthSession session,
     required InboxRepository inbox,
+    required int generation,
   }) async {
     await Future<void>.delayed(Duration.zero);
-    if (_cancellation.isCancelled) return;
-    _listenRealtime(session: session, inbox: inbox);
+    if (_cancellation?.isCancelled != false || generation != _buildGeneration) {
+      return;
+    }
+    _listenRealtime(session: session, inbox: inbox, generation: generation);
   }
 
   void _listenRealtime({
     required AuthSession session,
     required InboxRepository inbox,
+    required int generation,
   }) {
     _realtimeSubscription = inbox
         .watch(session: session)
         .listen(
-          _onRealtimeEvent,
+          (InboxRealtimeEvent event) {
+            if (generation == _buildGeneration) _onRealtimeEvent(event);
+          },
           onError: (Object error, StackTrace stackTrace) {
-            _setConnectionStatus(InboxConnectionStatus.disconnected);
+            if (generation == _buildGeneration) {
+              _setConnectionStatus(InboxConnectionStatus.disconnected);
+            }
           },
           onDone: () {
-            _setConnectionStatus(InboxConnectionStatus.disconnected);
+            if (generation == _buildGeneration) {
+              _setConnectionStatus(InboxConnectionStatus.disconnected);
+            }
           },
         );
+  }
+
+  /// Replaces a potentially half-open socket and reconciles events missed
+  /// while the process was suspended.
+  void handleAppResumed() {
+    if (_session == null || _inbox == null) return;
+    _setConnectionStatus(InboxConnectionStatus.connecting);
+    _inbox!.reconnectRealtime();
+    _realtimeRefreshQueued = true;
+    unawaited(_refreshFromRealtime());
   }
 
   void _onRealtimeEvent(InboxRealtimeEvent event) {
@@ -108,24 +163,44 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     switch (event) {
       case InboxConnectionChanged(:final status):
         _setConnectionStatus(status);
-      case InboxPostChanged(:final postId, :final candidate):
+      case InboxPostChanged():
         if (_busy) {
           _pendingRealtimePostChanges.add(event);
           return;
         }
-        state = AsyncData(
-          current.copyWith(
-            snapshot: applyInboxPostChange(
-              snapshot: current.snapshot,
-              postId: postId,
-              candidate: candidate,
-            ),
-          ),
-        );
+        _applyRealtimePostChange(current, event);
       case InboxRefreshRequired():
         _realtimeRefreshQueued = true;
         unawaited(_refreshFromRealtime());
     }
+  }
+
+  void _applyRealtimePostChange(
+    InboxViewState current,
+    InboxPostChanged change,
+  ) {
+    final bool wasAlreadyPresent = current.snapshot.newItems.any(
+      (InboxItem item) => item.postIds.contains(change.postId),
+    );
+    final InboxSnapshot snapshot = applyInboxPostChange(
+      snapshot: current.snapshot,
+      postId: change.postId,
+      candidate: change.candidate,
+    );
+    final bool wasAdded =
+        !wasAlreadyPresent &&
+        change.candidate != null &&
+        snapshot.newItems.any(
+          (InboxItem item) => item.postIds.contains(change.postId),
+        );
+    state = AsyncData(
+      current.copyWith(
+        snapshot: snapshot,
+        inAppNotification: wasAdded
+            ? InboxInAppNotification(candidate: change.candidate!)
+            : current.inAppNotification,
+      ),
+    );
   }
 
   void _setConnectionStatus(InboxConnectionStatus status) {
@@ -150,7 +225,9 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       current.copyWith(isRefreshing: true, refreshFailed: false),
     );
     try {
-      final InboxSnapshot snapshot = await _cancellation.run(
+      final RequestCancellation? cancellation = _cancellation;
+      if (cancellation == null) return;
+      final InboxSnapshot snapshot = await cancellation.run(
         () => inbox.load(session: session),
       );
       final InboxViewState latest = state.value ?? current;
@@ -162,7 +239,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         ),
       );
     } on Object {
-      if (!_cancellation.isCancelled) {
+      if (_cancellation?.isCancelled == false) {
         final InboxViewState latest = state.value ?? current;
         state = AsyncData(
           latest.copyWith(isRefreshing: false, refreshFailed: true),
@@ -313,16 +390,11 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     _busy = false;
     final InboxViewState? current = state.value;
     if (current != null && _pendingRealtimePostChanges.isNotEmpty) {
-      var snapshot = current.snapshot;
       for (final InboxPostChanged change in _pendingRealtimePostChanges) {
-        snapshot = applyInboxPostChange(
-          snapshot: snapshot,
-          postId: change.postId,
-          candidate: change.candidate,
-        );
+        final InboxViewState? latest = state.value;
+        if (latest != null) _applyRealtimePostChange(latest, change);
       }
       _pendingRealtimePostChanges.clear();
-      state = AsyncData(current.copyWith(snapshot: snapshot));
     }
     if (_realtimeRefreshQueued) unawaited(_refreshFromRealtime());
   }
