@@ -131,6 +131,55 @@ void main() {
     expect(find.text(MessageActionsStrings.delete), findsOneWidget);
   });
 
+  testWidgets('quick actions stay interactive above the following message', (
+    WidgetTester tester,
+  ) async {
+    var openCount = 0;
+    await tester.pumpWidget(
+      _app(
+        onOpenThread: () => openCount += 1,
+        messageHeight: 24,
+        followingMessage: true,
+      ),
+    );
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    addTearDown(mouse.removePointer);
+
+    await mouse.addPointer(location: tester.getCenter(find.text('Message')));
+    await tester.pumpAndSettle();
+
+    final Finder actions = find.byKey(
+      const ValueKey<String>('quick-message-actions'),
+    );
+    expect(actions, findsOneWidget);
+    expect(
+      tester.getBottomRight(actions).dy,
+      greaterThan(tester.getBottomRight(find.text('Message')).dy),
+    );
+
+    final Rect moreButton = tester.getRect(
+      find.byKey(const ValueKey<String>('more-message-actions')),
+    );
+    final Offset actionPoint = Offset(
+      moreButton.center.dx,
+      moreButton.bottom - 2,
+    );
+    await mouse.moveTo(actionPoint);
+    await tester.pumpAndSettle();
+    expect(actions, findsOneWidget);
+
+    await mouse.down(actionPoint);
+    await mouse.up();
+    await tester.pumpAndSettle();
+
+    expect(openCount, 0);
+    expect(find.text(MessageActionsStrings.forward), findsOneWidget);
+    expect(find.text(MessageActionsStrings.delete), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('mouse long press does not open touch bottom sheet', (
     WidgetTester tester,
   ) async {
@@ -252,6 +301,8 @@ void main() {
 Widget _app({
   required VoidCallback onOpenThread,
   double width = 600,
+  double messageHeight = 100,
+  bool followingMessage = false,
   TextScaler textScaler = TextScaler.noScaling,
   CustomEmojiRepository? repository,
   Future<bool> Function(String emojiName)? onToggleReaction,
@@ -265,12 +316,31 @@ Widget _app({
     body: Center(
       child: SizedBox(
         width: width,
-        child: MessageInteractionSurface(
-          onOpenThread: onOpenThread,
-          emojiRepositoryFactory: repository == null ? null : () => repository,
-          accountId: repository == null ? '' : 'account-a',
-          onToggleReaction: onToggleReaction,
-          child: const SizedBox(height: 100, child: Text('Message')),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            MessageInteractionSurface(
+              onOpenThread: onOpenThread,
+              emojiRepositoryFactory: repository == null
+                  ? null
+                  : () => repository,
+              accountId: repository == null ? '' : 'account-a',
+              onToggleReaction: onToggleReaction,
+              child: SizedBox(
+                height: messageHeight,
+                child: const Text('Message'),
+              ),
+            ),
+            if (followingMessage)
+              const SizedBox(
+                height: 48,
+                width: double.infinity,
+                child: ColoredBox(
+                  color: Colors.white,
+                  child: Text('Following message'),
+                ),
+              ),
+          ],
         ),
       ),
     ),

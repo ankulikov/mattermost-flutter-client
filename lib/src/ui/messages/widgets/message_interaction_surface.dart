@@ -30,10 +30,38 @@ class MessageInteractionSurface extends StatefulWidget {
 }
 
 class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
+  final OverlayPortalController _quickActionsController =
+      OverlayPortalController();
   Timer? _touchHighlightTimer;
+  Timer? _hoverExitTimer;
   int? _activeTouchPointer;
-  bool _hovered = false;
+  bool _messageHovered = false;
+  bool _quickActionsHovered = false;
   bool _touchHighlighted = false;
+
+  bool get _hovered => _messageHovered || _quickActionsHovered;
+
+  void _handleMessageHover(bool hovered) {
+    _hoverExitTimer?.cancel();
+    setState(() => _messageHovered = hovered);
+    if (hovered) {
+      _quickActionsController.show();
+    } else {
+      _hideQuickActionsSoon();
+    }
+  }
+
+  void _handleQuickActionsHover(bool hovered) {
+    _hoverExitTimer?.cancel();
+    setState(() => _quickActionsHovered = hovered);
+    if (!hovered) _hideQuickActionsSoon();
+  }
+
+  void _hideQuickActionsSoon() {
+    _hoverExitTimer = Timer(Duration.zero, () {
+      if (mounted && !_hovered) _quickActionsController.hide();
+    });
+  }
 
   void _handlePointerDown(PointerDownEvent event) {
     if (!_isTouch(event.kind)) return;
@@ -130,6 +158,7 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
   @override
   void dispose() {
     _touchHighlightTimer?.cancel();
+    _hoverExitTimer?.cancel();
     super.dispose();
   }
 
@@ -140,51 +169,66 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     return Semantics(
       button: true,
       label: MessageActionsStrings.actions,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: Listener(
-          onPointerDown: _handlePointerDown,
-          onPointerUp: _handlePointerEnd,
-          onPointerCancel: _handlePointerEnd,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onOpenThread,
-            onLongPress: _handleLongPress,
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) =>
-                  Stack(
-                    children: <Widget>[
-                      Container(
-                        key: const ValueKey<String>('message-highlight'),
-                        decoration: BoxDecoration(
-                          color: highlighted
-                              ? colors.primary.withValues(alpha: 0.10)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        child: widget.child,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final bool isLeftToRight =
+              Directionality.of(context) == TextDirection.ltr;
+          return OverlayPortal.overlayChildLayoutBuilder(
+            controller: _quickActionsController,
+            overlayChildBuilder:
+                (BuildContext context, OverlayChildLayoutInfo info) {
+                  final Offset anchor = MatrixUtils.transformPoint(
+                    info.childPaintTransform,
+                    Offset(isLeftToRight ? info.childSize.width - 8 : 8, 0),
+                  );
+                  return Positioned(
+                    top: anchor.dy,
+                    left: isLeftToRight ? null : anchor.dx,
+                    right: isLeftToRight
+                        ? info.overlaySize.width - anchor.dx
+                        : null,
+                    child: MouseRegion(
+                      onEnter: (_) => _handleQuickActionsHover(true),
+                      onExit: (_) => _handleQuickActionsHover(false),
+                      child: _QuickMessageActions(
+                        compact: constraints.maxWidth < 420,
+                        onEmojiSelected: _submitReaction,
+                        onOpenPicker: _openPointerPicker,
                       ),
-                      if (_hovered)
-                        PositionedDirectional(
-                          top: 0,
-                          end: 8,
-                          child: _QuickMessageActions(
-                            compact: constraints.maxWidth < 420,
-                            onEmojiSelected: _submitReaction,
-                            onOpenPicker: _openPointerPicker,
-                          ),
-                        ),
-                    ],
+                    ),
+                  );
+                },
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) => _handleMessageHover(true),
+              onExit: (_) => _handleMessageHover(false),
+              child: Listener(
+                onPointerDown: _handlePointerDown,
+                onPointerUp: _handlePointerEnd,
+                onPointerCancel: _handlePointerEnd,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onOpenThread,
+                  onLongPress: _handleLongPress,
+                  child: Container(
+                    key: const ValueKey<String>('message-highlight'),
+                    decoration: BoxDecoration(
+                      color: highlighted
+                          ? colors.primary.withValues(alpha: 0.10)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    child: widget.child,
                   ),
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
