@@ -98,6 +98,242 @@ Future<String?> showEmojiPickerBottomSheet({
   ),
 );
 
+/// One selectable result shared by the full picker and composer autocomplete.
+final class EmojiSuggestion {
+  const EmojiSuggestion._({required this.name, this.unicode, this.custom});
+
+  factory EmojiSuggestion.system(SystemEmojiDefinition emoji, {String? name}) =>
+      EmojiSuggestion._(name: name ?? emoji.name, unicode: emoji.unicode);
+
+  factory EmojiSuggestion.custom(CustomEmojiReference emoji) =>
+      EmojiSuggestion._(name: emoji.name, custom: emoji);
+
+  final String name;
+  final String? unicode;
+  final CustomEmojiReference? custom;
+}
+
+/// Keyboard selection state for a query-driven emoji result grid.
+final class EmojiSearchNavigationController extends ChangeNotifier {
+  List<EmojiSuggestion> _options = const <EmojiSuggestion>[];
+  int _highlightedIndex = 0;
+
+  int get highlightedIndex => _options.isEmpty ? -1 : _highlightedIndex;
+
+  EmojiSuggestion? get highlightedSuggestion => _options.isEmpty
+      ? null
+      : _options[_highlightedIndex.clamp(0, _options.length - 1)];
+
+  void move(int delta) {
+    if (_options.isEmpty) return;
+    _highlightedIndex = (_highlightedIndex + delta).clamp(
+      0,
+      _options.length - 1,
+    );
+    notifyListeners();
+  }
+
+  void highlight(int index) {
+    if (index < 0 || index >= _options.length || index == _highlightedIndex) {
+      return;
+    }
+    _highlightedIndex = index;
+    notifyListeners();
+  }
+
+  void _setOptions(List<EmojiSuggestion> options) {
+    final String? selectedName = highlightedSuggestion?.name;
+    _options = options;
+    if (options.isEmpty) {
+      _highlightedIndex = 0;
+    } else {
+      final int retained = selectedName == null
+          ? -1
+          : options.indexWhere(
+              (EmojiSuggestion option) => option.name == selectedName,
+            );
+      _highlightedIndex = retained < 0 ? 0 : retained;
+    }
+    notifyListeners();
+  }
+}
+
+/// Emoji results controlled by an external query, without search field or
+/// category navigation. Custom results are debounced and stale requests are
+/// cancelled, while system results update synchronously.
+class EmojiSearchResults extends StatefulWidget {
+  const EmojiSearchResults({
+    required this.query,
+    required this.repository,
+    required this.accountId,
+    required this.onSelected,
+    this.navigationController,
+    this.limit = 200,
+    super.key,
+  });
+
+  final String query;
+  final CustomEmojiRepository repository;
+  final String accountId;
+  final ValueChanged<EmojiSuggestion> onSelected;
+  final EmojiSearchNavigationController? navigationController;
+  final int limit;
+
+  @override
+  State<EmojiSearchResults> createState() => _EmojiSearchResultsState();
+}
+
+class _EmojiSearchResultsState extends State<EmojiSearchResults> {
+  Timer? _searchDebounce;
+  RequestCancellation? _searchCancellation;
+  List<CustomEmojiReference> _customResults = const <CustomEmojiReference>[];
+  List<EmojiSuggestion> _results = const <EmojiSuggestion>[];
+  int _generation = 0;
+  bool _searchingCustom = false;
+  bool _customSearchFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startSearch();
+  }
+
+  @override
+  void didUpdateWidget(covariant EmojiSearchResults oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.navigationController != widget.navigationController) {
+      oldWidget.navigationController?._setOptions(const <EmojiSuggestion>[]);
+      widget.navigationController?._setOptions(_results);
+    }
+    if (oldWidget.query != widget.query ||
+        oldWidget.accountId != widget.accountId ||
+        oldWidget.repository != widget.repository ||
+        oldWidget.limit != widget.limit) {
+      _startSearch();
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchCancellation?.cancel('emoji search disposed');
+    widget.navigationController?._setOptions(const <EmojiSuggestion>[]);
+    super.dispose();
+  }
+
+  void _startSearch() {
+    final String query = normalizeEmojiSearchTerm(widget.query);
+    _generation += 1;
+    _searchDebounce?.cancel();
+    _searchCancellation?.cancel('emoji search superseded');
+    _searchCancellation = null;
+    _customResults = const <CustomEmojiReference>[];
+    _customSearchFailed = false;
+    _searchingCustom = query.length > 1;
+    _updateResults(query);
+    if (query.length <= 1) return;
+    final int generation = _generation;
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+      unawaited(_searchCustom(query, generation));
+    });
+  }
+
+  Future<void> _searchCustom(String query, int generation) async {
+    final RequestCancellation cancellation = RequestCancellation();
+    _searchCancellation = cancellation;
+    try {
+      final List<CustomEmojiReference> values = await cancellation.run(
+        () =>
+            widget.repository.search(accountId: widget.accountId, term: query),
+      );
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _customResults = values;
+        _searchingCustom = false;
+        _updateResults(query);
+      });
+    } on RequestCancelledException {
+      // Superseded searches are expected and must not replace newer results.
+    } on Object {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _searchingCustom = false;
+        _customSearchFailed = true;
+      });
+    }
+  }
+
+  void _updateResults(String query) {
+    final List<EmojiSuggestion> results = searchSystemEmojis(
+      mattermostSystemEmojiCatalog,
+      query,
+      limit: widget.limit,
+    ).map(EmojiSuggestion.system).toList();
+    final Set<String> names = results
+        .map((EmojiSuggestion option) => option.name)
+        .toSet();
+    for (final CustomEmojiReference emoji in _customResults) {
+      if (!names.add(emoji.name)) continue;
+      if (results.length >= widget.limit) results.removeLast();
+      results.add(EmojiSuggestion.custom(emoji));
+    }
+    _results = List<EmojiSuggestion>.unmodifiable(results);
+    widget.navigationController?._setOptions(_results);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_results.isEmpty && _searchingCustom) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final Widget grid = _results.isEmpty
+        ? Center(
+            child: Text(
+              MessageActionsStrings.noEmojiResults(widget.query.trim()),
+              textAlign: TextAlign.center,
+            ),
+          )
+        : ListenableBuilder(
+            listenable:
+                widget.navigationController ?? const _NeverChangedListenable(),
+            builder: (BuildContext context, Widget? child) => _EmojiGrid(
+              options: _results,
+              repository: widget.repository,
+              accountId: widget.accountId,
+              onSelected: widget.onSelected,
+              highlightedIndex:
+                  widget.navigationController?.highlightedIndex ?? -1,
+              onHighlight: widget.navigationController?.highlight,
+            ),
+          );
+    return Column(
+      children: <Widget>[
+        if (_customSearchFailed)
+          _InlineRetry(
+            message: MessageActionsStrings.customEmojiSearchFailed,
+            onRetry: () => _searchCustom(
+              normalizeEmojiSearchTerm(widget.query),
+              _generation,
+            ),
+          )
+        else if (_searchingCustom)
+          const LinearProgressIndicator(minHeight: 2),
+        Expanded(child: grid),
+      ],
+    );
+  }
+}
+
+class _NeverChangedListenable implements Listenable {
+  const _NeverChangedListenable();
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
 class EmojiPicker extends StatefulWidget {
   const EmojiPicker({
     required this.repository,
@@ -120,20 +356,14 @@ class _EmojiPickerState extends State<EmojiPicker> {
   late final TextEditingController _searchController = TextEditingController()
     ..addListener(_searchChanged);
   final RequestCancellation _pageCancellation = RequestCancellation();
-  Timer? _searchDebounce;
-  RequestCancellation? _searchCancellation;
   List<String> _recentNames = const <String>[];
   List<CustomEmojiReference> _customEmojis = const <CustomEmojiReference>[];
-  List<CustomEmojiReference> _customSearch = const <CustomEmojiReference>[];
   String _selectedCategory = 'recent';
   String _query = '';
-  int _searchGeneration = 0;
   int _nextCustomPage = 0;
   bool _loadingRecents = true;
   bool _loadingCustom = false;
-  bool _searchingCustom = false;
   bool _customLoadFailed = false;
-  bool _customSearchFailed = false;
   bool _hasMoreCustom = true;
 
   @override
@@ -144,8 +374,6 @@ class _EmojiPickerState extends State<EmojiPicker> {
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
-    _searchCancellation?.cancel('emoji search superseded');
     _pageCancellation.cancel('emoji picker disposed');
     _searchController.dispose();
     super.dispose();
@@ -176,45 +404,7 @@ class _EmojiPickerState extends State<EmojiPicker> {
   void _searchChanged() {
     final String query = normalizeEmojiSearchTerm(_searchController.text);
     if (query == _query) return;
-    _query = query;
-    _searchGeneration += 1;
-    _searchDebounce?.cancel();
-    _searchCancellation?.cancel('emoji search superseded');
-    _searchCancellation = null;
-    setState(() {
-      _customSearch = const <CustomEmojiReference>[];
-      _customSearchFailed = false;
-      _searchingCustom = query.length > 1;
-    });
-    if (query.length <= 1) return;
-    final int generation = _searchGeneration;
-    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
-      unawaited(_searchCustom(query, generation));
-    });
-  }
-
-  Future<void> _searchCustom(String query, int generation) async {
-    final RequestCancellation cancellation = RequestCancellation();
-    _searchCancellation = cancellation;
-    try {
-      final List<CustomEmojiReference> values = await cancellation.run(
-        () =>
-            widget.repository.search(accountId: widget.accountId, term: query),
-      );
-      if (!mounted || generation != _searchGeneration) return;
-      setState(() {
-        _customSearch = values;
-        _searchingCustom = false;
-      });
-    } on RequestCancelledException {
-      // Superseded searches are expected and must not replace newer results.
-    } on Object {
-      if (!mounted || generation != _searchGeneration) return;
-      setState(() {
-        _searchingCustom = false;
-        _customSearchFailed = true;
-      });
-    }
+    setState(() => _query = query);
   }
 
   Future<void> _loadMoreCustom() async {
@@ -306,37 +496,12 @@ class _EmojiPickerState extends State<EmojiPicker> {
 
   Widget _buildBody() {
     if (_query.isNotEmpty) {
-      final List<_EmojiOption> results = _searchResults();
-      if (results.isEmpty && _searchingCustom) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      return Column(
-        children: <Widget>[
-          if (_customSearchFailed)
-            _InlineRetry(
-              message: MessageActionsStrings.customEmojiSearchFailed,
-              onRetry: () => _searchCustom(_query, _searchGeneration),
-            )
-          else if (_searchingCustom)
-            const LinearProgressIndicator(minHeight: 2),
-          Expanded(
-            child: results.isEmpty
-                ? Center(
-                    child: Text(
-                      MessageActionsStrings.noEmojiResults(
-                        _searchController.text.trim(),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : _EmojiGrid(
-                    options: results,
-                    repository: widget.repository,
-                    accountId: widget.accountId,
-                    onSelected: widget.onSelected,
-                  ),
-          ),
-        ],
+      return EmojiSearchResults(
+        query: _query,
+        repository: widget.repository,
+        accountId: widget.accountId,
+        onSelected: (EmojiSuggestion suggestion) =>
+            widget.onSelected(suggestion.name),
       );
     }
 
@@ -354,11 +519,12 @@ class _EmojiPickerState extends State<EmojiPicker> {
           Expanded(
             child: _EmojiGrid(
               options: _customEmojis
-                  .map(_EmojiOption.custom)
+                  .map(EmojiSuggestion.custom)
                   .toList(growable: false),
               repository: widget.repository,
               accountId: widget.accountId,
-              onSelected: widget.onSelected,
+              onSelected: (EmojiSuggestion suggestion) =>
+                  widget.onSelected(suggestion.name),
               hasMore: _hasMoreCustom && !_customLoadFailed,
               isLoadingMore: _loadingCustom,
               onLoadMore: _loadMoreCustom,
@@ -368,7 +534,7 @@ class _EmojiPickerState extends State<EmojiPicker> {
       );
     }
 
-    final List<_EmojiOption> options = _selectedCategory == 'recent'
+    final List<EmojiSuggestion> options = _selectedCategory == 'recent'
         ? _recentOptions()
         : mattermostSystemEmojiCatalog
               .where(
@@ -376,39 +542,26 @@ class _EmojiPickerState extends State<EmojiPicker> {
                     emoji.category == _selectedCategory &&
                     !emoji.name.contains('_skin_tone'),
               )
-              .map(_EmojiOption.system)
+              .map(EmojiSuggestion.system)
               .toList(growable: false);
     return _EmojiGrid(
       options: options,
       repository: widget.repository,
       accountId: widget.accountId,
-      onSelected: widget.onSelected,
+      onSelected: (EmojiSuggestion suggestion) =>
+          widget.onSelected(suggestion.name),
     );
   }
 
-  List<_EmojiOption> _searchResults() {
-    final List<_EmojiOption> results = searchSystemEmojis(
-      mattermostSystemEmojiCatalog,
-      _query,
-    ).map(_EmojiOption.system).toList();
-    final Set<String> names = results
-        .map((_EmojiOption option) => option.name)
-        .toSet();
-    for (final CustomEmojiReference emoji in _customSearch) {
-      if (names.add(emoji.name)) results.add(_EmojiOption.custom(emoji));
-    }
-    return results;
-  }
-
-  List<_EmojiOption> _recentOptions() => _recentNames
+  List<EmojiSuggestion> _recentOptions() => _recentNames
       .map((String name) {
         final SystemEmojiDefinition? system = _systemEmojiByAlias[name];
-        if (system != null) return _EmojiOption.system(system, name: name);
+        if (system != null) return EmojiSuggestion.system(system, name: name);
         final CustomEmojiReference custom = _customEmojis.firstWhere(
           (CustomEmojiReference emoji) => emoji.name == name,
           orElse: () => CustomEmojiReference(name: name),
         );
-        return _EmojiOption.custom(custom);
+        return EmojiSuggestion.custom(custom);
       })
       .toList(growable: false);
 }
@@ -461,15 +614,19 @@ class _EmojiGrid extends StatelessWidget {
     this.hasMore = false,
     this.isLoadingMore = false,
     this.onLoadMore,
+    this.highlightedIndex = -1,
+    this.onHighlight,
   });
 
-  final List<_EmojiOption> options;
+  final List<EmojiSuggestion> options;
   final CustomEmojiRepository repository;
   final String accountId;
-  final ValueChanged<String> onSelected;
+  final ValueChanged<EmojiSuggestion> onSelected;
   final bool hasMore;
   final bool isLoadingMore;
   final VoidCallback? onLoadMore;
+  final int highlightedIndex;
+  final ValueChanged<int>? onHighlight;
 
   @override
   Widget build(BuildContext context) {
@@ -499,27 +656,39 @@ class _EmojiGrid extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           );
         }
-        final _EmojiOption option = options[index];
+        final EmojiSuggestion option = options[index];
         return Tooltip(
           message: ':${option.name}:',
           child: Semantics(
             button: true,
             label: ':${option.name}:',
-            child: InkResponse(
-              key: ValueKey<String>('emoji-${option.name}'),
-              radius: 24,
-              onTap: () => onSelected(option.name),
-              child: Center(
-                child: option.custom == null
-                    ? Text(
-                        option.unicode!,
-                        style: const TextStyle(fontSize: 28),
-                      )
-                    : _CustomEmojiImage(
-                        repository: repository,
-                        accountId: accountId,
-                        emoji: option.custom!,
-                      ),
+            selected: index == highlightedIndex,
+            child: MouseRegion(
+              onEnter: (_) => onHighlight?.call(index),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: index == highlightedIndex
+                      ? Theme.of(context).colorScheme.primaryContainer
+                      : null,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: InkResponse(
+                  key: ValueKey<String>('emoji-${option.name}'),
+                  radius: 24,
+                  onTap: () => onSelected(option),
+                  child: Center(
+                    child: option.custom == null
+                        ? Text(
+                            option.unicode!,
+                            style: const TextStyle(fontSize: 28),
+                          )
+                        : CustomEmojiImage(
+                            repository: repository,
+                            accountId: accountId,
+                            emoji: option.custom!,
+                          ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -529,11 +698,12 @@ class _EmojiGrid extends StatelessWidget {
   }
 }
 
-class _CustomEmojiImage extends StatefulWidget {
-  const _CustomEmojiImage({
+class CustomEmojiImage extends StatefulWidget {
+  const CustomEmojiImage({
     required this.repository,
     required this.accountId,
     required this.emoji,
+    super.key,
   });
 
   final CustomEmojiRepository repository;
@@ -541,10 +711,10 @@ class _CustomEmojiImage extends StatefulWidget {
   final CustomEmojiReference emoji;
 
   @override
-  State<_CustomEmojiImage> createState() => _CustomEmojiImageState();
+  State<CustomEmojiImage> createState() => _CustomEmojiImageState();
 }
 
-class _CustomEmojiImageState extends State<_CustomEmojiImage> {
+class _CustomEmojiImageState extends State<CustomEmojiImage> {
   late Future<CustomEmojiContent> _content = _load();
 
   Future<CustomEmojiContent> _load() => widget.repository.getByName(
@@ -555,7 +725,7 @@ class _CustomEmojiImageState extends State<_CustomEmojiImage> {
   );
 
   @override
-  void didUpdateWidget(covariant _CustomEmojiImage oldWidget) {
+  void didUpdateWidget(covariant CustomEmojiImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.accountId != widget.accountId ||
         oldWidget.emoji != widget.emoji) {
@@ -606,20 +776,6 @@ class _InlineRetry extends StatelessWidget {
       ),
     ],
   );
-}
-
-final class _EmojiOption {
-  const _EmojiOption._({required this.name, this.unicode, this.custom});
-
-  factory _EmojiOption.system(SystemEmojiDefinition emoji, {String? name}) =>
-      _EmojiOption._(name: name ?? emoji.name, unicode: emoji.unicode);
-
-  factory _EmojiOption.custom(CustomEmojiReference emoji) =>
-      _EmojiOption._(name: emoji.name, custom: emoji);
-
-  final String name;
-  final String? unicode;
-  final CustomEmojiReference? custom;
 }
 
 final Map<String, SystemEmojiDefinition> _systemEmojiByAlias =

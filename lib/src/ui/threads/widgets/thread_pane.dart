@@ -211,6 +211,10 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                       ),
                       destinationId: 'thread-${widget.rootPostId}',
                       placeholder: MessageComposerStrings.replyPlaceholder,
+                      emojiRepositoryFactory: session == null
+                          ? null
+                          : () => ref.read(customEmojiRepositoryProvider),
+                      accountId: session?.durableDataScopeId ?? '',
                       onSubmit: _sendReply,
                     ),
                   ],

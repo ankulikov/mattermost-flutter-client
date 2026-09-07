@@ -131,6 +131,10 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                 placeholder: MessageComposerStrings.channelPlaceholder(
                   channel.displayName,
                 ),
+                emojiRepositoryFactory: session == null
+                    ? null
+                    : () => ref.read(customEmojiRepositoryProvider),
+                accountId: session?.durableDataScopeId ?? '',
                 onSubmit: (String message, String pendingPostId) async {
                   await ref
                       .read(channelPostsProvider(channel.id).notifier)
