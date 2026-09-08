@@ -202,32 +202,7 @@ void main() {
   });
 
   group('groupDirectMessages', () {
-    test('groups adjacent messages with gaps through 120000 milliseconds', () {
-      final DateTime start = DateTime.utc(2026);
-      for (final int gap in <int>[119999, 120000]) {
-        final List<InboxItem> items =
-            groupDirectMessages(<CanonicalInboxCandidate>[
-              CanonicalDirectPostCandidate(
-                _postCandidate(id: 'one-$gap', direct: true, at: start),
-              ),
-              CanonicalDirectPostCandidate(
-                _postCandidate(
-                  id: 'two-$gap',
-                  direct: true,
-                  at: start.add(Duration(milliseconds: gap)),
-                ),
-              ),
-            ]);
-
-        expect(items, hasLength(1));
-        expect(
-          (items.single as DirectMessageBundleInboxItem).postIds,
-          hasLength(2),
-        );
-      }
-    });
-
-    test('splits direct messages with a 120001 millisecond gap', () {
+    test('groups messages from one sender regardless of time gap', () {
       final DateTime start = DateTime.utc(2026);
       final List<InboxItem> items =
           groupDirectMessages(<CanonicalInboxCandidate>[
@@ -238,8 +213,23 @@ void main() {
               _postCandidate(
                 id: 'two',
                 direct: true,
-                at: start.add(const Duration(milliseconds: 120001)),
+                at: start.add(const Duration(days: 3)),
               ),
+            ),
+          ]);
+
+      expect(items, hasLength(1));
+      expect(items.single.postIds, <String>['one', 'two']);
+    });
+
+    test('keeps direct messages from different senders separate', () {
+      final List<InboxItem> items =
+          groupDirectMessages(<CanonicalInboxCandidate>[
+            CanonicalDirectPostCandidate(
+              _postCandidate(id: 'ada', direct: true, authorId: 'ada'),
+            ),
+            CanonicalDirectPostCandidate(
+              _postCandidate(id: 'grace', direct: true, authorId: 'grace'),
             ),
           ]);
 

@@ -106,14 +106,15 @@ void main() {
       expect(find.text('Bots & integrations'), findsOneWidget);
       expect(find.text('Direct Messages'), findsOneWidget);
       expect(find.text('Threads'), findsOneWidget);
-      expect(find.text('first DM'), findsOneWidget);
-      expect(find.text('second DM'), findsOneWidget);
+      expect(find.text('2 messages'), findsOneWidget);
+      expect(find.text('first DM'), findsNothing);
+      expect(find.text('second DM'), findsNothing);
       expect(find.byType(Card), findsNothing);
       expect(find.text('Open'), findsNothing);
-      expect(find.byTooltip('Mark as read'), findsNWidgets(5));
-      expect(find.byTooltip('Postpone'), findsNWidgets(5));
-      expect(find.byIcon(Icons.done), findsNWidgets(5));
-      expect(find.byIcon(Icons.schedule), findsNWidgets(5));
+      expect(find.byTooltip('Mark as read'), findsNWidgets(4));
+      expect(find.byTooltip('Postpone'), findsNWidgets(4));
+      expect(find.byIcon(Icons.done), findsNWidgets(4));
+      expect(find.byIcon(Icons.schedule), findsNWidgets(4));
 
       await tester.tap(
         find.byKey(const ValueKey<String>('inbox-item-post:mention')),
@@ -167,6 +168,45 @@ void main() {
           .left,
       greaterThan(tester.getRect(find.text(InboxStrings.newItems)).right),
     );
+  });
+
+  testWidgets('shows the message text for a single direct message', (
+    WidgetTester tester,
+  ) async {
+    final InboxPostCandidate message = _candidate(
+      'only-dm',
+      'Only direct message',
+      direct: true,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(
+            _InboxRepository(
+              InboxSnapshot(
+                newItems: <InboxItem>[
+                  DirectMessageBundleInboxItem(
+                    channelId: 'dm',
+                    authorId: 'other',
+                    automationClass: InboxAutomationClass.person,
+                    messages: <InboxPostCandidate>[message],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Only direct message'), findsOneWidget);
+    expect(find.text('1 message'), findsNothing);
   });
 
   testWidgets('read action marks the item without opening its row', (

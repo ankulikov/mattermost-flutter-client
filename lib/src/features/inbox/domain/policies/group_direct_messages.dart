@@ -2,39 +2,42 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/canonical_in
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 
-const Duration directMessageBundleGap = Duration(minutes: 2);
-
-/// Builds presentation items, combining adjacent compatible direct messages.
+/// Builds presentation items, combining compatible direct messages by sender.
 ///
-/// The two-minute boundary is inclusive and grouping is intentionally
-/// transitive: every adjacent pair controls whether a bundle continues.
+/// A channel remains part of the identity because one sender can participate
+/// in more than one group-message conversation. Automation messages also stay
+/// separate so they keep their dedicated Inbox section.
 List<InboxItem> groupDirectMessages(
   Iterable<CanonicalInboxCandidate> candidates,
 ) {
   final List<CanonicalInboxCandidate> ordered = candidates.toList()
     ..sort(_compareByActivity);
   final List<InboxItem> result = <InboxItem>[];
-  final List<InboxPostCandidate> directCandidates = <InboxPostCandidate>[];
-  final List<InboxPostCandidate> directBundle = <InboxPostCandidate>[];
-
-  void flushBundle() {
-    if (directBundle.isEmpty) return;
-    final InboxPostCandidate first = directBundle.first;
-    result.add(
-      DirectMessageBundleInboxItem(
-        channelId: first.post.channelId,
-        authorId: first.post.author.id,
-        automationClass: first.automationClass,
-        messages: directBundle,
-      ),
-    );
-    directBundle.clear();
-  }
+  final Map<
+    ({String channelId, String authorId, InboxAutomationClass automationClass}),
+    List<InboxPostCandidate>
+  >
+  directMessages =
+      <
+        ({
+          String channelId,
+          String authorId,
+          InboxAutomationClass automationClass,
+        }),
+        List<InboxPostCandidate>
+      >{};
 
   for (final CanonicalInboxCandidate candidate in ordered) {
     switch (candidate) {
       case CanonicalDirectPostCandidate(:final InboxPostCandidate candidate):
-        directCandidates.add(candidate);
+        final key = (
+          channelId: candidate.post.channelId,
+          authorId: candidate.post.author.id,
+          automationClass: candidate.automationClass,
+        );
+        directMessages
+            .putIfAbsent(key, () => <InboxPostCandidate>[])
+            .add(candidate);
       case CanonicalThreadCandidate(:final candidate):
         result.add(
           ThreadInboxItem(
@@ -49,15 +52,16 @@ List<InboxItem> groupDirectMessages(
         result.add(ChannelPostInboxItem(candidate: candidate));
     }
   }
-  for (final InboxPostCandidate candidate in directCandidates) {
-    if (directBundle.isEmpty || _canAppend(directBundle.last, candidate)) {
-      directBundle.add(candidate);
-    } else {
-      flushBundle();
-      directBundle.add(candidate);
-    }
+  for (final MapEntry(:key, :value) in directMessages.entries) {
+    result.add(
+      DirectMessageBundleInboxItem(
+        channelId: key.channelId,
+        authorId: key.authorId,
+        automationClass: key.automationClass,
+        messages: value,
+      ),
+    );
   }
-  flushBundle();
   result.sort((InboxItem first, InboxItem second) {
     final int byActivity = first.lastActivityAt.compareTo(
       second.lastActivityAt,
@@ -65,16 +69,6 @@ List<InboxItem> groupDirectMessages(
     return byActivity != 0 ? byActivity : first.key.compareTo(second.key);
   });
   return List<InboxItem>.unmodifiable(result);
-}
-
-bool _canAppend(InboxPostCandidate previous, InboxPostCandidate next) {
-  if (previous.post.channelId != next.post.channelId ||
-      previous.post.author.id != next.post.author.id ||
-      previous.automationClass != next.automationClass) {
-    return false;
-  }
-  final Duration gap = next.post.sentAt.difference(previous.post.sentAt);
-  return gap >= Duration.zero && gap <= directMessageBundleGap;
 }
 
 int _compareByActivity(

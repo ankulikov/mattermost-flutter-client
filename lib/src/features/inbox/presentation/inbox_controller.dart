@@ -250,8 +250,20 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     }
   }
 
-  Future<bool> postpone(InboxItem item) => _move(item, toPostponed: true);
+  Future<bool> postpone(InboxItem item) =>
+      _move(_latestDirectMessage(item), toPostponed: true);
   Future<bool> remove(InboxItem item) => _move(item, toPostponed: false);
+
+  InboxItem _latestDirectMessage(InboxItem item) => switch (item) {
+    DirectMessageBundleInboxItem(messages: final messages) =>
+      DirectMessageBundleInboxItem(
+        channelId: item.channelId,
+        authorId: item.authorId,
+        automationClass: item.automationClass,
+        messages: <InboxPostCandidate>[messages.last],
+      ),
+    _ => item,
+  };
 
   /// Removes an unfollowed CRT thread from both volatile Inbox queues.
   void removeUnfollowedThread(String rootPostId) {

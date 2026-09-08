@@ -13,6 +13,7 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candid
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_thread_host.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
+import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
@@ -46,7 +47,7 @@ void main() {
       expect(target.channel, same(publicChannel));
     });
 
-    test('opens a direct-message bundle at its latest message thread', () {
+    test('opens a single direct message at its root thread', () {
       final InboxThreadTarget target = InboxThreadTarget.fromItem(
         DirectMessageBundleInboxItem(
           channelId: directChannel.id,
@@ -54,12 +55,8 @@ void main() {
           automationClass: InboxAutomationClass.person,
           messages: <InboxPostCandidate>[
             _candidate(
-              _post(id: 'first', channelId: directChannel.id),
-              directChannel,
-            ),
-            _candidate(
               _post(
-                id: 'latest-reply',
+                id: 'direct-reply',
                 channelId: directChannel.id,
                 rootId: 'direct-root',
               ),
@@ -70,7 +67,31 @@ void main() {
       );
 
       expect(target.rootPostId, 'direct-root');
-      expect(target.channel.kind, ChannelKind.directMessage);
+      expect(target.channel, same(directChannel));
+    });
+
+    test('rejects a multi-message bundle as a thread target', () {
+      final DirectMessageBundleInboxItem item = DirectMessageBundleInboxItem(
+        channelId: directChannel.id,
+        authorId: 'ada',
+        automationClass: InboxAutomationClass.person,
+        messages: <InboxPostCandidate>[
+          _candidate(
+            _post(id: 'first', channelId: directChannel.id),
+            directChannel,
+          ),
+          _candidate(
+            _post(
+              id: 'latest-reply',
+              channelId: directChannel.id,
+              rootId: 'direct-root',
+            ),
+            directChannel,
+          ),
+        ],
+      );
+
+      expect(() => InboxThreadTarget.fromItem(item), throwsArgumentError);
     });
 
     test('preserves unread context for a followed thread', () {
@@ -113,6 +134,7 @@ void main() {
           home: InboxThreadHost(
             showAdjacentThread: true,
             background: const Center(child: Text('Current workspace')),
+            onOpenChannel: (_) {},
             inboxBuilder: (_, ValueChanged<InboxItem> onOpenItem) => Center(
               child: FilledButton(
                 onPressed: () => onOpenItem(item),
@@ -150,16 +172,11 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final InboxItem item = DirectMessageBundleInboxItem(
-      channelId: directChannel.id,
-      authorId: 'ada',
-      automationClass: InboxAutomationClass.person,
-      messages: <InboxPostCandidate>[
-        _candidate(
-          _post(id: 'direct-message', channelId: directChannel.id),
-          directChannel,
-        ),
-      ],
+    final InboxItem item = ChannelPostInboxItem(
+      candidate: _candidate(
+        _post(id: 'channel-message', channelId: publicChannel.id),
+        publicChannel,
+      ),
     );
     late final GoRouter router;
     router = GoRouter(
@@ -169,6 +186,7 @@ void main() {
           builder: (_, _) => InboxThreadHost(
             showAdjacentThread: false,
             background: const Text('Current workspace'),
+            onOpenChannel: (_) {},
             inboxBuilder: (_, ValueChanged<InboxItem> onOpenItem) => Center(
               child: FilledButton(
                 onPressed: () => onOpenItem(item),
@@ -199,14 +217,109 @@ void main() {
     await tester.tap(find.text('Direct message'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Route thread direct-message'), findsOneWidget);
+    expect(find.text('Route thread channel-message'), findsOneWidget);
     expect(find.text('Direct message'), findsNothing);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     expect(find.text('Direct message'), findsOneWidget);
-    expect(find.text('Route thread direct-message'), findsNothing);
+    expect(find.text('Route thread channel-message'), findsNothing);
+  });
+
+  testWidgets('opens a multi-message bundle as a chat', (
+    WidgetTester tester,
+  ) async {
+    SidebarChannel? openedChannel;
+    final InboxItem item = DirectMessageBundleInboxItem(
+      channelId: directChannel.id,
+      authorId: 'ada',
+      automationClass: InboxAutomationClass.person,
+      messages: <InboxPostCandidate>[
+        _candidate(
+          _post(id: 'direct-message-1', channelId: directChannel.id),
+          directChannel,
+        ),
+        _candidate(
+          _post(id: 'direct-message-2', channelId: directChannel.id),
+          directChannel,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_NoopAuthRepository()),
+        ],
+        child: MaterialApp(
+          home: InboxThreadHost(
+            showAdjacentThread: true,
+            background: const Text('Current workspace'),
+            onOpenChannel: (SidebarChannel channel) => openedChannel = channel,
+            inboxBuilder: (_, ValueChanged<InboxItem> onOpenItem) => Center(
+              child: FilledButton(
+                onPressed: () => onOpenItem(item),
+                child: const Text('Direct message'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Direct message'));
+    await tester.pump();
+
+    expect(openedChannel, same(directChannel));
+    expect(find.byType(ThreadPane), findsNothing);
+  });
+
+  testWidgets('opens a single direct message as a thread', (
+    WidgetTester tester,
+  ) async {
+    SidebarChannel? openedChannel;
+    final InboxItem item = DirectMessageBundleInboxItem(
+      channelId: directChannel.id,
+      authorId: 'ada',
+      automationClass: InboxAutomationClass.person,
+      messages: <InboxPostCandidate>[
+        _candidate(
+          _post(id: 'direct-message', channelId: directChannel.id),
+          directChannel,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_NoopAuthRepository()),
+        ],
+        child: MaterialApp(
+          home: InboxThreadHost(
+            showAdjacentThread: true,
+            background: const Text('Current workspace'),
+            onOpenChannel: (SidebarChannel channel) => openedChannel = channel,
+            inboxBuilder: (_, ValueChanged<InboxItem> onOpenItem) => Center(
+              child: FilledButton(
+                onPressed: () => onOpenItem(item),
+                child: const Text('Direct message'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Direct message'));
+    await tester.pump();
+
+    expect(openedChannel, isNull);
+    expect(
+      find.byKey(const ValueKey<String>('inbox-thread-direct-message')),
+      findsOneWidget,
+    );
   });
 }
 

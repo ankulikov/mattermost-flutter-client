@@ -233,7 +233,7 @@ void main() {
     },
   );
 
-  test('postponing one message retains the rest of its DM bundle', () async {
+  test('postponing a DM bundle moves only its latest message', () async {
     final InboxPostCandidate first = _candidate('first');
     final InboxPostCandidate second = _candidate('second');
     final DirectMessageBundleInboxItem bundle = DirectMessageBundleInboxItem(
@@ -247,23 +247,19 @@ void main() {
         () async => InboxSnapshot(newItems: <InboxItem>[bundle]),
       ],
     );
-    final provider = _provider(repository);
+    final _RecordingPostponedRepository postponed =
+        _RecordingPostponedRepository();
+    final provider = _provider(repository, postponed: postponed);
     final ProviderContainer container = ProviderContainer()
       ..listen(provider, (_, _) {});
     addTearDown(container.dispose);
     await container.read(provider.future);
-    final DirectMessageBundleInboxItem selected = DirectMessageBundleInboxItem(
-      channelId: 'channel',
-      authorId: 'other',
-      automationClass: InboxAutomationClass.person,
-      messages: <InboxPostCandidate>[second],
-    );
-
-    expect(await container.read(provider.notifier).postpone(selected), isTrue);
+    expect(await container.read(provider.notifier).postpone(bundle), isTrue);
 
     final InboxSnapshot snapshot = container.read(provider).value!.snapshot;
     expect(snapshot.newItems.single.postIds, <String>['first']);
     expect(snapshot.postponedItems.single.postIds, <String>['second']);
+    expect(postponed.saved.single.postId, 'second');
   });
 }
 
@@ -286,8 +282,9 @@ InboxPostCandidate _candidate(String id) => InboxPostCandidate(
 );
 
 AsyncNotifierProvider<InboxController, InboxViewState> _provider(
-  InboxRepository repository,
-) {
+  InboxRepository repository, {
+  PostponedRepository postponed = const _PostponedRepository(),
+}) {
   final Provider<AuthSession?> sessionProvider = Provider<AuthSession?>(
     (Ref ref) => AuthSession(
       serverUrl: Uri(scheme: 'https', host: 'chat.example.test'),
@@ -299,7 +296,7 @@ AsyncNotifierProvider<InboxController, InboxViewState> _provider(
     (Ref ref) => repository,
   );
   final Provider<PostponedRepository> postponedProvider =
-      Provider<PostponedRepository>((Ref ref) => const _PostponedRepository());
+      Provider<PostponedRepository>((Ref ref) => postponed);
   return AsyncNotifierProvider.autoDispose<InboxController, InboxViewState>(
     () => InboxController(sessionProvider, inboxProvider, postponedProvider),
   );
@@ -362,4 +359,27 @@ final class _PostponedRepository extends PostponedRepository {
     required AuthSession session,
     required List<PostponedReference> references,
   }) async {}
+}
+
+final class _RecordingPostponedRepository extends PostponedRepository {
+  List<PostponedReference> saved = <PostponedReference>[];
+
+  @override
+  Future<PostponedReferencesSnapshot> load({
+    required AuthSession session,
+  }) async => PostponedReferencesSnapshot(const <PostponedReference>[]);
+
+  @override
+  Future<void> remove({
+    required AuthSession session,
+    required List<PostponedReference> references,
+  }) async {}
+
+  @override
+  Future<void> save({
+    required AuthSession session,
+    required List<PostponedReference> references,
+  }) async {
+    saved = List<PostponedReference>.of(references);
+  }
 }

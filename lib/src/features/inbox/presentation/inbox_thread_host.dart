@@ -23,11 +23,11 @@ final class InboxThreadTarget {
     this.positionAtEndWhenRead = false,
   });
 
-  /// Resolves every Inbox item to a thread, including direct and group posts.
+  /// Resolves thread-capable Inbox items to the root thread they open.
   ///
-  /// A reply opens its root thread. A direct-message bundle opens the thread
-  /// containing its most recent message, which is the message represented by
-  /// the bundle's latest activity.
+  /// A single direct message behaves like any other post and opens its thread.
+  /// Multi-message bundles open their chat through [InboxThreadHost] and are
+  /// deliberately rejected here.
   factory InboxThreadTarget.fromItem(InboxItem item) {
     return switch (item) {
       ThreadInboxItem(
@@ -47,12 +47,17 @@ final class InboxThreadTarget {
         channel: candidate.channel,
         teamId: candidate.channel.teamId,
       ),
-      DirectMessageBundleInboxItem(messages: final messages) =>
+      DirectMessageBundleInboxItem(messages: [final message]) =>
         InboxThreadTarget(
-          rootPostId: _rootPostId(messages.last.post),
-          channel: messages.last.channel,
-          teamId: messages.last.channel.teamId,
+          rootPostId: _rootPostId(message.post),
+          channel: message.channel,
+          teamId: message.channel.teamId,
         ),
+      DirectMessageBundleInboxItem() => throw ArgumentError.value(
+        item,
+        'item',
+        'Multi-message bundles open their channel, not a thread',
+      ),
     };
   }
 
@@ -77,6 +82,7 @@ class InboxThreadHost extends ConsumerStatefulWidget {
     required this.inboxBuilder,
     required this.background,
     required this.showAdjacentThread,
+    required this.onOpenChannel,
     this.onSelectChannel,
     this.inboxWidth = 380,
     super.key,
@@ -85,6 +91,7 @@ class InboxThreadHost extends ConsumerStatefulWidget {
   final InboxPaneBuilder inboxBuilder;
   final Widget background;
   final bool showAdjacentThread;
+  final ValueChanged<SidebarChannel> onOpenChannel;
   final ValueChanged<String>? onSelectChannel;
   final double inboxWidth;
 
@@ -103,6 +110,12 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
       ),
     );
     final Widget inbox = widget.inboxBuilder(context, (InboxItem item) {
+      if (item case DirectMessageBundleInboxItem(
+        messages: final messages,
+      ) when messages.length >= 2) {
+        widget.onOpenChannel(messages.last.channel);
+        return;
+      }
       final InboxThreadTarget target = InboxThreadTarget.fromItem(item);
       if (widget.showAdjacentThread) {
         setState(() => _selectedTarget = target);

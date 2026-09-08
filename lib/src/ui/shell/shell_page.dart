@@ -127,6 +127,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           selectedChannel: selectedChannel,
           threadsSelected: threadsSelected,
           sidebar: sidebar,
+          onOpenChannel: _openInboxChannel,
           onSelectChannel: _selectChannelNamed,
         );
         if (expanded) {
@@ -162,6 +163,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       selectedChannel: selectedChannel,
       threadsSelected: false,
       sidebar: sidebar,
+      onOpenChannel: _openInboxChannel,
       onSelectChannel: _selectChannelNamed,
     );
     return Scaffold(
@@ -185,6 +187,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                           ) => InboxPage(onOpenItem: onOpenItem),
                       background: mainContent,
                       showAdjacentThread: true,
+                      onOpenChannel: _openInboxChannel,
                       onSelectChannel: _selectChannelNamed,
                     )
                   : Row(
@@ -221,6 +224,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         selectedChannel: selectedChannel,
         threadsSelected: false,
         sidebar: sidebar,
+        onOpenChannel: _openInboxChannel,
         onSelectChannel: _selectChannelNamed,
         onBackToChannels: _showChannelsDestination,
       );
@@ -230,6 +234,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         selectedChannel: selectedChannel,
         threadsSelected: true,
         sidebar: sidebar,
+        onOpenChannel: _openInboxChannel,
         onSelectChannel: _selectChannelNamed,
       );
     } else {
@@ -316,6 +321,12 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     if (!_showCompactChannel) {
       setState(() => _showCompactChannel = true);
     }
+  }
+
+  void _openInboxChannel(SidebarChannel channel) {
+    ref.read(threadsDestinationProvider.notifier).clear();
+    ref.read(selectedChannelProvider.notifier).select(channel);
+    _showSelectedChannelOnCompact();
   }
 
   void _selectChannelNamed(String name) {
@@ -440,6 +451,7 @@ class _MainContent extends StatelessWidget {
     required this.selectedChannel,
     required this.threadsSelected,
     required this.sidebar,
+    required this.onOpenChannel,
     required this.onSelectChannel,
     this.onBackToChannels,
   });
@@ -448,6 +460,7 @@ class _MainContent extends StatelessWidget {
   final SidebarChannel? selectedChannel;
   final bool threadsSelected;
   final ChannelSidebarSnapshot? sidebar;
+  final ValueChanged<SidebarChannel> onOpenChannel;
   final ValueChanged<String> onSelectChannel;
   final VoidCallback? onBackToChannels;
 
@@ -464,6 +477,7 @@ class _MainContent extends StatelessWidget {
                   InboxPage(onOpenItem: onOpenItem),
           background: const SizedBox.shrink(),
           showAdjacentThread: false,
+          onOpenChannel: onOpenChannel,
           onSelectChannel: onSelectChannel,
         );
       }

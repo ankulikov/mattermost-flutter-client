@@ -207,7 +207,10 @@ class _InboxList extends StatelessWidget {
           for (final InboxSection section in InboxSection.values)
             section: <InboxItem>[],
         };
-    for (final InboxItem item in items.expand(_presentationItems)) {
+    final Iterable<InboxItem> presentationItems = isPostponed
+        ? items.expand(_postponedPresentationItems)
+        : items;
+    for (final InboxItem item in presentationItems) {
       sections[classifyInboxSection(item)]!.add(item);
     }
     return ListView(
@@ -233,7 +236,7 @@ class _InboxList extends StatelessWidget {
     );
   }
 
-  Iterable<InboxItem> _presentationItems(InboxItem item) sync* {
+  Iterable<InboxItem> _postponedPresentationItems(InboxItem item) sync* {
     if (item case DirectMessageBundleInboxItem(:final messages)) {
       for (final message in messages) {
         yield DirectMessageBundleInboxItem(
