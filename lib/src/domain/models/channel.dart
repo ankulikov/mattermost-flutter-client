@@ -17,6 +17,7 @@ final class SidebarChannel {
     required this.displayName,
     required this.kind,
     this.lastActivityAt = 0,
+    this.profileImage,
   });
 
   final String id;
@@ -25,6 +26,7 @@ final class SidebarChannel {
   final String displayName;
   final ChannelKind kind;
   final int lastActivityAt;
+  final SidebarProfileImage? profileImage;
 
   bool get isDialog =>
       kind == ChannelKind.directMessage || kind == ChannelKind.groupMessage;
@@ -36,7 +38,36 @@ final class SidebarChannel {
     displayName: value,
     kind: kind,
     lastActivityAt: lastActivityAt,
+    profileImage: profileImage,
   );
+
+  SidebarChannel withDirectUser({
+    required String displayName,
+    required String userId,
+    required int profileImageUpdatedAt,
+  }) => SidebarChannel(
+    id: id,
+    teamId: teamId,
+    name: name,
+    displayName: displayName,
+    kind: kind,
+    lastActivityAt: lastActivityAt,
+    profileImage: SidebarProfileImage(
+      userId: userId,
+      updatedAt: profileImageUpdatedAt,
+    ),
+  );
+}
+
+/// Versioned reference to a direct-message participant's profile image.
+///
+/// Image bytes remain owned by the user repository. A sidebar snapshot carries
+/// only the data needed to start an asynchronous image request.
+final class SidebarProfileImage {
+  const SidebarProfileImage({required this.userId, required this.updatedAt});
+
+  final String userId;
+  final int updatedAt;
 }
 
 final class SidebarSection {

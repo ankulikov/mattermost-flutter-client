@@ -7,6 +7,7 @@ import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
+import 'package:mattermost_flutter/src/ui/channels/widgets/channel_avatar.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class ChannelSidebar extends ConsumerWidget {
@@ -366,7 +367,7 @@ class _ChannelTile extends StatelessWidget {
       selected: selected,
       selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      leading: Icon(_iconFor(channel.kind), size: 18),
+      leading: ChannelAvatar(channel: channel),
       title: Text(
         channel.displayName,
         maxLines: 1,
@@ -375,11 +376,4 @@ class _ChannelTile extends StatelessWidget {
       onTap: onTap,
     ),
   );
-
-  IconData _iconFor(ChannelKind kind) => switch (kind) {
-    ChannelKind.publicChannel => Icons.tag,
-    ChannelKind.privateChannel => Icons.lock_outline,
-    ChannelKind.directMessage => Icons.person_outline,
-    ChannelKind.groupMessage => Icons.group_outlined,
-  };
 }

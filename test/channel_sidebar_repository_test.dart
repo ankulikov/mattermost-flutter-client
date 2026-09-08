@@ -34,6 +34,14 @@ void main() {
         snapshot.sections.first.channels.first.displayName,
         'Ada Lovelace',
       );
+      expect(
+        snapshot.sections.first.channels.first.profileImage?.userId,
+        'ada',
+      );
+      expect(
+        snapshot.sections.first.channels.first.profileImage?.updatedAt,
+        99,
+      );
     },
   );
 }

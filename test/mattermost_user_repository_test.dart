@@ -144,6 +144,30 @@ void main() {
       '|user:ada|updated:42',
     );
   });
+
+  test('reuses versioned avatar bytes without another API request', () async {
+    final _UserApi api = _UserApi();
+    final _RecordingAvatarCache avatarCache = _RecordingAvatarCache(
+      cachedBytes: Uint8List.fromList(<int>[9, 8, 7]),
+    );
+    final MattermostUserRepository repository = MattermostUserRepository(
+      api: api,
+      cache: cache,
+      avatarCache: avatarCache,
+      accountScopeId: 'scope',
+      now: () => now,
+    );
+
+    final avatar = await repository.loadAvatar(
+      userId: 'ada',
+      profileImageUpdatedAt: 42,
+    );
+
+    expect(avatar.bytes, <int>[9, 8, 7]);
+    expect(avatarCache.readKey, 'avatar|account:scope|user:ada|updated:42');
+    expect(api.requestedAvatar, isNull);
+    expect(avatarCache.writtenKey, isNull);
+  });
 }
 
 final class _NoopAvatarCache implements UserAvatarCache {
@@ -164,10 +188,17 @@ final class _NoopAvatarCache implements UserAvatarCache {
 }
 
 final class _RecordingAvatarCache implements UserAvatarCache {
+  _RecordingAvatarCache({this.cachedBytes});
+
+  final Uint8List? cachedBytes;
+  String? readKey;
   String? writtenKey;
 
   @override
-  Future<Uint8List?> read(String key) async => null;
+  Future<Uint8List?> read(String key) async {
+    readKey = key;
+    return cachedBytes;
+  }
 
   @override
   Future<void> remove(String key) async {}

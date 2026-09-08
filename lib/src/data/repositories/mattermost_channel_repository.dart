@@ -80,8 +80,13 @@ final class MattermostChannelRepository implements ChannelRepository {
         .where((SidebarChannel item) => item.kind == ChannelKind.groupMessage)
         .toList(growable: false);
     final Set<String> directUserIds = directChannels
-        .expand((SidebarChannel item) => item.name.split('__'))
-        .where((String id) => id.isNotEmpty && id != currentUserId)
+        .map(
+          (SidebarChannel item) => _directParticipantId(
+            channelName: item.name,
+            currentUserId: currentUserId,
+          ),
+        )
+        .whereType<String>()
         .toSet();
     final Future<List<UserSummary>> directUsersFuture = users.getUsers(
       directUserIds.toList(growable: false),
@@ -94,20 +99,26 @@ final class MattermostChannelRepository implements ChannelRepository {
         );
     final List<UserSummary> directUsers = await directUsersFuture;
     final MattermostGroupChannelUsersDto groupUsers = await groupUsersFuture;
-    final Map<String, String> directNames = <String, String>{
+    final Map<String, UserSummary> directUsersById = <String, UserSummary>{
       for (final UserSummary user in directUsers)
-        if (user.id.isNotEmpty) user.id: _userDisplayName(user),
+        if (user.id.isNotEmpty) user.id: user,
     };
 
     return channels
         .map((SidebarChannel channel) {
           if (channel.kind == ChannelKind.directMessage) {
-            final String? otherId = channel.name
-                .split('__')
-                .where((String id) => id != currentUserId)
-                .firstOrNull;
-            final String? name = directNames[otherId];
-            return name == null ? channel : channel.withDisplayName(name);
+            final String? participantId = _directParticipantId(
+              channelName: channel.name,
+              currentUserId: currentUserId,
+            );
+            final UserSummary? participant = directUsersById[participantId];
+            return participant == null
+                ? channel
+                : channel.withDirectUser(
+                    displayName: _userDisplayName(participant),
+                    userId: participant.id,
+                    profileImageUpdatedAt: participant.profileImageUpdatedAt,
+                  );
           }
           if (channel.kind == ChannelKind.groupMessage) {
             final List<MattermostUserDto> rawGroupUsers =
@@ -127,3 +138,17 @@ final class MattermostChannelRepository implements ChannelRepository {
 }
 
 String _userDisplayName(UserSummary user) => user.fullName;
+
+String? _directParticipantId({
+  required String channelName,
+  required String currentUserId,
+}) {
+  final List<String> participantIds = channelName
+      .split('__')
+      .where((String id) => id.isNotEmpty)
+      .toList(growable: false);
+  for (final String id in participantIds) {
+    if (id != currentUserId) return id;
+  }
+  return participantIds.contains(currentUserId) ? currentUserId : null;
+}

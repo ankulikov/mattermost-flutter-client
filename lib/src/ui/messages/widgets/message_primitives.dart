@@ -6,11 +6,10 @@ import 'package:intl/intl.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
-import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
-import 'package:mattermost_flutter/src/ui/core/widgets/avatar_initials.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:mattermost_flutter/src/ui/users/widgets/user_avatar_image.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
 class MessageAvatar extends ConsumerWidget {
@@ -21,47 +20,12 @@ class MessageAvatar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<UserAvatar?> avatar = ref.watch(
-      userAvatarProvider((
-        userId: author.id,
-        profileImageUpdatedAt: author.profileImageUpdatedAt,
-      )),
-    );
-    final Widget fallback = CircleAvatar(
-      radius: radius,
-      backgroundColor: _avatarColor(author.id),
-      foregroundColor: Colors.white,
-      child: Text(
-        avatarInitials(author.displayName),
-        style: Theme.of(
-          context,
-        ).textTheme.labelMedium?.copyWith(color: Colors.white),
-      ),
-    );
     final double diameter = radius * 2;
-    final int cacheWidth = (diameter * MediaQuery.devicePixelRatioOf(context))
-        .ceil();
-    final Widget image = SizedBox.square(
-      dimension: diameter,
-      child: ClipOval(
-        child: avatar.when(
-          data: (UserAvatar? value) => value == null
-              ? fallback
-              : Image.memory(
-                  value.bytes,
-                  fit: BoxFit.cover,
-                  cacheWidth: cacheWidth,
-                  gaplessPlayback: true,
-                  excludeFromSemantics: true,
-                  errorBuilder:
-                      (BuildContext context, Object _, StackTrace? _) {
-                        return fallback;
-                      },
-                ),
-          loading: () => fallback,
-          error: (Object _, StackTrace _) => fallback,
-        ),
-      ),
+    final Widget image = UserAvatarImage(
+      userId: author.id,
+      displayName: author.displayName,
+      profileImageUpdatedAt: author.profileImageUpdatedAt,
+      radius: radius,
     );
     final double tapTarget = diameter < 44 ? 44 : diameter;
     return Semantics(
@@ -86,17 +50,6 @@ class MessageAvatar extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  static Color _avatarColor(String id) {
-    const List<Color> colors = <Color>[
-      Color(0xff3f51b5),
-      Color(0xff00796b),
-      Color(0xffad4b00),
-      Color(0xff7b1fa2),
-    ];
-    final int sum = id.codeUnits.fold(0, (int value, int unit) => value + unit);
-    return colors[sum % colors.length];
   }
 }
 
