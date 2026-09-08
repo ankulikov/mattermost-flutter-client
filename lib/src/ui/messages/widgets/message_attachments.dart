@@ -361,6 +361,7 @@ class _AttachmentImageViewerState extends ConsumerState<AttachmentImageViewer> {
             appBar: AppBar(
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
+              systemOverlayStyle: SystemUiOverlayStyle.light,
               title: Text(current.name, overflow: TextOverflow.ellipsis),
               centerTitle: false,
               actions: <Widget>[

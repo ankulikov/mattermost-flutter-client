@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -92,6 +92,10 @@ void main() {
     expect(
       find.byKey(const ValueKey('attachment-image-viewer')),
       findsOneWidget,
+    );
+    expect(
+      tester.widget<AppBar>(find.byType(AppBar)).systemOverlayStyle,
+      SystemUiOverlayStyle.light,
     );
     expect(find.text('2 of 2'), findsOneWidget);
 
