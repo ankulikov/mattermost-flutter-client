@@ -52,23 +52,6 @@ int? emojiSearchMatchRank(String candidate, String normalizedTerm) {
   final String value = candidate.toLowerCase().replaceAll('-', '_');
   if (value == normalizedTerm) return 0;
   if (value.startsWith(normalizedTerm)) return 1;
-  if (value.split('_').any((String part) => part.startsWith(normalizedTerm))) {
-    return 2;
-  }
   if (value.contains(normalizedTerm)) return 3;
-  if (normalizedTerm.length >= 4 && _isSubsequence(normalizedTerm, value)) {
-    return 4;
-  }
   return null;
-}
-
-bool _isSubsequence(String query, String candidate) {
-  var queryIndex = 0;
-  for (var index = 0; index < candidate.length; index += 1) {
-    if (candidate.codeUnitAt(index) == query.codeUnitAt(queryIndex)) {
-      queryIndex += 1;
-      if (queryIndex == query.length) return true;
-    }
-  }
-  return false;
 }

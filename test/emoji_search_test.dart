@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/policies/emoji_search.dart';
@@ -32,6 +33,40 @@ void main() {
       expect(results.map((emoji) => emoji.name).toSet(), hasLength(5));
     },
   );
+
+  test('does not match a non-contiguous search term', () {
+    final results = searchSystemEmojis(mattermostSystemEmojiCatalog, 'haro');
+
+    expect(
+      results.map((emoji) => emoji.name),
+      isNot(contains('the_horns_dark_skin_tone')),
+    );
+    expect(emojiSearchMatchRank('the_horns_dark_skin_tone', 'haro'), isNull);
+  });
+
+  test('ranks a name prefix ahead of an in-name substring', () {
+    const List<SystemEmojiDefinition> catalog = <SystemEmojiDefinition>[
+      SystemEmojiDefinition(
+        name: 'birthday_party',
+        unicode: '🎂',
+        category: 'activities',
+        aliases: <String>['birthday_party'],
+      ),
+      SystemEmojiDefinition(
+        name: 'party_popper',
+        unicode: '🎉',
+        category: 'activities',
+        aliases: <String>['party_popper'],
+      ),
+    ];
+
+    final results = searchSystemEmojis(catalog, 'party');
+
+    expect(results.map((emoji) => emoji.name), <String>[
+      'party_popper',
+      'birthday_party',
+    ]);
+  });
 
   test('optimistic system reactions use their unicode glyph', () {
     final Post post = Post(
