@@ -132,10 +132,16 @@ class _MessageComposerState extends State<MessageComposer> {
   String _emojiQueryKey(EmojiAutocompleteQuery query) =>
       '${query.range.start}:${query.term}';
 
-  Future<void> _submit() async {
+  Future<void> _submit({bool finalizeComposing = false}) async {
     if (!_canSend) return;
     final TextEditingValue value = _controller.value;
-    if (value.composing.isValid && !value.composing.isCollapsed) return;
+    if (value.composing.isValid && !value.composing.isCollapsed) {
+      if (!finalizeComposing) return;
+      // Android keyboards such as Gboard keep the word at the caret in a
+      // composing region for autocorrect. An explicit send action finalizes
+      // that word; it must not silently discard the tap while the IME is open.
+      _controller.clearComposing();
+    }
 
     final String message = _controller.messageText;
     final String draft = _controller.text;
@@ -154,13 +160,14 @@ class _MessageComposerState extends State<MessageComposer> {
       if (_controller.text == draft) _controller.clear();
       _pendingPostId = null;
       _pendingDraft = null;
+      _focusNode.unfocus();
     } on Object {
       if (!mounted) return;
       setState(() => _failed = true);
+      _focusNode.requestFocus();
     } finally {
       if (mounted) {
         setState(() => _sending = false);
-        _focusNode.requestFocus();
       }
     }
   }
@@ -442,7 +449,8 @@ class _MessageComposerState extends State<MessageComposer> {
                           ),
                           tooltip: MessageComposerStrings.send,
                           onPressed: _canSend
-                              ? () => unawaited(_submit())
+                              ? () =>
+                                    unawaited(_submit(finalizeComposing: true))
                               : null,
                           icon: _sending
                               ? const SizedBox.square(

@@ -724,6 +724,49 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('keeps the compact thread composer above the keyboard', (
+    WidgetTester tester,
+  ) async {
+    const double keyboardHeight = 320;
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetViewInsets);
+    addTearDown(() => appRouter.go('/'));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          postRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
+        ],
+        child: const MattermostApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('2 replies'));
+    await tester.pumpAndSettle();
+
+    tester.view.viewInsets = FakeViewPadding(
+      bottom: keyboardHeight * tester.view.devicePixelRatio,
+    );
+    await tester.pumpAndSettle();
+
+    final Finder composer = find.byKey(
+      const ValueKey<String>('message-composer-thread-town-square-post'),
+    );
+    expect(
+      tester.getBottomRight(composer).dy,
+      lessThanOrEqualTo(844 - keyboardHeight),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('auto-pages when replies leave a short root list unscrollable', (
     WidgetTester tester,
   ) async {

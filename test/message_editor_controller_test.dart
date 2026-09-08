@@ -15,7 +15,7 @@ void main() {
       expect(result?.range, const TextRange(start: 4, end: 7));
     });
 
-    test('ignores completed, selected, and composing text', () {
+    test('ignores completed and selected text', () {
       expect(_query(':office:'), isNull);
       expect(
         findEmojiAutocompleteQuery(
@@ -26,16 +26,19 @@ void main() {
         ),
         isNull,
       );
-      expect(
-        findEmojiAutocompleteQuery(
-          const TextEditingValue(
-            text: ':of',
-            selection: TextSelection.collapsed(offset: 3),
-            composing: TextRange(start: 1, end: 3),
-          ),
+    });
+
+    test('accepts a shortcode inside an Android composing region', () {
+      final EmojiAutocompleteQuery? result = findEmojiAutocompleteQuery(
+        const TextEditingValue(
+          text: 'Say :of',
+          selection: TextSelection.collapsed(offset: 7),
+          composing: TextRange(start: 5, end: 7),
         ),
-        isNull,
       );
+
+      expect(result?.term, 'of');
+      expect(result?.range, const TextRange(start: 4, end: 7));
     });
 
     test('replaces the whole shortcode when the caret is inside it', () {

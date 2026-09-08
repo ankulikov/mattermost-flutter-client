@@ -45,6 +45,7 @@ void main() {
 
     expect(find.text('Keep this draft'), findsOneWidget);
     expect(find.text(MessageComposerStrings.sendFailed), findsOneWidget);
+    expect(tester.widget<TextField>(input).focusNode?.hasFocus, isTrue);
 
     await tester.tap(send);
     await tester.pump();
@@ -53,6 +54,7 @@ void main() {
     expect(pendingIds[1], pendingIds[0]);
     expect(find.text('Keep this draft'), findsNothing);
     expect(find.text(MessageComposerStrings.sendFailed), findsNothing);
+    expect(tester.widget<TextField>(input).focusNode?.hasFocus, isFalse);
   });
 
   testWidgets(
@@ -104,6 +106,58 @@ void main() {
       expect(find.text('Send with Enter'), findsNothing);
     },
   );
+
+  testWidgets('send button finalizes an active Android composing region', (
+    WidgetTester tester,
+  ) async {
+    final Completer<void> completion = Completer<void>();
+    String? submitted;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageComposer(
+            destinationId: 'android-composing',
+            placeholder: 'Message channel',
+            onSubmit: (String message, String pendingPostId) {
+              submitted = message;
+              return completion.future;
+            },
+          ),
+        ),
+      ),
+    );
+
+    final Finder input = find.byKey(
+      const ValueKey<String>('message-input-android-composing'),
+    );
+    await tester.enterText(input, 'Send this word');
+    final TextEditingController controller = tester
+        .widget<TextField>(input)
+        .controller!;
+    controller.value = controller.value.copyWith(
+      selection: const TextSelection.collapsed(offset: 14),
+      composing: const TextRange(start: 10, end: 14),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(submitted, isNull);
+    expect(controller.value.composing, const TextRange(start: 10, end: 14));
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('send-message-android-composing')),
+    );
+    await tester.pump();
+
+    expect(submitted, 'Send this word');
+    expect(controller.value.composing, TextRange.empty);
+
+    completion.complete();
+    await tester.pump();
+    expect(tester.widget<TextField>(input).focusNode?.hasFocus, isFalse);
+  });
 
   testWidgets('lays out at compact width with large text', (
     WidgetTester tester,
@@ -178,6 +232,43 @@ void main() {
     await tester.tap(find.byKey(const ValueKey<String>('send-message-emoji')));
     await tester.pump();
     expect(submitted, 'Meet 🏢');
+  });
+
+  testWidgets('keeps suggestions open for Android composing text', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _emojiComposerApp(repository: FakeEmojiRepository()),
+    );
+    final Finder input = find.byKey(
+      const ValueKey<String>('message-input-emoji'),
+    );
+    final TextEditingController controller = tester
+        .widget<TextField>(input)
+        .controller!;
+
+    await tester.enterText(input, ':of');
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey<String>('composer-emoji-suggestions')),
+      findsOneWidget,
+    );
+
+    controller.value = controller.value.copyWith(
+      composing: const TextRange(start: 1, end: 3),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('composer-emoji-suggestions')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey<String>('emoji-office')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('emoji-office')));
+    await tester.pump();
+    expect(controller.text, '🏢');
+    expect(controller.value.composing, TextRange.empty);
   });
 
   testWidgets('mouse press keeps suggestions alive until tap selects emoji', (

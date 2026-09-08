@@ -27,9 +27,10 @@ final GoRouter appRouter = GoRouter(
             state.extra! as ThreadRouteArguments;
         return MaterialPage<void>(
           key: state.pageKey,
-          child: ColoredBox(
-            color: Theme.of(context).colorScheme.surface,
-            child: SafeArea(
+          child: Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            resizeToAvoidBottomInset: true,
+            body: SafeArea(
               child: ThreadPane(
                 key: ValueKey<String>('thread-${arguments.rootPostId}'),
                 rootPostId: arguments.rootPostId,

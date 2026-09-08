@@ -243,7 +243,6 @@ final class MessageEditorController extends TextEditingController {
 EmojiAutocompleteQuery? findEmojiAutocompleteQuery(TextEditingValue value) {
   final TextSelection selection = value.selection;
   if (!selection.isValid || !selection.isCollapsed) return null;
-  if (value.composing.isValid && !value.composing.isCollapsed) return null;
 
   final int caret = selection.extentOffset;
   if (caret < 3 || caret > value.text.length) return null;
