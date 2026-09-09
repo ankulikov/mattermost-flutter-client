@@ -20,6 +20,7 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realti
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
+import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
@@ -279,6 +280,74 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets(
+    'filters loaded channels and dialogs by display name in their categories',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _SearchSidebarRepository(),
+            ),
+          ],
+          child: const MaterialApp(home: BootstrapPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder search = find.byKey(
+        const ValueKey<String>('channel-search-field'),
+      );
+      expect(search, findsOneWidget);
+      expect(tester.getSize(search).height, 48);
+      expect(find.text('Public channels'), findsOneWidget);
+      expect(find.text('Town Square'), findsNothing);
+      expect(find.text('Direct messages'), findsOneWidget);
+      expect(find.text('Ada Lovelace'), findsOneWidget);
+
+      await tester.tap(search);
+      await tester.pump();
+      expect(tester.widget<TextField>(search).focusNode?.hasFocus, isTrue);
+
+      await tester.enterText(search, 'town');
+      await tester.pump();
+      expect(find.text('Public channels'), findsOneWidget);
+      expect(find.text('Town Square'), findsOneWidget);
+      expect(find.text('Direct messages'), findsNothing);
+      expect(find.text('Ada Lovelace'), findsNothing);
+
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pump();
+      expect(tester.widget<TextField>(search).focusNode?.hasFocus, isFalse);
+      expect(find.text('Town Square'), findsOneWidget);
+
+      await tester.tap(find.byTooltip(ChannelSidebarStrings.clearSearch));
+      await tester.pump();
+      expect(find.text('Public channels'), findsOneWidget);
+      expect(find.text('Town Square'), findsNothing);
+      expect(find.text('Direct messages'), findsOneWidget);
+      expect(find.text('Ada Lovelace'), findsOneWidget);
+      expect(find.byTooltip(ChannelSidebarStrings.clearSearch), findsNothing);
+
+      await tester.enterText(search, 'ada');
+      await tester.pump();
+      expect(find.text('Public channels'), findsNothing);
+      expect(find.text('Direct messages'), findsOneWidget);
+      expect(find.text('Ada Lovelace'), findsOneWidget);
+      expect(find.text('Grace Hopper'), findsNothing);
+
+      await tester.enterText(search, 'me__ada');
+      await tester.pump();
+      expect(find.text(ChannelSidebarStrings.noSearchResults), findsOneWidget);
+      expect(find.text('Ada Lovelace'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('shows Inbox tabs and moves an item to Postponed', (
     WidgetTester tester,
@@ -906,6 +975,77 @@ void main() {
     expect(find.byType(ListTile).evaluate().length, lessThan(30));
   });
 
+  testWidgets('clips the selected channel background while scrolling', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _LargeSidebarRepository(),
+          ),
+          postRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder search = find.byKey(
+      const ValueKey<String>('channel-search-field'),
+    );
+    final Rect searchRect = tester.getRect(search);
+
+    await tester.tap(find.text('Channel 0'));
+    await tester.pumpAndSettle();
+
+    final Finder selectionSurface = find.byKey(
+      const ValueKey<String>('channel-selection-surface-channel-0'),
+      skipOffstage: false,
+    );
+    final Material material = tester.widget<Material>(selectionSurface);
+    expect(
+      material.color,
+      Theme.of(tester.element(selectionSurface)).colorScheme.secondaryContainer,
+    );
+    expect(material.clipBehavior, Clip.antiAlias);
+    expect(
+      tester
+          .widget<ListTile>(
+            find.descendant(
+              of: selectionSurface,
+              matching: find.byType(ListTile),
+            ),
+          )
+          .selectedTileColor,
+      isNull,
+    );
+
+    final Finder channelList = find.byKey(
+      const PageStorageKey<String>('channel-sidebar'),
+    );
+    final ScrollableState scrollable = tester.state<ScrollableState>(
+      find.descendant(of: channelList, matching: find.byType(Scrollable)),
+    );
+    final double scrollOffset =
+        tester.getRect(selectionSurface).center.dy - searchRect.center.dy;
+    scrollable.position.jumpTo(scrollOffset);
+    await tester.pump();
+
+    expect(
+      tester.getRect(selectionSurface).center.dy,
+      lessThan(tester.getRect(channelList).top),
+    );
+    expect(tester.widget<ListView>(channelList).clipBehavior, Clip.hardEdge);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('uses compact vertical spacing for channel rows', (
     WidgetTester tester,
   ) async {
@@ -1338,6 +1478,57 @@ final class _SidebarRepository implements ChannelRepository {
                 teamId: '',
                 name: 'me__ada',
                 displayName: 'Ada Lovelace',
+                kind: ChannelKind.directMessage,
+              ),
+            ],
+          ),
+        ],
+      );
+}
+
+final class _SearchSidebarRepository implements ChannelRepository {
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      const ChannelSidebarSnapshot(
+        team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'public',
+            displayName: 'Public channels',
+            collapsed: true,
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'town-square',
+                teamId: 'team-1',
+                name: 'town-square',
+                displayName: 'Town Square',
+                kind: ChannelKind.publicChannel,
+              ),
+            ],
+          ),
+          SidebarSection(
+            id: 'direct',
+            displayName: 'Direct messages',
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'direct-ada',
+                teamId: '',
+                name: 'me__ada',
+                displayName: 'Ada Lovelace',
+                kind: ChannelKind.directMessage,
+              ),
+              SidebarChannel(
+                id: 'direct-grace',
+                teamId: '',
+                name: 'me__grace',
+                displayName: 'Grace Hopper',
                 kind: ChannelKind.directMessage,
               ),
             ],

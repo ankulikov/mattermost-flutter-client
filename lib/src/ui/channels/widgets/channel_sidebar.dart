@@ -76,7 +76,7 @@ class _InitialError extends StatelessWidget {
   );
 }
 
-class _SidebarContent extends StatelessWidget {
+class _SidebarContent extends StatefulWidget {
   const _SidebarContent({
     required this.snapshot,
     required this.isRefreshing,
@@ -92,31 +92,129 @@ class _SidebarContent extends StatelessWidget {
   final VoidCallback? onChannelSelected;
 
   @override
+  State<_SidebarContent> createState() => _SidebarContentState();
+}
+
+class _SidebarContentState extends State<_SidebarContent> {
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  List<SidebarSection> get _filteredSections {
+    final String normalizedQuery = _query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return widget.snapshot.sections;
+
+    return widget.snapshot.sections
+        .map((SidebarSection section) {
+          final List<SidebarChannel> channels = section.channels
+              .where(
+                (SidebarChannel channel) =>
+                    channel.displayName.toLowerCase().contains(normalizedQuery),
+              )
+              .toList(growable: false);
+          return SidebarSection(
+            id: section.id,
+            displayName: section.displayName,
+            channels: channels,
+            collapsed: section.collapsed,
+            muted: section.muted,
+            sorting: section.sorting,
+          );
+        })
+        .where((SidebarSection section) => section.channels.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  bool get _hasSearchQuery => _query.trim().isNotEmpty;
+  bool get _hasSearchText => _query.isNotEmpty;
+
+  @override
   Widget build(BuildContext context) {
+    final List<SidebarSection> filteredSections = _filteredSections;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        _TeamHeader(team: snapshot.team, onRefresh: onRefresh),
-        if (isRefreshing) const LinearProgressIndicator(minHeight: 2),
-        if (refreshFailed)
+        _TeamHeader(team: widget.snapshot.team, onRefresh: widget.onRefresh),
+        if (widget.isRefreshing) const LinearProgressIndicator(minHeight: 2),
+        if (widget.refreshFailed)
           const MaterialBanner(
             content: Text(ChannelSidebarStrings.refreshFailed),
             actions: <Widget>[SizedBox.shrink()],
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: TextField(
+            key: const ValueKey<String>('channel-search-field'),
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            autocorrect: false,
+            textInputAction: TextInputAction.search,
+            onChanged: _updateQuery,
+            onSubmitted: (_) => _searchFocusNode.unfocus(),
+            onTapOutside: (_) => _searchFocusNode.unfocus(),
+            decoration: InputDecoration(
+              isDense: true,
+              constraints: const BoxConstraints(minHeight: 48),
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              hintText: ChannelSidebarStrings.searchHint,
+              prefixIcon: const Icon(Icons.search),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 48,
+                minHeight: 48,
+              ),
+              suffixIcon: _hasSearchText
+                  ? IconButton(
+                      tooltip: ChannelSidebarStrings.clearSearch,
+                      onPressed: _clearSearch,
+                      icon: const Icon(Icons.close),
+                    )
+                  : null,
+              filled: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
         Expanded(
-          child: snapshot.sections.isEmpty
-              ? const Center(child: Text(ChannelSidebarStrings.empty))
+          child: filteredSections.isEmpty
+              ? Center(
+                  child: Text(
+                    _hasSearchQuery
+                        ? ChannelSidebarStrings.noSearchResults
+                        : ChannelSidebarStrings.empty,
+                  ),
+                )
               : RefreshIndicator(
-                  onRefresh: onRefresh,
+                  onRefresh: widget.onRefresh,
                   child: _LazyChannelList(
-                    sections: snapshot.sections,
-                    onChannelSelected: onChannelSelected,
+                    sections: filteredSections,
+                    expandSections: _hasSearchQuery,
+                    onChannelSelected: widget.onChannelSelected,
                   ),
                 ),
         ),
       ],
     );
+  }
+
+  void _updateQuery(String value) {
+    if (value == _query) return;
+    setState(() => _query = value);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _updateQuery('');
   }
 }
 
@@ -145,10 +243,12 @@ class _TeamHeader extends StatelessWidget {
 class _LazyChannelList extends ConsumerStatefulWidget {
   const _LazyChannelList({
     required this.sections,
+    required this.expandSections,
     required this.onChannelSelected,
   });
 
   final List<SidebarSection> sections;
+  final bool expandSections;
   final VoidCallback? onChannelSelected;
 
   @override
@@ -202,9 +302,12 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
 
   @override
   Widget build(BuildContext context) {
+    final Set<String> collapsedSectionIds = widget.expandSections
+        ? const <String>{}
+        : _collapsedSectionIds;
     final _ChannelListIndex index = _ChannelListIndex(
       sections: widget.sections,
-      collapsedSectionIds: _collapsedSectionIds,
+      collapsedSectionIds: collapsedSectionIds,
     );
     return ListView.builder(
       key: const PageStorageKey<String>('channel-sidebar'),
@@ -213,12 +316,14 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
         final _ChannelListRow row = index.rowAt(rowIndex);
         final SidebarSection section = widget.sections[row.sectionIndex];
         if (row.channelIndex == null) {
-          final bool isExpanded = !_collapsedSectionIds.contains(section.id);
+          final bool isExpanded = !collapsedSectionIds.contains(section.id);
           return _ChannelSectionHeader(
             key: ValueKey<String>('channel-section-${section.id}'),
             section: section,
             isExpanded: isExpanded,
-            onTap: () => _toggleSection(section.id),
+            onTap: widget.expandSections
+                ? null
+                : () => _toggleSection(section.id),
           );
         }
         final SidebarChannel channel = section.channels[row.channelIndex!];
@@ -316,11 +421,11 @@ class _ChannelSectionHeader extends StatelessWidget {
 
   final SidebarSection section;
   final bool isExpanded;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => Semantics(
-    button: true,
+    button: onTap != null,
     expanded: isExpanded,
     child: Opacity(
       opacity: section.muted ? 0.55 : 1,
@@ -359,21 +464,33 @@ class _ChannelTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Opacity(
-    opacity: muted ? 0.55 : 1,
-    child: ListTile(
-      dense: true,
-      visualDensity: const VisualDensity(vertical: -2),
-      selected: selected,
-      selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      leading: ChannelAvatar(channel: channel),
-      title: Text(
-        channel.displayName,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) {
+    final RoundedRectangleBorder shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(8),
+    );
+    return Opacity(
+      opacity: muted ? 0.55 : 1,
+      child: Material(
+        key: ValueKey<String>('channel-selection-surface-${channel.id}'),
+        color: selected
+            ? Theme.of(context).colorScheme.secondaryContainer
+            : Colors.transparent,
+        shape: shape,
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          dense: true,
+          visualDensity: const VisualDensity(vertical: -2),
+          selected: selected,
+          shape: shape,
+          leading: ChannelAvatar(channel: channel),
+          title: Text(
+            channel.displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: onTap,
+        ),
       ),
-      onTap: onTap,
-    ),
-  );
+    );
+  }
 }
