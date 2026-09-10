@@ -34,10 +34,31 @@ void main() {
       await repository.signOut();
 
       expect(store.clearCount, 1);
+      expect((activeApi as _AuthApi).logoutCalls, 1);
       expect(factory.clients.single.closed, isTrue);
       expect(repository.api, isNull);
     },
   );
+
+  test('clears local credentials when server logout fails', () async {
+    final _CredentialStore store = _CredentialStore();
+    final _AuthApi api = _AuthApi(failLogout: true);
+    final MattermostAuthRepository repository = MattermostAuthRepository(
+      credentialStore: store,
+      clientFactory: _ClientFactory(api: api),
+    );
+    await repository.authenticateWithSessionToken(
+      serverUrl: Uri.parse('https://chat.example.com'),
+      token: 'secret',
+    );
+
+    await repository.signOut();
+
+    expect(api.logoutCalls, 1);
+    expect(store.clearCount, 1);
+    expect(store.credentials, isNull);
+    expect(repository.api, isNull);
+  });
 
   test('closes the previous transport after switching servers', () async {
     final _CredentialStore store = _CredentialStore();
@@ -239,7 +260,18 @@ final class _ServerLoginClient implements MattermostServerDiscoveryClient {
   }
 }
 
-final class _AuthApi implements MattermostApi {
+final class _AuthApi implements MattermostSessionApi {
+  _AuthApi({this.failLogout = false});
+
+  final bool failLogout;
+  int logoutCalls = 0;
+
+  @override
+  Future<void> logout() async {
+    logoutCalls += 1;
+    if (failLogout) throw StateError('logout failed');
+  }
+
   @override
   Future<void> updateThreadRead({
     required String userId,

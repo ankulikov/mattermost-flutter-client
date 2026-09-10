@@ -171,6 +171,15 @@ class MattermostAuthRepository implements AuthRepository {
   Future<void> signOut() async {
     try {
       await cancelSsoAuthentication();
+      final MattermostApi? api = _activeAccount.api;
+      if (api is MattermostSessionApi) {
+        try {
+          await api.logout();
+        } on Object {
+          // Local logout must still remove the only persisted credential when
+          // the server is unreachable or the session already expired.
+        }
+      }
       await _credentialStore.clear();
     } finally {
       _deactivate();

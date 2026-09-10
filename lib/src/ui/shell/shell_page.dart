@@ -9,6 +9,9 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.d
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_thread_host.dart';
+import 'package:mattermost_flutter/src/features/profile/domain/models/current_user_profile.dart';
+import 'package:mattermost_flutter/src/features/profile/presentation/profile_page.dart';
+import 'package:mattermost_flutter/src/features/profile/presentation/widgets/profile_navigation_avatar.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
@@ -30,6 +33,7 @@ class BootstrapPage extends ConsumerStatefulWidget {
 class _BootstrapPageState extends ConsumerState<BootstrapPage>
     with WidgetsBindingObserver {
   bool _showCompactChannel = false;
+  bool _profileSelected = false;
   late final ProviderSubscription<InboxInAppNotification?>
   _notificationSubscription;
 
@@ -90,6 +94,10 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         (value) => value.value?.snapshot.hasNewItems ?? false,
       ),
     );
+    final CurrentUserProfile? currentUserProfile = ref
+        .watch(currentUserProfileProvider)
+        .value
+        ?.profile;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         if (constraints.maxWidth < AppBreakpoints.compact) {
@@ -99,6 +107,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
             threadsSelected: threadsSelected,
             sidebar: sidebar,
             inboxHasNewItems: inboxHasNewItems,
+            currentUserProfile: currentUserProfile,
           );
         }
         return _buildDesktop(
@@ -107,6 +116,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           threadsSelected: threadsSelected,
           sidebar: sidebar,
           inboxHasNewItems: inboxHasNewItems,
+          currentUserProfile: currentUserProfile,
           expanded: constraints.maxWidth >= AppBreakpoints.expanded,
         );
       },
@@ -156,6 +166,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     required bool threadsSelected,
     required ChannelSidebarSnapshot? sidebar,
     required bool inboxHasNewItems,
+    required CurrentUserProfile? currentUserProfile,
     required bool expanded,
   }) {
     final Widget mainContent = _MainContent(
@@ -172,13 +183,25 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           key: ValueKey<String>(expanded ? 'expanded-layout' : 'medium-layout'),
           children: <Widget>[
             _DestinationRail(
-              selectedIndex: threadsSelected ? 1 : 0,
+              selectedIndex: _profileSelected
+                  ? null
+                  : threadsSelected
+                  ? 1
+                  : 0,
               inboxHasNewItems: inboxHasNewItems,
+              profile: currentUserProfile,
+              profileSelected: _profileSelected,
               onDestinationSelected: _selectDestination,
+              onProfileSelected: _showProfileDestination,
             ),
             const VerticalDivider(width: 1),
             Expanded(
-              child: threadsSelected
+              child: _profileSelected
+                  ? ProfilePage(
+                      onLogout: () =>
+                          ref.read(authControllerProvider.notifier).signOut(),
+                    )
+                  : threadsSelected
                   ? InboxThreadHost(
                       inboxBuilder:
                           (
@@ -192,10 +215,12 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                     )
                   : Row(
                       children: <Widget>[
-                        const SizedBox(
+                        SizedBox(
                           key: ValueKey<String>('channels-side-pane'),
                           width: 280,
-                          child: ChannelSidebar(),
+                          child: ChannelSidebar(
+                            onChannelSelected: _showSelectedChannel,
+                          ),
                         ),
                         const VerticalDivider(width: 1),
                         Expanded(child: mainContent),
@@ -214,11 +239,16 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     required bool threadsSelected,
     required ChannelSidebarSnapshot? sidebar,
     required bool inboxHasNewItems,
+    required CurrentUserProfile? currentUserProfile,
   }) {
     final bool showChannel =
         _showCompactChannel && !threadsSelected && selectedChannel != null;
     final Widget pane;
-    if (showChannel) {
+    if (_profileSelected) {
+      pane = ProfilePage(
+        onLogout: () => ref.read(authControllerProvider.notifier).signOut(),
+      );
+    } else if (showChannel) {
       pane = _MainContent(
         auth: auth,
         selectedChannel: selectedChannel,
@@ -238,7 +268,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         onSelectChannel: _selectChannelNamed,
       );
     } else {
-      pane = ChannelSidebar(onChannelSelected: _showSelectedChannelOnCompact);
+      pane = ChannelSidebar(onChannelSelected: _showSelectedChannel);
     }
 
     return PopScope<void>(
@@ -260,8 +290,13 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
             bottomNavigationBar: showChannel
                 ? null
                 : _BottomDestinations(
-                    selectedIndex: threadsSelected ? 1 : 0,
+                    selectedIndex: _profileSelected
+                        ? 2
+                        : threadsSelected
+                        ? 1
+                        : 0,
                     inboxHasNewItems: inboxHasNewItems,
+                    profile: currentUserProfile,
                     onDestinationSelected: _selectDestination,
                   ),
           ),
@@ -271,7 +306,9 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _selectDestination(int index) {
-    if (index == 1) {
+    if (index == 2) {
+      _showProfileDestination();
+    } else if (index == 1) {
       _showThreadsDestination();
     } else {
       _showChannelsDestination();
@@ -279,6 +316,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showChannelsDestination() {
+    if (_profileSelected) setState(() => _profileSelected = false);
     ref.read(threadsDestinationProvider.notifier).clear();
     if (_showCompactChannel) {
       setState(() => _showCompactChannel = false);
@@ -286,9 +324,21 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showThreadsDestination() {
+    if (_profileSelected) setState(() => _profileSelected = false);
     ref.read(threadsDestinationProvider.notifier).select();
     if (_showCompactChannel) {
       setState(() => _showCompactChannel = false);
+    }
+  }
+
+  void _showProfileDestination() {
+    ref.read(threadsDestinationProvider.notifier).clear();
+    unawaited(ref.read(currentUserProfileProvider.notifier).refresh());
+    if (!_profileSelected || _showCompactChannel) {
+      setState(() {
+        _profileSelected = true;
+        _showCompactChannel = false;
+      });
     }
   }
 
@@ -317,16 +367,19 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       );
   }
 
-  void _showSelectedChannelOnCompact() {
-    if (!_showCompactChannel) {
-      setState(() => _showCompactChannel = true);
+  void _showSelectedChannel() {
+    if (_profileSelected || !_showCompactChannel) {
+      setState(() {
+        _profileSelected = false;
+        _showCompactChannel = true;
+      });
     }
   }
 
   void _openInboxChannel(SidebarChannel channel) {
     ref.read(threadsDestinationProvider.notifier).clear();
     ref.read(selectedChannelProvider.notifier).select(channel);
-    _showSelectedChannelOnCompact();
+    _showSelectedChannel();
   }
 
   void _selectChannelNamed(String name) {
@@ -340,7 +393,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         if (channel.name == name) {
           ref.read(threadsDestinationProvider.notifier).clear();
           ref.read(selectedChannelProvider.notifier).select(channel);
-          _showSelectedChannelOnCompact();
+          _showSelectedChannel();
           return;
         }
       }
@@ -352,12 +405,18 @@ class _DestinationRail extends StatelessWidget {
   const _DestinationRail({
     required this.selectedIndex,
     required this.inboxHasNewItems,
+    required this.profile,
+    required this.profileSelected,
     required this.onDestinationSelected,
+    required this.onProfileSelected,
   });
 
-  final int selectedIndex;
+  final int? selectedIndex;
   final bool inboxHasNewItems;
+  final CurrentUserProfile? profile;
+  final bool profileSelected;
   final ValueChanged<int> onDestinationSelected;
+  final VoidCallback onProfileSelected;
 
   @override
   Widget build(BuildContext context) => NavigationRail(
@@ -368,6 +427,16 @@ class _DestinationRail extends StatelessWidget {
     minWidth: 82,
     backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
     onDestinationSelected: onDestinationSelected,
+    trailing: Expanded(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: _RailProfileDestination(
+          profile: profile,
+          selected: profileSelected,
+          onPressed: onProfileSelected,
+        ),
+      ),
+    ),
     destinations: <NavigationRailDestination>[
       const NavigationRailDestination(
         icon: Icon(Icons.home_outlined),
@@ -387,11 +456,13 @@ class _BottomDestinations extends StatelessWidget {
   const _BottomDestinations({
     required this.selectedIndex,
     required this.inboxHasNewItems,
+    required this.profile,
     required this.onDestinationSelected,
   });
 
   final int selectedIndex;
   final bool inboxHasNewItems;
+  final CurrentUserProfile? profile;
   final ValueChanged<int> onDestinationSelected;
 
   @override
@@ -410,7 +481,63 @@ class _BottomDestinations extends StatelessWidget {
         selectedIcon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
         label: ShellStrings.inbox,
       ),
+      NavigationDestination(
+        icon: ProfileNavigationAvatar(profile: profile),
+        selectedIcon: ProfileNavigationAvatar(profile: profile),
+        label: ShellStrings.profile,
+      ),
     ],
+  );
+}
+
+class _RailProfileDestination extends StatelessWidget {
+  const _RailProfileDestination({
+    required this.profile,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final CurrentUserProfile? profile;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Tooltip(
+      message: ShellStrings.profile,
+      child: InkWell(
+        key: const ValueKey<String>('shell-profile-destination'),
+        borderRadius: BorderRadius.circular(28),
+        onTap: onPressed,
+        child: Semantics(
+          selected: selected,
+          button: true,
+          label: ShellStrings.profile,
+          child: Container(
+            width: 64,
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            decoration: BoxDecoration(
+              color: selected
+                  ? Theme.of(context).colorScheme.secondaryContainer
+                  : null,
+              borderRadius: BorderRadius.circular(28),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                ProfileNavigationAvatar(profile: profile),
+                const SizedBox(height: 3),
+                Text(
+                  ShellStrings.profile,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }
 

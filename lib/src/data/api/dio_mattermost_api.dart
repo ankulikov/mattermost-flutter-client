@@ -6,7 +6,8 @@ import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 
-final class DioMattermostApi implements MattermostApi {
+final class DioMattermostApi
+    implements MattermostProfileApi, MattermostSessionApi {
   DioMattermostApi({required Dio dio}) : _dio = dio;
 
   final Dio _dio;
@@ -16,6 +17,9 @@ final class DioMattermostApi implements MattermostApi {
     final Response<Object?> response = await _get('/users/me');
     return MattermostUserDto.fromJson(_object(response.data));
   }
+
+  @override
+  Future<void> logout() => _post('/users/logout');
 
   @override
   Future<List<MattermostTeamDto>> getTeamsForCurrentUser() async {
@@ -92,6 +96,37 @@ final class DioMattermostApi implements MattermostApi {
     final Response<Object?> response = await _get('/users/$userId/status');
     return MattermostUserStatusDto.fromJson(_object(response.data));
   }
+
+  @override
+  Future<MattermostUserStatusDto> updateUserStatus({
+    required String userId,
+    required String status,
+    required int dndEndTime,
+  }) async {
+    final String encodedUserId = Uri.encodeComponent(userId);
+    final Response<Object?> response = await _put(
+      '/users/$encodedUserId/status',
+      data: <String, Object?>{
+        'user_id': userId,
+        'status': status,
+        'dnd_end_time': dndEndTime,
+      },
+    );
+    return MattermostUserStatusDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<void> updateUserCustomStatus({
+    required String userId,
+    required MattermostCustomStatusRequestDto status,
+  }) => _put(
+    '/users/${Uri.encodeComponent(userId)}/status/custom',
+    data: status.toJson(),
+  );
+
+  @override
+  Future<void> removeUserCustomStatus(String userId) =>
+      _delete('/users/${Uri.encodeComponent(userId)}/status/custom');
 
   @override
   Future<MattermostImageDto> getUserProfileImage({

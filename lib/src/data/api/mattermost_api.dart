@@ -211,3 +211,28 @@ abstract interface class MattermostApi {
     required List<MattermostPreferenceDto> preferences,
   });
 }
+
+/// Authenticated profile-status commands layered on the shared API boundary.
+///
+/// Keeping these commands in a sub-interface lets focused repository fakes
+/// implement only the API surface they exercise while production still routes
+/// every request through [MattermostApi].
+abstract interface class MattermostProfileApi implements MattermostApi {
+  Future<MattermostUserStatusDto> updateUserStatus({
+    required String userId,
+    required String status,
+    required int dndEndTime,
+  });
+
+  Future<void> updateUserCustomStatus({
+    required String userId,
+    required MattermostCustomStatusRequestDto status,
+  });
+
+  Future<void> removeUserCustomStatus(String userId);
+}
+
+/// Authenticated session commands used by the repository that owns the client.
+abstract interface class MattermostSessionApi implements MattermostApi {
+  Future<void> logout();
+}

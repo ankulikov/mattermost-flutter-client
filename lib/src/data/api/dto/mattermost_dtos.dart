@@ -149,6 +149,27 @@ final class MattermostUserStatusDto {
   final int dndEndTime;
 }
 
+final class MattermostCustomStatusRequestDto {
+  const MattermostCustomStatusRequestDto({
+    required this.emoji,
+    required this.text,
+    required this.duration,
+    required this.expiresAt,
+  });
+
+  final String emoji;
+  final String text;
+  final String duration;
+  final DateTime expiresAt;
+
+  JsonMap toJson() => <String, Object?>{
+    'emoji': emoji,
+    'text': text,
+    'duration': duration,
+    'expires_at': expiresAt.toUtc().toIso8601String(),
+  };
+}
+
 /// Binary response returned by the user profile-image endpoint.
 final class MattermostImageDto {
   const MattermostImageDto({required this.bytes, this.contentType});

@@ -9,6 +9,19 @@ import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 
 void main() {
+  test('logs out the active Mattermost session', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"status":"OK"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    await DioMattermostApi(dio: dio).logout();
+
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/users/logout');
+  });
+
   test('loads users by exact usernames in one request', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body: '[{"id":"ada-id","username":"ada"}]',
@@ -58,6 +71,63 @@ void main() {
     expect(adapter.request?.path, '/users/ada/status');
     expect(status.userId, 'ada');
     expect(status.status, 'online');
+  });
+
+  test('updates a timed user status in epoch seconds', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"user_id":"ada","status":"dnd","manual":true,'
+          '"dnd_end_time":1789057800}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    final MattermostUserStatusDto status = await api.updateUserStatus(
+      userId: 'ada',
+      status: 'dnd',
+      dndEndTime: 1789057800,
+    );
+
+    expect(adapter.request?.method, 'PUT');
+    expect(adapter.request?.path, '/users/ada/status');
+    expect(adapter.request?.data, <String, Object?>{
+      'user_id': 'ada',
+      'status': 'dnd',
+      'dnd_end_time': 1789057800,
+    });
+    expect(status.dndEndTime, 1789057800);
+  });
+
+  test('sets and clears a custom user status', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(body: '{}');
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+    final DateTime expiresAt = DateTime.utc(2026, 9, 10, 15, 30);
+
+    await api.updateUserCustomStatus(
+      userId: 'ada',
+      status: MattermostCustomStatusRequestDto(
+        emoji: 'calendar',
+        text: 'In a meeting',
+        duration: 'one_hour',
+        expiresAt: expiresAt,
+      ),
+    );
+
+    expect(adapter.request?.method, 'PUT');
+    expect(adapter.request?.path, '/users/ada/status/custom');
+    expect(adapter.request?.data, <String, Object?>{
+      'emoji': 'calendar',
+      'text': 'In a meeting',
+      'duration': 'one_hour',
+      'expires_at': '2026-09-10T15:30:00.000Z',
+    });
+
+    await api.removeUserCustomStatus('ada');
+    expect(adapter.request?.method, 'DELETE');
+    expect(adapter.request?.path, '/users/ada/status/custom');
   });
 
   test('creates a direct channel for exactly two users', () async {

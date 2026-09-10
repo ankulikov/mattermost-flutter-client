@@ -10,6 +10,7 @@ import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
@@ -20,6 +21,9 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realti
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
+import 'package:mattermost_flutter/src/features/profile/domain/models/current_user_profile.dart';
+import 'package:mattermost_flutter/src/features/profile/domain/repositories/current_user_profile_repository.dart';
+import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -109,6 +113,101 @@ void main() {
       find.byKey(const ValueKey<String>('expanded-layout')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('opens Profile from the bottom of the rail and logs out', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          currentUserProfileRepositoryProvider.overrideWithValue(
+            _CurrentProfileRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder profileDestination = find.byKey(
+      const ValueKey<String>('shell-profile-destination'),
+    );
+    expect(profileDestination, findsOneWidget);
+    expect(
+      tester.getCenter(profileDestination).dy,
+      greaterThan(tester.getCenter(find.text('Inbox')).dy),
+    );
+
+    await tester.tap(profileDestination);
+    await tester.pumpAndSettle();
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('profile-logout')),
+      findsOneWidget,
+    );
+
+    final Finder logout = find.byKey(const ValueKey<String>('profile-logout'));
+    final Finder profileScrollable = find.descendant(
+      of: find.byKey(const ValueKey<String>('profile-scroll-view')),
+      matching: find.byType(Scrollable),
+    );
+    await tester.drag(profileScrollable, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    await tester.tap(logout);
+    await tester.pumpAndSettle();
+    expect(find.text(AuthStrings.title), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('opens Profile from the rightmost compact destination', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          currentUserProfileRepositoryProvider.overrideWithValue(
+            _CurrentProfileRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final NavigationBar navigation = tester.widget<NavigationBar>(
+      find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+    );
+    expect(navigation.destinations, hasLength(3));
+    expect(
+      (navigation.destinations.last as NavigationDestination).label,
+      'Profile',
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+        matching: find.text('Profile'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('profile-logout')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('replaces the channel pane with Inbox on a wide screen', (
@@ -471,6 +570,8 @@ void main() {
     expect(inbox.loadCalls, 1);
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
 
@@ -1447,6 +1548,39 @@ final class _SignedInRepository implements AuthRepository {
 
   @override
   Future<void> signOut() async {}
+}
+
+final class _CurrentProfileRepository implements CurrentUserProfileRepository {
+  @override
+  Future<CurrentUserProfile> load() async => const CurrentUserProfile(
+    user: UserSummary(
+      id: 'me',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      username: 'ada',
+      nickname: '',
+      position: '',
+      email: 'ada@example.com',
+    ),
+    availability: Availability(presence: UserPresence.online),
+  );
+
+  @override
+  Future<Availability> setAvailability({
+    required UserPresence presence,
+    required DateTime? expiresAt,
+  }) async => Availability(presence: presence, expiresAt: expiresAt);
+
+  @override
+  Future<void> setCustomStatus({
+    required String emoji,
+    required String text,
+    required CustomStatusDuration duration,
+    required DateTime expiresAt,
+  }) async {}
+
+  @override
+  Future<void> clearCustomStatus() async {}
 }
 
 final class _SidebarRepository implements ChannelRepository {

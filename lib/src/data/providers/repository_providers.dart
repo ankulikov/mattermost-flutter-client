@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/data/platform/in_app_webview_sso_browser_gateway.dart';
 import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.dart';
@@ -25,6 +26,8 @@ import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermo
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_postponed_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
+import 'package:mattermost_flutter/src/features/profile/data/repositories/mattermost_current_user_profile_repository.dart';
+import 'package:mattermost_flutter/src/features/profile/domain/repositories/current_user_profile_repository.dart';
 
 final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
     Provider<MattermostAuthRepository>((Ref ref) {
@@ -55,6 +58,24 @@ final Provider<UserRepository> userRepositoryProvider =
         accountScopeId: session.durableDataScopeId,
       );
     });
+
+final Provider<CurrentUserProfileRepository>
+currentUserProfileRepositoryProvider = Provider<CurrentUserProfileRepository>((
+  Ref ref,
+) {
+  final session = ref.watch(activeAccountSessionProvider);
+  if (session == null) {
+    throw StateError('No active Mattermost account for profile repository');
+  }
+  final MattermostApi api = ref.watch(activeMattermostApiProvider);
+  if (api is! MattermostProfileApi) {
+    throw StateError('The active Mattermost API does not support profiles');
+  }
+  return MattermostCurrentUserProfileRepository(
+    api: api,
+    userId: session.userId,
+  );
+});
 
 final Provider<AttachmentRepository> attachmentRepositoryProvider =
     Provider<AttachmentRepository>(
