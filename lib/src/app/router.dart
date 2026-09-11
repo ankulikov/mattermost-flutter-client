@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_channel_route.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -10,6 +11,27 @@ final GoRouter appRouter = GoRouter(
       path: '/',
       builder: (BuildContext context, GoRouterState state) =>
           const BootstrapPage(),
+    ),
+    GoRoute(
+      name: InboxChannelRoute.name,
+      path: InboxChannelRoute.path,
+      redirect: (BuildContext context, GoRouterState state) {
+        final Object? extra = state.extra;
+        final String? channelId = state.pathParameters['channelId'];
+        if (extra is! InboxChannelRouteArguments ||
+            channelId != extra.channel.id) {
+          return '/';
+        }
+        return null;
+      },
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        final InboxChannelRouteArguments arguments =
+            state.extra! as InboxChannelRouteArguments;
+        return MaterialPage<void>(
+          key: state.pageKey,
+          child: InboxChannelRoute.build(context, arguments),
+        );
+      },
     ),
     GoRoute(
       name: ThreadRoute.name,

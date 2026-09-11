@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_channel_route.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
+import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
@@ -74,15 +76,14 @@ final class InboxThreadTarget {
 /// Hosts Inbox navigation without coupling Inbox rows to the app router.
 ///
 /// When enough width is available, Inbox remains visible and the selected
-/// thread replaces only the adjacent workspace. On narrower layouts the same
-/// [ThreadPane] is pushed as a route, so platform Back returns to the existing
-/// Inbox route and its state.
+/// thread or chat replaces only the adjacent workspace. On narrower layouts
+/// the destination is pushed as a route, so platform Back returns to the
+/// existing Inbox route and its state.
 class InboxThreadHost extends ConsumerStatefulWidget {
   const InboxThreadHost({
     required this.inboxBuilder,
     required this.background,
-    required this.showAdjacentThread,
-    required this.onOpenChannel,
+    required this.showAdjacentWorkspace,
     this.onSelectChannel,
     this.inboxWidth = 380,
     super.key,
@@ -90,8 +91,7 @@ class InboxThreadHost extends ConsumerStatefulWidget {
 
   final InboxPaneBuilder inboxBuilder;
   final Widget background;
-  final bool showAdjacentThread;
-  final ValueChanged<SidebarChannel> onOpenChannel;
+  final bool showAdjacentWorkspace;
   final ValueChanged<String>? onSelectChannel;
   final double inboxWidth;
 
@@ -101,6 +101,7 @@ class InboxThreadHost extends ConsumerStatefulWidget {
 
 class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
   InboxThreadTarget? _selectedTarget;
+  SidebarChannel? _selectedChannel;
 
   @override
   Widget build(BuildContext context) {
@@ -112,19 +113,38 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
     final Widget inbox = widget.inboxBuilder(context, (InboxItem item) {
       if (item case DirectMessageBundleInboxItem(
         messages: final messages,
-      ) when messages.length >= 2) {
-        widget.onOpenChannel(messages.last.channel);
+      ) when messages.length > 1) {
+        final SidebarChannel channel = messages.last.channel;
+        if (widget.showAdjacentWorkspace) {
+          setState(() {
+            _selectedTarget = null;
+            _selectedChannel = channel;
+          });
+          return;
+        }
+        unawaited(
+          InboxChannelRoute.open(
+            context,
+            InboxChannelRouteArguments(
+              channel: channel,
+              onSelectChannel: widget.onSelectChannel,
+            ),
+          ),
+        );
         return;
       }
       final InboxThreadTarget target = InboxThreadTarget.fromItem(item);
-      if (widget.showAdjacentThread) {
-        setState(() => _selectedTarget = target);
+      if (widget.showAdjacentWorkspace) {
+        setState(() {
+          _selectedChannel = null;
+          _selectedTarget = target;
+        });
         return;
       }
       unawaited(_openThreadRoute(context, target, serverUrl));
     });
 
-    if (!widget.showAdjacentThread) {
+    if (!widget.showAdjacentWorkspace) {
       return KeyedSubtree(
         key: const ValueKey<String>('inbox-thread-host-narrow'),
         child: inbox,
@@ -132,6 +152,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
     }
 
     final InboxThreadTarget? target = _selectedTarget;
+    final SidebarChannel? channel = _selectedChannel;
     return Row(
       key: const ValueKey<String>('inbox-thread-host-wide'),
       children: <Widget>[
@@ -143,7 +164,11 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
         const VerticalDivider(width: 1),
         Expanded(
           child: IndexedStack(
-            index: target == null ? 0 : 1,
+            index: channel != null
+                ? 2
+                : target != null
+                ? 1
+                : 0,
             children: <Widget>[
               widget.background,
               if (target == null)
@@ -160,6 +185,18 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
                   onSelectChannel: widget.onSelectChannel,
                   onThreadUnfollowed: _removeUnfollowedThread,
                   onClose: () => setState(() => _selectedTarget = null),
+                ),
+              if (channel == null)
+                const SizedBox.shrink()
+              else
+                Material(
+                  color: Theme.of(context).colorScheme.surface,
+                  child: ChannelPostsPane(
+                    key: ValueKey<String>('inbox-channel-${channel.id}'),
+                    channel: channel,
+                    onSelectChannel: widget.onSelectChannel,
+                    onBack: () => setState(() => _selectedChannel = null),
+                  ),
                 ),
             ],
           ),
