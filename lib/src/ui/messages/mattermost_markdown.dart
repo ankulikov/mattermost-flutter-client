@@ -13,12 +13,14 @@ import 'package:url_launcher/url_launcher.dart';
 typedef MattermostLinkLauncher = Future<bool> Function(Uri uri);
 typedef MattermostInlineReplacementBuilder =
     Widget Function(BuildContext context, String value, TextStyle textStyle);
+typedef MattermostInlineLinkTextBuilder = String Function(String value);
+typedef MattermostInlineLinkCallback =
+    void Function(BuildContext context, String value);
 
 /// Declarative hook for replacing inline message tokens with widgets.
 ///
-/// Emoji are the first consumer. Future enrichments such as `@username` can
-/// use the same parser/builder boundary without adding feature dependencies to
-/// the shared Markdown renderer.
+/// This is intended for atomic inline content such as emoji. Replacements whose
+/// labels need to wrap should use [MattermostInlineLinkReplacement] instead.
 final class MattermostInlineReplacement {
   const MattermostInlineReplacement({
     required this.elementName,
@@ -39,6 +41,31 @@ final class MattermostInlineReplacement {
   final MattermostInlineReplacementBuilder builder;
 }
 
+/// Declarative hook for replacing inline message tokens with text links.
+///
+/// Unlike a widget replacement, the resulting label remains part of the
+/// surrounding paragraph. This lets long labels wrap normally and contribute
+/// their full height to narrow containers such as table cells.
+final class MattermostInlineLinkReplacement {
+  const MattermostInlineLinkReplacement({
+    required this.elementName,
+    required this.pattern,
+    required this.textBuilder,
+    required this.onTap,
+    this.valueGroup = 1,
+    this.startCharacter,
+    this.shouldReplace,
+  });
+
+  final String elementName;
+  final String pattern;
+  final int valueGroup;
+  final int? startCharacter;
+  final bool Function(String value)? shouldReplace;
+  final MattermostInlineLinkTextBuilder textBuilder;
+  final MattermostInlineLinkCallback onTap;
+}
+
 /// Renders the Markdown dialect documented for Mattermost messages.
 ///
 /// Server-provided images are restricted to HTTP(S). Relative image and link
@@ -52,6 +79,7 @@ class MattermostMarkdown extends StatefulWidget {
     this.linkLauncher,
     this.textStyle,
     this.inlineReplacements = const <MattermostInlineReplacement>[],
+    this.inlineLinkReplacements = const <MattermostInlineLinkReplacement>[],
     this.inlineParserKey,
     super.key,
   });
@@ -62,6 +90,7 @@ class MattermostMarkdown extends StatefulWidget {
   final MattermostLinkLauncher? linkLauncher;
   final TextStyle? textStyle;
   final List<MattermostInlineReplacement> inlineReplacements;
+  final List<MattermostInlineLinkReplacement> inlineLinkReplacements;
 
   /// Changes when asynchronous replacement eligibility changes while [data]
   /// stays the same, forcing the Markdown AST to be parsed again.
@@ -95,7 +124,10 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
   void initState() {
     super.initState();
     _preparedData = prepareMattermostMarkdown(widget.data);
-    _extensionSet = _buildExtensionSet(widget.inlineReplacements);
+    _extensionSet = _buildExtensionSet(
+      widget.inlineReplacements,
+      widget.inlineLinkReplacements,
+    );
   }
 
   @override
@@ -104,8 +136,15 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
     if (widget.data != oldWidget.data) {
       _preparedData = prepareMattermostMarkdown(widget.data);
     }
-    if (!identical(widget.inlineReplacements, oldWidget.inlineReplacements)) {
-      _extensionSet = _buildExtensionSet(widget.inlineReplacements);
+    if (!identical(widget.inlineReplacements, oldWidget.inlineReplacements) ||
+        !identical(
+          widget.inlineLinkReplacements,
+          oldWidget.inlineLinkReplacements,
+        )) {
+      _extensionSet = _buildExtensionSet(
+        widget.inlineReplacements,
+        widget.inlineLinkReplacements,
+      );
       _cachedTheme = null;
     }
     if (widget.textStyle != oldWidget.textStyle ||
@@ -174,6 +213,7 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
         builders: _cachedBuilders!,
         onTapLink: (String text, String? href, String title) {
           if (href == null) return;
+          if (_handleInlineLinkReplacement(context, text, href)) return;
           if (href.startsWith(_MattermostChannelLinkSyntax.schemePrefix)) {
             final String channelName = Uri.decodeComponent(
               href.substring(_MattermostChannelLinkSyntax.schemePrefix.length),
@@ -189,13 +229,40 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
 
   md.ExtensionSet _buildExtensionSet(
     List<MattermostInlineReplacement> replacements,
+    List<MattermostInlineLinkReplacement> linkReplacements,
   ) => md.ExtensionSet(
     MattermostMarkdown._mattermostBlockSyntaxes,
     <md.InlineSyntax>[
+      ...linkReplacements.map(_MattermostInlineLinkReplacementSyntax.new),
       ...replacements.map(_MattermostInlineReplacementSyntax.new),
       ...MattermostMarkdown._mattermostInlineSyntaxes,
     ],
   );
+
+  bool _handleInlineLinkReplacement(
+    BuildContext context,
+    String text,
+    String href,
+  ) {
+    final Uri? uri = Uri.tryParse(href);
+    if (uri?.scheme != _MattermostInlineLinkReplacementSyntax.scheme ||
+        uri!.pathSegments.length != 1) {
+      return false;
+    }
+    for (final MattermostInlineLinkReplacement replacement
+        in widget.inlineLinkReplacements) {
+      if (replacement.elementName == uri.host) {
+        final String value = uri.pathSegments.single;
+        if (replacement.shouldReplace?.call(value) == false ||
+            replacement.textBuilder(value) != text) {
+          return false;
+        }
+        replacement.onTap(context, value);
+        return true;
+      }
+    }
+    return false;
+  }
 
   Widget _buildImage(Uri source, String? title, String? alt) {
     final String? encodedSize = source.queryParameters[_imageSizeParameter];
@@ -303,6 +370,35 @@ final class _MattermostInlineReplacementSyntax extends md.InlineSyntax {
     final md.Element element = md.Element.empty(replacement.elementName);
     element.attributes['value'] = value;
     parser.addNode(element);
+    return true;
+  }
+}
+
+final class _MattermostInlineLinkReplacementSyntax extends md.InlineSyntax {
+  _MattermostInlineLinkReplacementSyntax(this.replacement)
+    : super(replacement.pattern, startCharacter: replacement.startCharacter);
+
+  static const String scheme = 'mattermost-inline';
+
+  final MattermostInlineLinkReplacement replacement;
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final String value = match[replacement.valueGroup]!;
+    if (replacement.shouldReplace?.call(value) == false) {
+      parser.advanceBy(1);
+      return false;
+    }
+    final md.Element link = md.Element.text(
+      'a',
+      replacement.textBuilder(value),
+    );
+    link.attributes['href'] = Uri(
+      scheme: scheme,
+      host: replacement.elementName,
+      pathSegments: <String>[value],
+    ).toString();
+    parser.addNode(link);
     return true;
   }
 }

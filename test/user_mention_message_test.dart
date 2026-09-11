@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
@@ -65,14 +68,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('@Ada Lovelace'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('user-mention-ada')),
+      find.textContaining('@Ada Lovelace', findRichText: true),
       findsOneWidget,
     );
     expect(find.textContaining('@missing'), findsOneWidget);
 
-    await tester.tap(find.text('@Ada Lovelace'));
+    _tapTextSpan(tester, '@Ada Lovelace');
     await tester.pumpAndSettle();
     expect(find.byType(UserProfileCard), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
@@ -139,11 +141,116 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('@Ada Lovelace'), findsOneWidget);
+    expect(
+      find.textContaining('@Ada Lovelace', findRichText: true),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('underlines a resolved mention only while hovered', (
+  testWidgets('keeps resolved full names within table rows', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final Completer<List<UserMention>> mentions =
+        Completer<List<UserMention>>();
+    const String message = '''
+| Priority | PR | Waiting | Responsible |
+| --- | --- | --- | --- |
+| warning | first | 6h | @andrey @ilya @vladislav |
+| warning | second | 5h | @ruslan @nikita @semen |
+''';
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          userMentionsProvider(
+            userMentionLookupKey(message),
+          ).overrideWith((Ref ref) => mentions.future),
+        ],
+        child: MaterialApp(
+          builder: (BuildContext context, Widget? child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(1.5)),
+            child: child!,
+          ),
+          home: Scaffold(body: _messageBody(message)),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.textContaining('@andrey', findRichText: true), findsOneWidget);
+    mentions.complete(const <UserMention>[
+      UserMention(
+        userId: 'andrey-id',
+        username: 'andrey',
+        displayName: 'Andrey Petrov',
+      ),
+      UserMention(
+        userId: 'ilya-id',
+        username: 'ilya',
+        displayName: 'Ilya Edrets',
+      ),
+      UserMention(
+        userId: 'vladislav-id',
+        username: 'vladislav',
+        displayName: 'Vladislav Sychev',
+      ),
+      UserMention(
+        userId: 'ruslan-id',
+        username: 'ruslan',
+        displayName: 'Ruslan Azamatov',
+      ),
+      UserMention(
+        userId: 'nikita-id',
+        username: 'nikita',
+        displayName: 'Nikita Khramov',
+      ),
+      UserMention(
+        userId: 'semen-id',
+        username: 'semen',
+        displayName: 'Semen Sychev',
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    final RenderTable resolvedTable = tester.renderObject<RenderTable>(
+      find.byType(Table),
+    );
+    final Rect firstRow = resolvedTable
+        .getRowBox(1)
+        .shift(resolvedTable.localToGlobal(Offset.zero));
+    final Rect secondRow = resolvedTable
+        .getRowBox(2)
+        .shift(resolvedTable.localToGlobal(Offset.zero));
+    for (final String displayName in <String>[
+      '@Andrey Petrov',
+      '@Ilya Edrets',
+      '@Vladislav Sychev',
+    ]) {
+      expect(
+        tester.getRect(find.textContaining(displayName, findRichText: true)),
+        _isContainedVerticallyBy(firstRow),
+      );
+    }
+    for (final String displayName in <String>[
+      '@Ruslan Azamatov',
+      '@Nikita Khramov',
+      '@Semen Sychev',
+    ]) {
+      expect(
+        tester.getRect(find.textContaining(displayName, findRichText: true)),
+        _isContainedVerticallyBy(secondRow),
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('renders a resolved mention as wrapping inline text', (
     WidgetTester tester,
   ) async {
     const String message = 'Hello @ada';
@@ -165,21 +272,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Text mentionText() => tester.widget<Text>(find.text('@Ada Lovelace'));
-    expect(mentionText().style?.decoration, TextDecoration.none);
-
-    final TestGesture mouse = await tester.createGesture(
-      kind: PointerDeviceKind.mouse,
+    final Finder richText = find.textContaining(
+      '@Ada Lovelace',
+      findRichText: true,
     );
-    addTearDown(mouse.removePointer);
-    await mouse.addPointer();
-    await mouse.moveTo(tester.getCenter(find.text('@Ada Lovelace')));
-    await tester.pump();
-    expect(mentionText().style?.decoration, TextDecoration.underline);
-
-    await mouse.moveTo(Offset.zero);
-    await tester.pump();
-    expect(mentionText().style?.decoration, TextDecoration.none);
+    expect(richText, findsOneWidget);
+    final InlineSpan span = tester.widget<RichText>(richText).text;
+    expect(_findTapRecognizer(span, '@Ada Lovelace'), isNotNull);
+    expect(_containsWidgetSpan(span), isFalse);
   });
 }
 
@@ -192,3 +292,48 @@ MessageBody _messageBody(String message) => MessageBody(
     message: message,
   ),
 );
+
+Matcher _isContainedVerticallyBy(Rect outer) => predicate<Rect>(
+  (Rect inner) =>
+      inner.top >= outer.top - 0.01 && inner.bottom <= outer.bottom + 0.01,
+  'is vertically contained by $outer',
+);
+
+bool _containsWidgetSpan(InlineSpan span) {
+  if (span is WidgetSpan) return true;
+  return span is TextSpan && span.children?.any(_containsWidgetSpan) == true;
+}
+
+void _tapTextSpan(WidgetTester tester, String text) {
+  final Iterable<InlineSpan> spans = <InlineSpan>[
+    ...find
+        .byType(RichText)
+        .evaluate()
+        .map((Element element) => (element.widget as RichText).text),
+    ...find
+        .byType(SelectableText)
+        .evaluate()
+        .map((Element element) => (element.widget as SelectableText).textSpan!),
+  ];
+  for (final InlineSpan span in spans) {
+    final TapGestureRecognizer? recognizer = _findTapRecognizer(span, text);
+    if (recognizer != null) {
+      recognizer.onTap?.call();
+      return;
+    }
+  }
+  fail('No tappable text span contained "$text".');
+}
+
+TapGestureRecognizer? _findTapRecognizer(InlineSpan span, String text) {
+  if (span is! TextSpan) return null;
+  final GestureRecognizer? recognizer = span.recognizer;
+  if (span.toPlainText().contains(text) && recognizer is TapGestureRecognizer) {
+    return recognizer;
+  }
+  for (final InlineSpan child in span.children ?? const <InlineSpan>[]) {
+    final TapGestureRecognizer? recognizer = _findTapRecognizer(child, text);
+    if (recognizer != null) return recognizer;
+  }
+  return null;
+}

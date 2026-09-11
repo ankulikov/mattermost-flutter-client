@@ -161,19 +161,29 @@ class MessageBody extends ConsumerWidget {
       onTapChannel: onSelectChannel,
       textStyle: bodyStyle,
       inlineParserKey: resolvedMentionNames.join(','),
-      inlineReplacements: <MattermostInlineReplacement>[
-        MattermostInlineReplacement(
+      inlineLinkReplacements: <MattermostInlineLinkReplacement>[
+        MattermostInlineLinkReplacement(
           elementName: 'user-mention',
           pattern: r'\B@([a-zA-Z0-9][a-zA-Z0-9._-]*)',
           startCharacter: 0x40,
           shouldReplace: (String username) =>
               mentionsByUsername.containsKey(username.toLowerCase()),
-          builder: (BuildContext context, String username, TextStyle style) {
+          textBuilder: (String username) =>
+              '@${mentionsByUsername[username.toLowerCase()]!.displayName}',
+          onTap: (BuildContext context, String username) {
             final UserMention mention =
                 mentionsByUsername[username.toLowerCase()]!;
-            return _UserMentionInline(mention: mention, textStyle: style);
+            showUserProfileCard(
+              context,
+              userId: mention.userId,
+              onMessage: (profile) => ref
+                  .read(channelSidebarProvider.notifier)
+                  .openDirectMessage(profile),
+            );
           },
         ),
+      ],
+      inlineReplacements: <MattermostInlineReplacement>[
         MattermostInlineReplacement(
           elementName: 'custom-emoji',
           pattern: r':([a-z0-9_+-]+):',
@@ -188,51 +198,6 @@ class MessageBody extends ConsumerWidget {
           },
         ),
       ],
-    );
-  }
-}
-
-class _UserMentionInline extends ConsumerStatefulWidget {
-  const _UserMentionInline({required this.mention, required this.textStyle});
-
-  final UserMention mention;
-  final TextStyle textStyle;
-
-  @override
-  ConsumerState<_UserMentionInline> createState() => _UserMentionInlineState();
-}
-
-class _UserMentionInlineState extends ConsumerState<_UserMentionInline> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextStyle linkStyle = widget.textStyle.copyWith(
-      color: Theme.of(context).colorScheme.primary,
-      decoration: _hovered ? TextDecoration.underline : TextDecoration.none,
-      decorationColor: Theme.of(context).colorScheme.primary,
-    );
-    return Semantics(
-      button: true,
-      link: true,
-      label: '@${widget.mention.displayName}',
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          key: ValueKey<String>('user-mention-${widget.mention.username}'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () => showUserProfileCard(
-            context,
-            userId: widget.mention.userId,
-            onMessage: (profile) => ref
-                .read(channelSidebarProvider.notifier)
-                .openDirectMessage(profile),
-          ),
-          child: Text('@${widget.mention.displayName}', style: linkStyle),
-        ),
-      ),
     );
   }
 }

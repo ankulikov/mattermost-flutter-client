@@ -51,6 +51,9 @@ avoids passing server-provided HTML through to a platform renderer.
 - Custom emoji keep their shortcode as an immediate loading/error fallback.
   Image bytes are cached separately from Markdown parsing and capped at 5000
   account-scoped objects.
+- Resolved user mentions remain text spans instead of embedded widgets. Full
+  display names therefore wrap with the surrounding text and contribute their
+  complete height to narrow table rows.
 - The system shortcode dictionary is generated from Mattermost's pinned
   `emoji.json`, including aliases newer than the GitHub dictionary used by
   `package:markdown`. The JSON is used only by
