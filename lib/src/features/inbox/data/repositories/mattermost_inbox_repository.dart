@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
+import 'package:mattermost_flutter/src/data/mappers/dialog_display_name_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
@@ -108,6 +109,11 @@ final class MattermostInboxRepository extends InboxRepository {
         members.putIfAbsent(member.channelId, () => member);
       }
     }
+    final Map<String, SidebarChannel> knownChannels =
+        await _resolveKnownChannels(
+          rawChannels: channels,
+          currentUserId: session.userId,
+        );
 
     final List<_TeamThreads> unreadThreadPages = await Future.wait(
       teams.map(
@@ -167,17 +173,20 @@ final class MattermostInboxRepository extends InboxRepository {
 
     final List<InboxThreadCandidate> threadCandidates = rawThreads.values
         .map(
-          (_ThreadSource source) =>
-              _mapThread(source, mappedById, channels, members, currentUser),
+          (_ThreadSource source) => _mapThread(
+            source,
+            mappedById,
+            knownChannels,
+            members,
+            currentUser,
+          ),
         )
         .whereType<InboxThreadCandidate>()
         .toList(growable: false);
     final List<InboxPostCandidate> newCandidates = <InboxPostCandidate>[];
     var incompleteMentions = false;
     for (final _UnreadChannelPosts entry in unread) {
-      final SidebarChannel? channel = _mapKnownChannel(
-        channels[entry.channelId],
-      );
+      final SidebarChannel? channel = knownChannels[entry.channelId];
       final MattermostChannelMemberDto? member = members[entry.channelId];
       if (channel == null || member == null) continue;
       var reconstructedMentions = 0;
@@ -218,7 +227,7 @@ final class MattermostInboxRepository extends InboxRepository {
       references: postponed.references,
       rawPosts: rawPosts,
       mappedById: mappedById,
-      channels: channels,
+      channels: knownChannels,
       authors: authors,
     );
     // TODO(inbox): API v4 counters cannot identify all historical mentions;
@@ -236,12 +245,7 @@ final class MattermostInboxRepository extends InboxRepository {
     );
     _realtimeScope = _InboxRealtimeScope(
       currentUser: currentUser,
-      channels: <String, SidebarChannel>{
-        for (final MapEntry<String, MattermostChannelDto> entry
-            in channels.entries)
-          if (_mapKnownChannel(entry.value) case final SidebarChannel channel)
-            entry.key: channel,
-      },
+      channels: knownChannels,
       members: Map<String, MattermostChannelMemberDto>.of(members),
       authors: Map<String, UserSummary>.of(authors),
     );
@@ -578,7 +582,7 @@ final class MattermostInboxRepository extends InboxRepository {
   InboxThreadCandidate? _mapThread(
     _ThreadSource source,
     Map<String, ChannelPost> mappedById,
-    Map<String, MattermostChannelDto> channels,
+    Map<String, SidebarChannel> channels,
     Map<String, MattermostChannelMemberDto> members,
     MattermostUserDto currentUser,
   ) {
@@ -588,7 +592,7 @@ final class MattermostInboxRepository extends InboxRepository {
         : mappedById[raw.post!.id];
     final SidebarChannel? channel = root == null
         ? null
-        : _mapKnownChannel(channels[root.channelId]);
+        : channels[root.channelId];
     if (root == null || channel == null) return null;
     final MattermostChannelMemberDto? member = members[root.channelId];
     final InboxAttentionReason? rootReason = channel.isDialog
@@ -630,7 +634,7 @@ final class MattermostInboxRepository extends InboxRepository {
     required List<PostponedReference> references,
     required Map<String, MattermostPostDto> rawPosts,
     required Map<String, ChannelPost> mappedById,
-    required Map<String, MattermostChannelDto> channels,
+    required Map<String, SidebarChannel> channels,
     required Map<String, UserSummary> authors,
   }) {
     final List<InboxPostCandidate> posts = <InboxPostCandidate>[];
@@ -640,7 +644,7 @@ final class MattermostInboxRepository extends InboxRepository {
       final ChannelPost? post = mappedById[reference.postId];
       final SidebarChannel? channel = raw == null
           ? null
-          : _mapKnownChannel(channels[raw.channelId]);
+          : channels[raw.channelId];
       if (raw == null || post == null || channel == null) {
         // TODO(inbox): Domain has no unavailable-post placeholder yet; retain
         // the preference remotely and surface it when a placeholder is added.
@@ -723,8 +727,70 @@ final class MattermostInboxRepository extends InboxRepository {
     ),
   };
 
-  SidebarChannel? _mapKnownChannel(MattermostChannelDto? channel) {
-    if (channel == null) return null;
+  Future<Map<String, SidebarChannel>> _resolveKnownChannels({
+    required Map<String, MattermostChannelDto> rawChannels,
+    required String currentUserId,
+  }) async {
+    final List<SidebarChannel> channels = rawChannels.values
+        .map(_mapKnownChannel)
+        .whereType<SidebarChannel>()
+        .toList(growable: false);
+    final Set<String> directParticipantIds = channels
+        .where(
+          (SidebarChannel channel) => channel.kind == ChannelKind.directMessage,
+        )
+        .map(
+          (SidebarChannel channel) => directParticipantId(
+            channelName: channel.name,
+            currentUserId: currentUserId,
+          ),
+        )
+        .whereType<String>()
+        .toSet();
+    final List<SidebarChannel> groupChannels = channels
+        .where(
+          (SidebarChannel channel) => channel.kind == ChannelKind.groupMessage,
+        )
+        .toList(growable: false);
+    try {
+      final List<MattermostUserDto> directUsers = directParticipantIds.isEmpty
+          ? const <MattermostUserDto>[]
+          : await _api.getUsersByIds(directParticipantIds.toList());
+      final MattermostGroupChannelUsersDto groupUsers = groupChannels.isEmpty
+          ? const MattermostGroupChannelUsersDto(
+              usersByChannelId: <String, List<MattermostUserDto>>{},
+            )
+          : await _api.getUsersForGroupChannels(
+              groupChannels
+                  .map((SidebarChannel channel) => channel.id)
+                  .toList(growable: false),
+            );
+      final List<SidebarChannel> resolved = resolveDialogDisplayNames(
+        channels: channels,
+        currentUserId: currentUserId,
+        directUsersById: <String, UserSummary>{
+          for (final MattermostUserDto user in directUsers)
+            if (user.id.isNotEmpty) user.id: mapUserSummary(user),
+        },
+        groupUsersByChannelId: groupUsers.usersByChannelId.map(
+          (String channelId, List<MattermostUserDto> users) =>
+              MapEntry<String, List<UserSummary>>(
+                channelId,
+                users.map(mapUserSummary).toList(growable: false),
+              ),
+        ),
+      );
+      return <String, SidebarChannel>{
+        for (final SidebarChannel channel in resolved) channel.id: channel,
+      };
+    } on Object {
+      return <String, SidebarChannel>{
+        for (final SidebarChannel channel in channels) channel.id: channel,
+      };
+    }
+  }
+
+  SidebarChannel? _mapKnownChannel(MattermostChannelDto channel) {
     try {
       return mapChannel(channel);
     } on FormatException {

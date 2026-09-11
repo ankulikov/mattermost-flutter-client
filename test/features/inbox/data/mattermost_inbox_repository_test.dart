@@ -68,6 +68,99 @@ void main() {
     expect(snapshot.newItems.single.postIds, <String>['p1']);
   });
 
+  test(
+    'resolves direct and group dialog names before Inbox navigation',
+    () async {
+      final _InboxApi api = _InboxApi(
+        teams: const <MattermostTeamDto>[
+          MattermostTeamDto(id: 't', name: 'team', displayName: 'Team'),
+        ],
+        channels: const <MattermostChannelDto>[
+          MattermostChannelDto(
+            id: 'direct',
+            teamId: 't',
+            type: 'D',
+            name: 'me__ada',
+            displayName: '',
+            totalMessageCount: 1,
+          ),
+          MattermostChannelDto(
+            id: 'group',
+            teamId: 't',
+            type: 'G',
+            name: 'me__ada__grace',
+            displayName: '',
+            totalMessageCount: 1,
+          ),
+        ],
+        members: const <MattermostChannelMemberDto>[
+          MattermostChannelMemberDto(channelId: 'direct', userId: 'me'),
+          MattermostChannelMemberDto(channelId: 'group', userId: 'me'),
+        ],
+        unread: const <MattermostPostDto>[
+          MattermostPostDto(
+            id: 'direct-post',
+            userId: 'ada',
+            channelId: 'direct',
+            message: 'Hi',
+            createAt: 1,
+          ),
+          MattermostPostDto(
+            id: 'group-post',
+            userId: 'grace',
+            channelId: 'group',
+            message: 'Hello',
+            createAt: 2,
+          ),
+        ],
+        users: const <MattermostUserDto>[
+          MattermostUserDto(id: 'ada', username: 'ada', firstName: 'Ada'),
+          MattermostUserDto(id: 'grace', username: 'grace', firstName: 'Grace'),
+        ],
+        groupUsers: const MattermostGroupChannelUsersDto(
+          usersByChannelId: <String, List<MattermostUserDto>>{
+            'group': <MattermostUserDto>[
+              MattermostUserDto(id: 'me', username: 'me'),
+              MattermostUserDto(id: 'ada', username: 'ada', firstName: 'Ada'),
+              MattermostUserDto(
+                id: 'grace',
+                username: 'grace',
+                firstName: 'Grace',
+              ),
+            ],
+          },
+        ),
+      );
+
+      final InboxSnapshot snapshot = await _repository(
+        api,
+      ).load(session: session);
+      final List<SidebarChannel> channels = snapshot.newItems
+          .map(
+            (InboxItem item) => switch (item) {
+              DirectMessageBundleInboxItem(:final messages) =>
+                messages.first.channel,
+              ChannelPostInboxItem(:final candidate) => candidate.channel,
+              ThreadInboxItem(:final channel) => channel,
+            },
+          )
+          .toList(growable: false);
+
+      expect(
+        channels
+            .singleWhere((SidebarChannel channel) => channel.id == 'direct')
+            .displayName,
+        'Ada',
+      );
+      expect(
+        channels
+            .singleWhere((SidebarChannel channel) => channel.id == 'group')
+            .displayName,
+        'Ada, Grace',
+      );
+    },
+  );
+
   test('suppresses a postponed post from New', () async {
     final _InboxApi api = _InboxApi(
       teams: const <MattermostTeamDto>[
@@ -541,12 +634,20 @@ final class _InboxApi extends Fake implements MattermostApi {
     required this.channels,
     required this.members,
     required this.unread,
+    this.users = const <MattermostUserDto>[
+      MattermostUserDto(id: 'other', username: 'other'),
+    ],
+    this.groupUsers = const MattermostGroupChannelUsersDto(
+      usersByChannelId: <String, List<MattermostUserDto>>{},
+    ),
     this.failUserLookup = false,
   });
   final List<MattermostTeamDto> teams;
   final List<MattermostChannelDto> channels;
   final List<MattermostChannelMemberDto> members;
   final List<MattermostPostDto> unread;
+  final List<MattermostUserDto> users;
+  final MattermostGroupChannelUsersDto groupUsers;
   final bool failUserLookup;
   final List<String> unreadChannelIds = <String>[];
   String? viewedChannelId;
@@ -592,9 +693,12 @@ final class _InboxApi extends Fake implements MattermostApi {
     int limitAfter = 200,
   }) async {
     unreadChannelIds.add(channelId);
+    final List<MattermostPostDto> channelPosts = unread
+        .where((MattermostPostDto post) => post.channelId == channelId)
+        .toList(growable: false);
     return MattermostPostListDto(
-      order: unread.map((it) => it.id).toList(),
-      posts: {for (final it in unread) it.id: it},
+      order: channelPosts.map((MattermostPostDto post) => post.id).toList(),
+      posts: {for (final MattermostPostDto post in channelPosts) post.id: post},
       nextPostId: '',
       previousPostId: '',
       hasNext: false,
@@ -607,10 +711,15 @@ final class _InboxApi extends Fake implements MattermostApi {
   @override
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async {
     if (failUserLookup) throw StateError('profile lookup failed');
-    return const <MattermostUserDto>[
-      MattermostUserDto(id: 'other', username: 'other'),
-    ];
+    return users
+        .where((MattermostUserDto user) => userIds.contains(user.id))
+        .toList();
   }
+
+  @override
+  Future<MattermostGroupChannelUsersDto> getUsersForGroupChannels(
+    List<String> channelIds,
+  ) async => groupUsers;
 
   @override
   Future<void> viewChannel({

@@ -1,6 +1,7 @@
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
+import 'package:mattermost_flutter/src/data/mappers/dialog_display_name_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
@@ -81,7 +82,7 @@ final class MattermostChannelRepository implements ChannelRepository {
         .toList(growable: false);
     final Set<String> directUserIds = directChannels
         .map(
-          (SidebarChannel item) => _directParticipantId(
+          (SidebarChannel item) => directParticipantId(
             channelName: item.name,
             currentUserId: currentUserId,
           ),
@@ -104,51 +105,17 @@ final class MattermostChannelRepository implements ChannelRepository {
         if (user.id.isNotEmpty) user.id: user,
     };
 
-    return channels
-        .map((SidebarChannel channel) {
-          if (channel.kind == ChannelKind.directMessage) {
-            final String? participantId = _directParticipantId(
-              channelName: channel.name,
-              currentUserId: currentUserId,
-            );
-            final UserSummary? participant = directUsersById[participantId];
-            return participant == null
-                ? channel
-                : channel.withDirectUser(
-                    displayName: _userDisplayName(participant),
-                    userId: participant.id,
-                    profileImageUpdatedAt: participant.profileImageUpdatedAt,
-                  );
-          }
-          if (channel.kind == ChannelKind.groupMessage) {
-            final List<MattermostUserDto> rawGroupUsers =
-                groupUsers.usersByChannelId[channel.id] ??
-                const <MattermostUserDto>[];
-            final String name = rawGroupUsers
-                .map(mapUserSummary)
-                .where((UserSummary user) => user.id != currentUserId)
-                .map(_userDisplayName)
-                .join(', ');
-            return name.isEmpty ? channel : channel.withDisplayName(name);
-          }
-          return channel;
-        })
-        .toList(growable: false);
+    return resolveDialogDisplayNames(
+      channels: channels,
+      currentUserId: currentUserId,
+      directUsersById: directUsersById,
+      groupUsersByChannelId: groupUsers.usersByChannelId.map(
+        (String channelId, List<MattermostUserDto> users) =>
+            MapEntry<String, List<UserSummary>>(
+              channelId,
+              users.map(mapUserSummary).toList(growable: false),
+            ),
+      ),
+    );
   }
-}
-
-String _userDisplayName(UserSummary user) => user.fullName;
-
-String? _directParticipantId({
-  required String channelName,
-  required String currentUserId,
-}) {
-  final List<String> participantIds = channelName
-      .split('__')
-      .where((String id) => id.isNotEmpty)
-      .toList(growable: false);
-  for (final String id in participantIds) {
-    if (id != currentUserId) return id;
-  }
-  return participantIds.contains(currentUserId) ? currentUserId : null;
 }
