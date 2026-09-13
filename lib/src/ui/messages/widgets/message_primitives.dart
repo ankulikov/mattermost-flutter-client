@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
@@ -41,9 +43,8 @@ class MessageAvatar extends ConsumerWidget {
             onTap: () => showUserProfileCard(
               context,
               userId: author.id,
-              onMessage: (profile) => ref
-                  .read(channelSidebarProvider.notifier)
-                  .openDirectMessage(profile),
+              onMessage: (UserProfile profile) =>
+                  _openDirectMessage(context, ref, profile),
             ),
             child: Center(child: image),
           ),
@@ -179,9 +180,8 @@ class MessageBody extends ConsumerWidget {
             showUserProfileCard(
               context,
               userId: mention.userId,
-              onMessage: (profile) => ref
-                  .read(channelSidebarProvider.notifier)
-                  .openDirectMessage(profile),
+              onMessage: (UserProfile profile) =>
+                  _openDirectMessage(context, ref, profile),
             );
           },
         ),
@@ -203,6 +203,15 @@ class MessageBody extends ConsumerWidget {
       ],
     );
   }
+}
+
+Future<void> _openDirectMessage(
+  BuildContext context,
+  WidgetRef ref,
+  UserProfile profile,
+) async {
+  await ref.read(channelSidebarProvider.notifier).openDirectMessage(profile);
+  if (context.mounted) context.go('/');
 }
 
 class MessageReactions extends StatelessWidget {

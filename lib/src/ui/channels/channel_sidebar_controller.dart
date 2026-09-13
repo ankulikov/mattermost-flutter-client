@@ -107,5 +107,6 @@ final class ChannelSidebarController
     ref.read(threadsDestinationProvider.notifier).clear();
     ref.read(selectedChannelProvider.notifier).select(channel);
     await refresh();
+    ref.read(channelPresentationProvider.notifier).showSelectedChannel();
   }
 }

@@ -36,6 +36,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   bool _profileSelected = false;
   late final ProviderSubscription<InboxInAppNotification?>
   _notificationSubscription;
+  late final ProviderSubscription<bool> _channelPresentationSubscription;
 
   @override
   void initState() {
@@ -51,6 +52,15 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         }
       },
     );
+    _channelPresentationSubscription = ref.listenManual<bool>(
+      channelPresentationProvider,
+      (bool? previous, bool next) {
+        if (!next) return;
+        _showSelectedChannelFromChannelsDestination();
+        ref.read(channelPresentationProvider.notifier).markPresented();
+      },
+      fireImmediately: true,
+    );
     unawaited(
       Future<void>(() => ref.read(authControllerProvider.notifier).restore()),
     );
@@ -60,6 +70,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _notificationSubscription.close();
+    _channelPresentationSubscription.close();
     super.dispose();
   }
 
@@ -363,6 +374,16 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showSelectedChannel() {
+    if (_profileSelected || !_showCompactChannel) {
+      setState(() {
+        _profileSelected = false;
+        _showCompactChannel = true;
+      });
+    }
+  }
+
+  void _showSelectedChannelFromChannelsDestination() {
+    ref.read(threadsDestinationProvider.notifier).clear();
     if (_profileSelected || !_showCompactChannel) {
       setState(() {
         _profileSelected = false;

@@ -26,9 +26,11 @@ import 'package:mattermost_flutter/src/features/profile/domain/models/current_us
 import 'package:mattermost_flutter/src/features/profile/domain/repositories/current_user_profile_repository.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'support/fake_user_repository.dart';
 
 void main() {
   Future<void> selectInbox(WidgetTester tester) async {
@@ -814,6 +816,99 @@ void main() {
     );
     expect(find.byType(ThreadPane), findsNothing);
   });
+
+  testWidgets(
+    'Message clears stacked routes and opens the direct channel from Channels',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      addTearDown(() => appRouter.go('/'));
+      final _PermalinkPostRepository posts = _PermalinkPostRepository();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _DirectMessageSidebarRepository(),
+            ),
+            postRepositoryProvider.overrideWithValue(posts),
+            userRepositoryProvider.overrideWithValue(FakeUserRepository()),
+          ],
+          child: const MattermostApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Town Square'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.textContaining('Open linked root', findRichText: true),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(MessageAvatar).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Message'));
+      await tester.pumpAndSettle();
+
+      expect(appRouter.routeInformationProvider.value.uri.path, '/');
+      expect(find.text('Message for direct-grace'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const PageStorageKey<String>('channel-sidebar')),
+        findsOneWidget,
+      );
+      expect(find.text('Grace Hopper'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Message keeps Channels beside the direct channel on wide layouts',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      addTearDown(() => appRouter.go('/'));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _DirectMessageSidebarRepository(),
+            ),
+            postRepositoryProvider.overrideWithValue(
+              _PermalinkPostRepository(),
+            ),
+            userRepositoryProvider.overrideWithValue(FakeUserRepository()),
+          ],
+          child: const MattermostApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Town Square'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(MessageAvatar).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Message'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('channels-side-pane')),
+        findsOneWidget,
+      );
+      expect(find.text('Message for direct-grace'), findsOneWidget);
+      expect(
+        find.byKey(
+          const ValueKey<String>('channel-selection-surface-direct-grace'),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'keeps the thread root above the divider when a reply is highlighted',
@@ -1603,19 +1698,34 @@ final class _PermalinkPostRepository extends PostRepository {
   Future<ChannelPostPage> loadLatest({
     required AuthSession session,
     required String channelId,
-  }) async => ChannelPostPage(
-    posts: <ChannelPost>[
-      _post(
-        'source',
-        replyTarget
-            ? '[Open linked reply]('
-                  'https://chat.example.com/team-a/pl/$replyPostId)'
-            : '[Open linked root]('
-                  'https://chat.example.com/team-a/pl/linked-root)',
-        35,
-      ),
-    ],
-  );
+  }) async {
+    if (channelId == 'direct-grace') {
+      return ChannelPostPage(
+        posts: <ChannelPost>[
+          ChannelPost(
+            id: 'direct-grace-post',
+            channelId: channelId,
+            author: const PostAuthor(id: 'grace', displayName: 'Grace Hopper'),
+            sentAt: DateTime(2026, 8, 24, 10, 35),
+            message: 'Message for direct-grace',
+          ),
+        ],
+      );
+    }
+    return ChannelPostPage(
+      posts: <ChannelPost>[
+        _post(
+          'source',
+          replyTarget
+              ? '[Open linked reply]('
+                    'https://chat.example.com/team-a/pl/$replyPostId)'
+              : '[Open linked root]('
+                    'https://chat.example.com/team-a/pl/linked-root)',
+          35,
+        ),
+      ],
+    );
+  }
 
   @override
   Future<PostNavigationTarget> resolveNavigationTarget({
@@ -1948,6 +2058,44 @@ final class _SidebarRepository implements ChannelRepository {
                 kind: ChannelKind.directMessage,
               ),
             ],
+          ),
+        ],
+      );
+}
+
+final class _DirectMessageSidebarRepository implements ChannelRepository {
+  static const SidebarChannel _townSquare = SidebarChannel(
+    id: 'town-square',
+    teamId: 'team-1',
+    name: 'town-square',
+    displayName: 'Town Square',
+    kind: ChannelKind.publicChannel,
+  );
+
+  static const SidebarChannel _directGrace = SidebarChannel(
+    id: 'direct-grace',
+    teamId: '',
+    name: 'me__grace',
+    displayName: 'Grace Hopper',
+    kind: ChannelKind.directMessage,
+  );
+
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => _directGrace;
+
+  @override
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      const ChannelSidebarSnapshot(
+        team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'favorites',
+            displayName: 'Favorites',
+            channels: <SidebarChannel>[_townSquare, _directGrace],
           ),
         ],
       );
