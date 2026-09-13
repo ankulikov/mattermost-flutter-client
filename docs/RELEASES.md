@@ -16,23 +16,41 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-The workflow uploads these artifacts to the workflow run for 30 days:
+The workflow publishes these files directly as assets of the corresponding
+GitHub Release, so users download the file itself rather than a workflow-artifact
+ZIP:
 
-- three ABI-specific, unsigned Android APKs;
+- three ABI-specific, release-signed Android APKs;
 - an unsigned Windows x64 ZIP without PDB files;
 - an ARM64-only macOS DMG with an ad-hoc-signed app bundle;
 - an unsigned iOS IPA.
 
-Matching Dart and native symbol files are uploaded separately for 90 days. Keep
-them private and retain them for as long as the corresponding binary can produce
-crash reports. Every binary artifact also contains a `SHA256SUMS` file.
+Each platform also has a uniquely named SHA-256 checksum file. Matching Dart and
+native symbol files remain private workflow artifacts for 90 days. Keep them for
+as long as the corresponding binary can produce crash reports.
+
+## Android signing secrets
+
+The Android release job fails unless these repository or environment secrets are
+present:
+
+- `ANDROID_KEYSTORE_BASE64` — base64-encoded JKS or PKCS#12 release keystore;
+- `ANDROID_KEY_ALIAS` — alias of the release key;
+- `ANDROID_KEY_PASSWORD` — password for that key;
+- `ANDROID_KEYSTORE_PASSWORD` — password for the keystore.
+
+The job reconstructs the key only on the ephemeral runner, verifies the APK
+signature, and removes the temporary files before it exits. Install the APK that
+matches the device ABI: `arm64-v8a` for almost all current phones/tablets,
+`armeabi-v7a` for older 32-bit ARM devices, and `x86_64` mainly for emulators.
 
 ## Signing limitations
 
 These outputs are build verification artifacts, not store-ready packages:
 
-- Android rejects installation of an unsigned APK until it is signed with the
-  application's release key.
+- Android APKs in the GitHub Release are signed with the configured release key.
+  The same signing key must be retained for future updates to install over an
+  existing copy of the app.
 - Windows can run unsigned executables, but SmartScreen can warn or block them.
 - The macOS app uses only Xcode's certificate-free ad-hoc signature required for
   a coherent application bundle. The DMG has no Developer ID signature and is
