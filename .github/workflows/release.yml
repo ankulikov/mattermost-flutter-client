@@ -1,0 +1,361 @@
+name: Release builds
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: 3.47.2
+  PUB_CACHE: ${{ github.workspace }}/.pub-cache
+
+jobs:
+  verify:
+    name: Verify and calculate version
+    runs-on: ubuntu-24.04
+    outputs:
+      build_name: ${{ steps.version.outputs.build_name }}
+      build_number: ${{ steps.version.outputs.build_number }}
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter and dependencies
+        uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Validate tag and calculate build version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          if [[ "$tag" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(\+([0-9]+))?$ ]]; then
+            build_name="${BASH_REMATCH[1]}"
+            build_number="${BASH_REMATCH[3]:-$GITHUB_RUN_NUMBER}"
+          else
+            echo "Tag must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH+BUILD." >&2
+            exit 1
+          fi
+          IFS='.' read -r major minor patch <<< "$build_name"
+          for component in "$major" "$minor" "$patch"; do
+            if (( 10#$component > 65535 )); then
+              echo 'Version components must be between 0 and 65535 for Windows.' >&2
+              exit 1
+            fi
+          done
+          if (( 10#$build_number < 1 || 10#$build_number > 65535 )); then
+            echo 'Build number must be between 1 and 65535 for all targets.' >&2
+            exit 1
+          fi
+          echo "build_name=$build_name" >> "$GITHUB_OUTPUT"
+          echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
+
+      # All platform jobs depend on this job and intentionally do not rerun these.
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed lib test tool
+
+      - name: Analyze
+        run: flutter analyze --no-pub
+
+      - name: Test
+        run: flutter test --no-pub
+
+  android:
+    name: Android APKs
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@4733eaac7c1b0da527e4206b7671e0061de1ce37 # v6
+        with:
+          cache-provider: basic
+          cache-read-only: false
+
+      - name: Set up Flutter and dependencies
+        uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Build compact unsigned APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build apk \
+            --release \
+            --no-pub \
+            --split-per-abi \
+            --obfuscate \
+            --split-debug-info=build/symbols/android \
+            --build-name='${{ needs.verify.outputs.build_name }}' \
+            --build-number='${{ needs.verify.outputs.build_number }}'
+
+          mkdir -p dist/android
+          apks=(build/app/outputs/flutter-apk/app-*-release.apk)
+          if [[ ${#apks[@]} -ne 3 || ! -f "${apks[0]}" ]]; then
+            echo "Expected three ABI-specific APKs, found ${#apks[@]}." >&2
+            exit 1
+          fi
+          apksigner="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          if [[ -z "$apksigner" ]]; then
+            echo 'apksigner was not found in the Android SDK.' >&2
+            exit 1
+          fi
+          for source in "${apks[@]}"; do
+            abi="${source##*/app-}"
+            abi="${abi%-release.apk}"
+            if "$apksigner" verify "$source"; then
+              echo "Expected an unsigned APK: $source" >&2
+              exit 1
+            fi
+            cp "$source" "dist/android/mattermost-${GITHUB_REF_NAME}-${abi}-unsigned.apk"
+          done
+          (cd dist/android && sha256sum ./*.apk > SHA256SUMS)
+
+      - name: Upload Android APKs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: android-apks-${{ github.ref_name }}
+          path: dist/android
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Upload Android symbols
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: android-symbols-${{ github.ref_name }}
+          path: build/symbols/android
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 90
+
+  windows:
+    name: Windows x64
+    needs: verify
+    runs-on: windows-2025
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter and dependencies
+        uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Build compact unsigned Windows bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter build windows `
+            --release `
+            --no-pub `
+            --obfuscate `
+            --split-debug-info=build/symbols/windows `
+            --build-name='${{ needs.verify.outputs.build_name }}' `
+            --build-number='${{ needs.verify.outputs.build_number }}'
+
+          $releaseDir = Join-Path $PWD 'build/windows/x64/runner/Release'
+          $stageDir = Join-Path $PWD 'dist/windows/app'
+          $symbolsDir = Join-Path $PWD 'build/symbols/windows/native'
+          New-Item -ItemType Directory -Force -Path $stageDir, $symbolsDir | Out-Null
+          Copy-Item -Path (Join-Path $releaseDir '*') -Destination $stageDir -Recurse
+
+          # Native PDBs are useful for crash analysis but do not belong in the app bundle.
+          Get-ChildItem -Path $releaseDir -Recurse -Filter '*.pdb' | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination $symbolsDir
+          }
+          Get-ChildItem -Path $stageDir -Recurse -Filter '*.pdb' | Remove-Item -Force
+
+          Get-ChildItem -Path $stageDir -Filter '*.exe' | ForEach-Object {
+            $signature = Get-AuthenticodeSignature -FilePath $_.FullName
+            if ($signature.Status -ne 'NotSigned') {
+              throw "Expected an unsigned executable, got $($signature.Status): $($_.Name)"
+            }
+          }
+
+          $archive = Join-Path $PWD "dist/windows/mattermost-windows-x64-${env:GITHUB_REF_NAME}-unsigned.zip"
+          Compress-Archive -Path (Join-Path $stageDir '*') -DestinationPath $archive -CompressionLevel Optimal
+          $hash = (Get-FileHash -Algorithm SHA256 -Path $archive).Hash.ToLowerInvariant()
+          "$hash  $([IO.Path]::GetFileName($archive))" | Set-Content -Encoding ascii 'dist/windows/SHA256SUMS'
+
+      - name: Upload Windows bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: windows-x64-${{ github.ref_name }}
+          path: |
+            dist/windows/*.zip
+            dist/windows/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Upload Windows symbols
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: windows-symbols-${{ github.ref_name }}
+          path: build/symbols/windows
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 90
+
+  apple:
+    name: macOS ARM64 and iOS
+    needs: verify
+    runs-on: macos-15
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter and dependencies
+        uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Restore CocoaPods cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ios/Pods
+            macos/Pods
+          key: pods-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-${{ hashFiles('ios/Podfile.lock', 'macos/Podfile.lock') }}
+          restore-keys: |
+            pods-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-
+
+      - name: Build compact macOS ARM64 app
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build macos \
+            --release \
+            --no-pub \
+            --config-only \
+            --obfuscate \
+            --split-debug-info=build/symbols/macos \
+            --build-name='${{ needs.verify.outputs.build_name }}' \
+            --build-number='${{ needs.verify.outputs.build_number }}'
+
+          # Flutter's default macOS release is universal and the Xcode project can
+          # discover a local development identity. Override both properties at the
+          # xcodebuild command line, where build settings have highest precedence.
+          xcodebuild \
+            -quiet \
+            -workspace macos/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -derivedDataPath build/macos \
+            -destination 'platform=macOS,arch=arm64' \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            build
+
+          app_path="$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' -print -quit)"
+          if [[ -z "$app_path" ]]; then
+            echo 'macOS app bundle was not produced.' >&2
+            exit 1
+          fi
+          # Apple Silicon requires internally consistent Mach-O signatures. An ad-hoc
+          # signature uses no identity or certificate and can be replaced later.
+          codesign --force --deep --sign - "$app_path"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_path/Contents/Info.plist")"
+          architectures="$(lipo -archs "$app_path/Contents/MacOS/$executable")"
+          if [[ "$architectures" != 'arm64' ]]; then
+            echo "Expected arm64-only macOS binary, got: $architectures" >&2
+            exit 1
+          fi
+          signature="$(codesign -dv --verbose=4 "$app_path" 2>&1)"
+          if [[ "$signature" != *'Signature=adhoc'* || "$signature" == *'Authority='* ]]; then
+            echo 'Expected certificate-free ad-hoc macOS signing.' >&2
+            exit 1
+          fi
+
+          mkdir -p dist/macos
+          dmg_stage="$(mktemp -d)"
+          ditto "$app_path" "$dmg_stage/$(basename "$app_path")"
+          ln -s /Applications "$dmg_stage/Applications"
+          hdiutil create \
+            -volname 'Mattermost' \
+            -srcfolder "$dmg_stage" \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            -ov \
+            "dist/macos/mattermost-macos-arm64-${GITHUB_REF_NAME}-unsigned.dmg"
+          (cd dist/macos && shasum -a 256 ./*.dmg > SHA256SUMS)
+
+      - name: Build compact unsigned iOS IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build ios \
+            --release \
+            --no-pub \
+            --no-codesign \
+            --obfuscate \
+            --split-debug-info=build/symbols/ios \
+            --build-name='${{ needs.verify.outputs.build_name }}' \
+            --build-number='${{ needs.verify.outputs.build_number }}'
+
+          ios_app='build/ios/iphoneos/Runner.app'
+          if [[ ! -d "$ios_app" ]]; then
+            echo 'Unsigned iOS app bundle was not produced.' >&2
+            exit 1
+          fi
+          mkdir -p dist/ios
+          ipa_stage="$(mktemp -d)"
+          mkdir -p "$ipa_stage/Payload"
+          ditto "$ios_app" "$ipa_stage/Payload/Runner.app"
+          (cd "$ipa_stage" && zip -qry -9 "$GITHUB_WORKSPACE/dist/ios/mattermost-ios-${GITHUB_REF_NAME}-unsigned.ipa" Payload)
+          (cd dist/ios && shasum -a 256 ./*.ipa > SHA256SUMS)
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: macos-arm64-${{ github.ref_name }}
+          path: dist/macos
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ios-${{ github.ref_name }}
+          path: dist/ios
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Upload Apple symbols
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: apple-symbols-${{ github.ref_name }}
+          path: |
+            build/symbols/macos
+            build/symbols/ios
+            build/macos/Build/Products/Release/**/*.dSYM
+            build/ios/iphoneos/**/*.dSYM
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 90

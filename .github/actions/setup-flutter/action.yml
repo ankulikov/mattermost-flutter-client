@@ -1,0 +1,34 @@
+name: Set up Flutter and dependencies
+description: Install the pinned Flutter SDK and restore the cross-platform Pub cache.
+
+inputs:
+  flutter-version:
+    description: Exact Flutter SDK version to install.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Flutter
+      uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+      with:
+        channel: stable
+        flutter-version: ${{ inputs.flutter-version }}
+        cache: true
+        pub-cache: false
+
+    # Hosted package sources are portable. Keeping them in the workspace lets the
+    # Linux verification job populate one cache that the macOS and Windows jobs
+    # can restore after it completes. SDK and generated build caches stay OS-local.
+    - name: Restore Pub packages
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: |
+          ${{ env.PUB_CACHE }}/hosted
+          ${{ env.PUB_CACHE }}/git
+        key: pub-v1-${{ inputs.flutter-version }}-${{ hashFiles('pubspec.lock') }}
+        enableCrossOsArchive: true
+
+    - name: Resolve dependencies
+      shell: bash
+      run: flutter pub get
