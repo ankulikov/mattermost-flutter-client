@@ -9,6 +9,10 @@ final class SecureCredentialStore implements CredentialStore {
           const FlutterSecureStorage(
             mOptions: MacOsOptions(
               accessibility: KeychainAccessibility.first_unlock,
+              // Ad-hoc macOS release builds cannot authorize the entitlement
+              // required by the Data Protection Keychain. Use the legacy
+              // file-based Keychain until macOS distribution signing is set up.
+              usesDataProtectionKeychain: false,
             ),
           );
 

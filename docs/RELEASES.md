@@ -55,6 +55,10 @@ These outputs are build verification artifacts, not store-ready packages:
 - The macOS app uses only Xcode's certificate-free ad-hoc signature required for
   a coherent application bundle. The DMG has no Developer ID signature and is
   not notarized, so Gatekeeper can block it on another Mac.
+- The ad-hoc macOS build uses the legacy file-based Keychain rather than the
+  Data Protection Keychain, whose access-group entitlement needs an authorized
+  provisioning profile. Restore the Data Protection Keychain when macOS
+  distribution signing is configured.
 - The iOS IPA cannot be installed on devices or uploaded to App Store Connect
   until it is signed with a certificate and provisioning profile.
 
