@@ -11,6 +11,7 @@ import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown_strings.d
 import 'package:url_launcher/url_launcher.dart';
 
 typedef MattermostLinkLauncher = Future<bool> Function(Uri uri);
+typedef MattermostPostLinkCallback = void Function(String postId);
 typedef MattermostInlineReplacementBuilder =
     Widget Function(BuildContext context, String value, TextStyle textStyle);
 typedef MattermostInlineLinkTextBuilder = String Function(String value);
@@ -76,6 +77,7 @@ class MattermostMarkdown extends StatefulWidget {
     required this.data,
     this.serverUrl,
     this.onTapChannel,
+    this.onTapPostLink,
     this.linkLauncher,
     this.textStyle,
     this.inlineReplacements = const <MattermostInlineReplacement>[],
@@ -87,6 +89,7 @@ class MattermostMarkdown extends StatefulWidget {
   final String data;
   final Uri? serverUrl;
   final ValueChanged<String>? onTapChannel;
+  final MattermostPostLinkCallback? onTapPostLink;
   final MattermostLinkLauncher? linkLauncher;
   final TextStyle? textStyle;
   final List<MattermostInlineReplacement> inlineReplacements;
@@ -221,6 +224,17 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
             widget.onTapChannel?.call(channelName);
             return;
           }
+          final Uri? resolved = _resolvedLink(href);
+          final String? postId = resolved == null || widget.serverUrl == null
+              ? null
+              : mattermostPostIdFromPermalink(
+                  uri: resolved,
+                  serverUrl: widget.serverUrl!,
+                );
+          if (postId != null && widget.onTapPostLink != null) {
+            widget.onTapPostLink!(postId);
+            return;
+          }
           unawaited(_openExternalLink(context, href));
         },
       ),
@@ -294,14 +308,7 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
     final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(
       context,
     );
-    final Uri? parsed = Uri.tryParse(href);
-    if (parsed == null) {
-      _showLinkError(messenger);
-      return;
-    }
-    final Uri? resolved = parsed.scheme.isEmpty
-        ? _resolveHttpUri(parsed)
-        : parsed;
+    final Uri? resolved = _resolvedLink(href);
     if (resolved == null ||
         !const <String>{
           'http',
@@ -320,6 +327,12 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
     } on Object {
       _showLinkError(messenger);
     }
+  }
+
+  Uri? _resolvedLink(String href) {
+    final Uri? parsed = Uri.tryParse(href);
+    if (parsed == null) return null;
+    return parsed.scheme.isEmpty ? _resolveHttpUri(parsed) : parsed;
   }
 
   Uri? _resolveHttpUri(Uri uri) {
@@ -347,6 +360,34 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
       const SnackBar(content: Text(MattermostMarkdownStrings.openLinkFailed)),
     );
   }
+}
+
+/// Returns the post ID for a same-server `/<team>/pl/<post-id>` URL.
+String? mattermostPostIdFromPermalink({
+  required Uri uri,
+  required Uri serverUrl,
+}) {
+  if (!const <String>{'http', 'https'}.contains(uri.scheme.toLowerCase()) ||
+      uri.scheme.toLowerCase() != serverUrl.scheme.toLowerCase() ||
+      uri.host.toLowerCase() != serverUrl.host.toLowerCase() ||
+      uri.port != serverUrl.port) {
+    return null;
+  }
+  final List<String> baseSegments = serverUrl.pathSegments
+      .where((String segment) => segment.isNotEmpty)
+      .toList(growable: false);
+  final List<String> segments = uri.pathSegments
+      .where((String segment) => segment.isNotEmpty)
+      .toList(growable: false);
+  if (segments.length != baseSegments.length + 3) return null;
+  for (var index = 0; index < baseSegments.length; index += 1) {
+    if (segments[index] != baseSegments[index]) return null;
+  }
+  final String teamName = segments[baseSegments.length];
+  final String marker = segments[baseSegments.length + 1];
+  final String postId = segments[baseSegments.length + 2];
+  if (teamName.isEmpty || marker != 'pl' || postId.isEmpty) return null;
+  return postId;
 }
 
 final class _MattermostInlineReplacementSyntax extends md.InlineSyntax {

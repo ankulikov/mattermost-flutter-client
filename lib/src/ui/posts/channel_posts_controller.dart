@@ -9,33 +9,57 @@ final class ChannelPostsViewState {
   const ChannelPostsViewState({
     required this.posts,
     required this.hasOlder,
+    this.hasNewer = false,
     this.replySummaries = const <String, ChannelReplySummary>{},
     this.beforePostId,
+    this.afterPostId,
     this.isLoadingOlder = false,
+    this.isLoadingNewer = false,
+    this.isFocusing = false,
     this.loadFailed = false,
+    this.focusFailed = false,
+    this.focusPostId,
   });
 
   final List<ChannelPost> posts;
   final bool hasOlder;
+  final bool hasNewer;
   final Map<String, ChannelReplySummary> replySummaries;
   final String? beforePostId;
+  final String? afterPostId;
   final bool isLoadingOlder;
+  final bool isLoadingNewer;
+  final bool isFocusing;
   final bool loadFailed;
+  final bool focusFailed;
+  final String? focusPostId;
 
   ChannelPostsViewState copyWith({
     List<ChannelPost>? posts,
     bool? hasOlder,
+    bool? hasNewer,
     Map<String, ChannelReplySummary>? replySummaries,
     String? beforePostId,
+    String? afterPostId,
     bool? isLoadingOlder,
+    bool? isLoadingNewer,
+    bool? isFocusing,
     bool? loadFailed,
+    bool? focusFailed,
+    String? focusPostId,
   }) => ChannelPostsViewState(
     posts: posts ?? this.posts,
     hasOlder: hasOlder ?? this.hasOlder,
+    hasNewer: hasNewer ?? this.hasNewer,
     replySummaries: replySummaries ?? this.replySummaries,
     beforePostId: beforePostId ?? this.beforePostId,
+    afterPostId: afterPostId ?? this.afterPostId,
     isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
+    isLoadingNewer: isLoadingNewer ?? this.isLoadingNewer,
+    isFocusing: isFocusing ?? this.isFocusing,
     loadFailed: loadFailed ?? this.loadFailed,
+    focusFailed: focusFailed ?? this.focusFailed,
+    focusPostId: focusPostId ?? this.focusPostId,
   );
 }
 
@@ -54,7 +78,10 @@ final class ChannelPostsController
   AuthSession? _session;
   PostRepository? _repository;
   bool _olderRunning = false;
+  bool _newerRunning = false;
   bool _sendRunning = false;
+  int _focusRequest = 0;
+  String? _requestedFocusPostId;
   final Set<String> _reactionRequests = <String>{};
 
   @override
@@ -124,7 +151,7 @@ final class ChannelPostsController
       final Map<String, ChannelReplySummary> replySummaries =
           mergeReplySummaries(latest.replySummaries, page.replySummaries);
       state = AsyncData(
-        ChannelPostsViewState(
+        latest.copyWith(
           posts: applyReplySummaries(
             mergePosts(latest.posts, page.posts),
             replySummaries,
@@ -132,6 +159,7 @@ final class ChannelPostsController
           hasOlder: page.hasOlder,
           replySummaries: replySummaries,
           beforePostId: page.beforePostId,
+          isLoadingOlder: false,
         ),
       );
     } on Object {
@@ -151,6 +179,116 @@ final class ChannelPostsController
         }
       }
     }
+  }
+
+  Future<void> loadNewer() async {
+    final AuthSession? session = _session;
+    final PostRepository? repository = _repository;
+    final ChannelPostsViewState? current = state.value;
+    final String? afterPostId = current?.afterPostId;
+    if (_newerRunning ||
+        session == null ||
+        repository == null ||
+        current == null ||
+        afterPostId == null ||
+        !current.hasNewer) {
+      return;
+    }
+    final RequestCancellation cancellation = _cancellation;
+    _newerRunning = true;
+    state = AsyncData(
+      current.copyWith(isLoadingNewer: true, loadFailed: false),
+    );
+    try {
+      final ChannelPostPage page = await cancellation.run(
+        () => repository.loadNewer(
+          session: session,
+          channelId: channelId,
+          afterPostId: afterPostId,
+        ),
+      );
+      final ChannelPostsViewState? latest = state.value;
+      if (latest == null) return;
+      final Map<String, ChannelReplySummary> replySummaries =
+          mergeReplySummaries(latest.replySummaries, page.replySummaries);
+      state = AsyncData(
+        latest.copyWith(
+          posts: applyReplySummaries(
+            mergePosts(latest.posts, page.posts),
+            replySummaries,
+          ),
+          hasNewer: page.hasNewer,
+          replySummaries: replySummaries,
+          afterPostId: page.afterPostId ?? afterPostId,
+          isLoadingNewer: false,
+        ),
+      );
+    } on Object {
+      if (cancellation.isCancelled) return;
+      final ChannelPostsViewState? latest = state.value;
+      if (latest != null) {
+        state = AsyncData(
+          latest.copyWith(isLoadingNewer: false, loadFailed: true),
+        );
+      }
+    } finally {
+      _newerRunning = false;
+      if (!cancellation.isCancelled) {
+        final ChannelPostsViewState? latest = state.value;
+        if (latest != null && latest.isLoadingNewer) {
+          state = AsyncData(latest.copyWith(isLoadingNewer: false));
+        }
+      }
+    }
+  }
+
+  Future<void> focusOn(String postId) async {
+    final AuthSession? session = _session;
+    final PostRepository? repository = _repository;
+    final ChannelPostsViewState current =
+        state.value ??
+        const ChannelPostsViewState(posts: <ChannelPost>[], hasOlder: false);
+    if (session == null || repository == null) return;
+    if (current.focusPostId == postId && !current.focusFailed) return;
+    _requestedFocusPostId = postId;
+    final int request = ++_focusRequest;
+    final RequestCancellation cancellation = _cancellation;
+    state = AsyncData(current.copyWith(isFocusing: true, focusFailed: false));
+    try {
+      final ChannelPostPage page = await cancellation.run(
+        () => repository.loadAround(
+          session: session,
+          channelId: channelId,
+          postId: postId,
+        ),
+      );
+      if (request != _focusRequest || cancellation.isCancelled) return;
+      state = AsyncData(
+        ChannelPostsViewState(
+          posts: page.posts,
+          hasOlder: page.hasOlder,
+          hasNewer: page.hasNewer,
+          replySummaries: page.replySummaries,
+          beforePostId: page.beforePostId,
+          afterPostId: page.afterPostId,
+          focusPostId: postId,
+        ),
+      );
+    } on Object {
+      if (request != _focusRequest || cancellation.isCancelled) return;
+      final ChannelPostsViewState? latest = state.value;
+      if (latest != null) {
+        state = AsyncData(
+          latest.copyWith(isFocusing: false, focusFailed: true),
+        );
+      }
+    }
+  }
+
+  Future<void> retryFocus() async {
+    final String? postId = _requestedFocusPostId;
+    if (postId == null) return;
+    await focusOn(postId);
   }
 
   Future<ChannelPost> sendText({

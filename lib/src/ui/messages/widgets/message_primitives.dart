@@ -121,6 +121,7 @@ class MessageBody extends ConsumerWidget {
     required this.post,
     this.serverUrl,
     this.onSelectChannel,
+    this.onOpenPostLink,
     this.deletedMessage,
     super.key,
   });
@@ -128,6 +129,7 @@ class MessageBody extends ConsumerWidget {
   final ChannelPost post;
   final Uri? serverUrl;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String>? onOpenPostLink;
   final String? deletedMessage;
 
   @override
@@ -159,6 +161,7 @@ class MessageBody extends ConsumerWidget {
       data: post.message,
       serverUrl: serverUrl,
       onTapChannel: onSelectChannel,
+      onTapPostLink: onOpenPostLink,
       textStyle: bodyStyle,
       inlineParserKey: resolvedMentionNames.join(','),
       inlineLinkReplacements: <MattermostInlineLinkReplacement>[

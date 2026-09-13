@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
+import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
@@ -766,6 +767,173 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('opens a root permalink in the channel and highlights it', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _PermalinkPostRepository posts = _PermalinkPostRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          postRepositoryProvider.overrideWithValue(posts),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.textContaining('Open linked root', findRichText: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(posts.resolvedPostId, 'linked-root');
+    expect(posts.aroundPostId, 'linked-root');
+    expect(
+      find.byKey(const ValueKey<String>('highlighted-post-linked-root')),
+      findsOneWidget,
+    );
+    expect(find.text('Historical linked message'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Oldest message')).dy,
+      lessThan(tester.getTopLeft(find.text('Older message')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Older message')).dy,
+      lessThan(tester.getTopLeft(find.text('Historical linked message')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Historical linked message')).dy,
+      lessThan(tester.getTopLeft(find.text('Newer message')).dy),
+    );
+    expect(find.byType(ThreadPane), findsNothing);
+  });
+
+  testWidgets(
+    'keeps the thread root above the divider when a reply is highlighted',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      addTearDown(() => appRouter.go('/'));
+      final _PermalinkPostRepository posts = _PermalinkPostRepository(
+        replyTarget: true,
+        replyPostId: 'reply-1',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+            postRepositoryProvider.overrideWithValue(posts),
+            threadRepositoryProvider.overrideWithValue(
+              const _ThreadRepository(),
+            ),
+          ],
+          child: const MattermostApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Town Square'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.textContaining('Open linked reply', findRichText: true),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder root = find.byKey(
+        const ValueKey<String>('thread-post-town-square-post'),
+      );
+      final Finder divider = find.text('2 replies');
+      final Finder reply = find.byKey(
+        const ValueKey<String>('highlighted-thread-post-reply-1'),
+      );
+      expect(root, findsOneWidget);
+      expect(divider, findsOneWidget);
+      expect(reply, findsOneWidget);
+      expect(
+        tester.getTopLeft(root).dy,
+        lessThan(tester.getTopLeft(divider).dy),
+      );
+      expect(
+        tester.getTopLeft(divider).dy,
+        lessThan(tester.getTopLeft(reply).dy),
+      );
+    },
+  );
+
+  testWidgets(
+    'opens and highlights a linked reply; Back returns to its channel',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      addTearDown(() => appRouter.go('/'));
+      final _PermalinkPostRepository posts = _PermalinkPostRepository(
+        replyTarget: true,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+            postRepositoryProvider.overrideWithValue(posts),
+            threadRepositoryProvider.overrideWithValue(
+              const _ThreadRepository(longThread: true),
+            ),
+          ],
+          child: const MattermostApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Town Square'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.textContaining('Open linked reply', findRichText: true),
+      );
+      await tester.pumpAndSettle();
+
+      expect(posts.resolvedPostId, 'reply-20');
+      expect(posts.aroundPostId, 'town-square-post');
+      expect(
+        find.byKey(const ValueKey<String>('highlighted-thread-post-reply-20')),
+        findsOneWidget,
+      );
+      final CustomScrollView threadMessages = tester.widget<CustomScrollView>(
+        find.byKey(
+          const ValueKey<String>('thread-message-list-town-square-post'),
+        ),
+      );
+      expect(threadMessages.controller?.position.pixels, isNot(0));
+      final Rect highlightedReply = tester.getRect(
+        find.byKey(const ValueKey<String>('highlighted-thread-post-reply-20')),
+      );
+      final Rect threadViewport = tester.getRect(
+        find.byKey(
+          const ValueKey<String>('thread-message-list-town-square-post'),
+        ),
+      );
+      expect(
+        highlightedReply.center.dy,
+        inInclusiveRange(threadViewport.top, threadViewport.bottom),
+      );
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ThreadPane), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('highlighted-post-town-square-post')),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('opens a thread beside the channel on expanded width', (
     WidgetTester tester,
   ) async {
@@ -1340,8 +1508,98 @@ class _DelayedPostRepository extends PostRepository {
   }) async => ChannelPostPage(posts: await _posts(channelId), hasOlder: false);
 }
 
+final class _PermalinkPostRepository extends PostRepository {
+  _PermalinkPostRepository({
+    this.replyTarget = false,
+    this.replyPostId = 'reply-20',
+  });
+
+  final bool replyTarget;
+  final String replyPostId;
+  String? resolvedPostId;
+  String? aroundPostId;
+
+  static const SidebarChannel _channel = SidebarChannel(
+    id: 'town-square',
+    teamId: 'team-1',
+    name: 'town-square',
+    displayName: 'Town Square',
+    kind: ChannelKind.publicChannel,
+  );
+
+  ChannelPost _post(String id, String message, int minute) => ChannelPost(
+    id: id,
+    channelId: _channel.id,
+    author: const PostAuthor(id: 'grace', displayName: 'Grace Hopper'),
+    sentAt: DateTime(2026, 8, 24, 10, minute),
+    message: message,
+    replyCount: id == 'town-square-post' ? 2 : 0,
+  );
+
+  @override
+  Future<ChannelPostPage> loadLatest({
+    required AuthSession session,
+    required String channelId,
+  }) async => ChannelPostPage(
+    posts: <ChannelPost>[
+      _post(
+        'source',
+        replyTarget
+            ? '[Open linked reply]('
+                  'https://chat.example.com/team-a/pl/$replyPostId)'
+            : '[Open linked root]('
+                  'https://chat.example.com/team-a/pl/linked-root)',
+        35,
+      ),
+    ],
+  );
+
+  @override
+  Future<PostNavigationTarget> resolveNavigationTarget({
+    required AuthSession session,
+    required String postId,
+  }) async {
+    resolvedPostId = postId;
+    return PostNavigationTarget(
+      linkedPostId: postId,
+      channelPostId: replyTarget ? 'town-square-post' : 'linked-root',
+      channel: _channel,
+      threadRootPostId: replyTarget ? 'town-square-post' : null,
+      threadHighlightedPostId: replyTarget ? postId : null,
+    );
+  }
+
+  @override
+  Future<ChannelPostPage> loadAround({
+    required AuthSession session,
+    required String channelId,
+    required String postId,
+  }) async {
+    aroundPostId = postId;
+    return ChannelPostPage(
+      posts: <ChannelPost>[
+        _post('oldest', 'Oldest message', 10),
+        _post('older', 'Older message', 20),
+        _post(postId, 'Historical linked message', 30),
+        _post('newer', 'Newer message', 40),
+      ],
+      beforePostId: 'older',
+      afterPostId: 'newer',
+    );
+  }
+
+  @override
+  Future<ChannelPostPage> loadOlder({
+    required AuthSession session,
+    required String channelId,
+    required String beforePostId,
+  }) async => const ChannelPostPage();
+}
+
 final class _ThreadRepository extends ThreadRepository {
-  const _ThreadRepository();
+  const _ThreadRepository({this.longThread = false});
+
+  final bool longThread;
 
   MessageThread _thread(String rootPostId) => MessageThread(
     rootPostId: rootPostId,
@@ -1353,25 +1611,37 @@ final class _ThreadRepository extends ThreadRepository {
       message: 'Message for town-square',
       replyCount: 2,
     ),
-    replies: <ChannelPost>[
-      ChannelPost(
-        id: 'reply-1',
-        channelId: 'town-square',
-        author: const PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
-        sentAt: DateTime(2026, 8, 24, 10, 31),
-        message: 'Thread reply 1',
-        rootId: rootPostId,
-      ),
-      ChannelPost(
-        id: 'reply-2',
-        channelId: 'town-square',
-        author: const PostAuthor(id: 'alan', displayName: 'Alan Turing'),
-        sentAt: DateTime(2026, 8, 24, 10, 35),
-        message: 'Deleted reply contents',
-        rootId: rootPostId,
-        isDeleted: true,
-      ),
-    ],
+    replies: longThread
+        ? List<ChannelPost>.generate(
+            30,
+            (int index) => ChannelPost(
+              id: 'reply-$index',
+              channelId: 'town-square',
+              author: const PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
+              sentAt: DateTime(2026, 8, 24, 10, 31 + index),
+              message: 'Thread reply $index',
+              rootId: rootPostId,
+            ),
+          )
+        : <ChannelPost>[
+            ChannelPost(
+              id: 'reply-1',
+              channelId: 'town-square',
+              author: const PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
+              sentAt: DateTime(2026, 8, 24, 10, 31),
+              message: 'Thread reply 1',
+              rootId: rootPostId,
+            ),
+            ChannelPost(
+              id: 'reply-2',
+              channelId: 'town-square',
+              author: const PostAuthor(id: 'alan', displayName: 'Alan Turing'),
+              sentAt: DateTime(2026, 8, 24, 10, 35),
+              message: 'Deleted reply contents',
+              rootId: rootPostId,
+              isDeleted: true,
+            ),
+          ],
     isComplete: true,
     loadedAt: DateTime.fromMillisecondsSinceEpoch(123456),
   );

@@ -16,6 +16,9 @@ abstract interface class MattermostApi {
     String? etag,
   });
 
+  Future<MattermostChannelDto> getChannel(String channelId) =>
+      throw UnimplementedError();
+
   Future<MattermostChannelCategoriesDto> getChannelCategories({
     required String userId,
     required String teamId,
@@ -93,6 +96,16 @@ abstract interface class MattermostApi {
     int page = 0,
     int perPage = 60,
   });
+
+  Future<MattermostPostListDto> getPostsAfter({
+    required String channelId,
+    required String postId,
+    int page = 0,
+    int perPage = 60,
+  }) => throw UnimplementedError();
+
+  Future<MattermostPostDto> getPost(String postId) =>
+      throw UnimplementedError();
 
   /// Returns posts modified after [since] (Unix milliseconds). Mattermost may
   /// return up to 1000 non-consecutive posts, so callers must reconcile holes.

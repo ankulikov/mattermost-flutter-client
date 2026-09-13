@@ -1,5 +1,6 @@
 abstract final class ThreadStrings {
   static const String title = 'Thread';
+  static const String highlightedMessage = 'Linked reply';
   static const String close = 'Close thread';
   static const String loading = 'Loading thread';
   static const String loadFailed = 'Could not refresh this thread';

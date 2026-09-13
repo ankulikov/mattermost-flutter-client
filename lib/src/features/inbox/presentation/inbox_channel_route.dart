@@ -8,10 +8,12 @@ final class InboxChannelRouteArguments {
   const InboxChannelRouteArguments({
     required this.channel,
     this.onSelectChannel,
+    this.onOpenPostLink,
   });
 
   final SidebarChannel channel;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String>? onOpenPostLink;
 }
 
 /// Keeps a compact Inbox chat on top of the Inbox navigation context.
@@ -36,6 +38,12 @@ abstract final class InboxChannelRoute {
           key: ValueKey<String>('inbox-channel-${args.channel.id}'),
           channel: args.channel,
           onBack: context.pop,
+          onOpenPostLink: args.onOpenPostLink == null
+              ? null
+              : (String postId) {
+                  if (context.mounted) context.pop();
+                  args.onOpenPostLink!(postId);
+                },
           onSelectChannel: args.onSelectChannel == null
               ? null
               : (String name) {

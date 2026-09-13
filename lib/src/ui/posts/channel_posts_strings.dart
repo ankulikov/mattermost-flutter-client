@@ -1,4 +1,7 @@
 abstract final class ChannelPostsStrings {
+  static const String highlightedMessage = 'Linked message';
+  static const String linkedMessageLoadFailed =
+      'Could not load the linked message.';
   static const String selectChannel = 'Select a channel to view messages';
   static const String loading = 'Loading channel messages';
   static const String empty = 'No messages in this channel yet';

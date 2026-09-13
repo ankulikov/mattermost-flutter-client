@@ -1,4 +1,6 @@
 abstract final class ShellStrings {
+  static const String linkedMessageLoadFailed =
+      'Could not open the linked message.';
   static const String appTitle = 'Mattermost';
   static const String channels = 'Channels';
   static const String inbox = 'Inbox';

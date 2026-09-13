@@ -7,6 +7,70 @@ import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown_strings.dart';
 
 void main() {
+  test('recognizes post permalinks only on the active Mattermost server', () {
+    final Uri server = Uri.parse('https://chat.example.com/mattermost');
+
+    expect(
+      mattermostPostIdFromPermalink(
+        uri: Uri.parse(
+          'https://chat.example.com/mattermost/team-a/pl/post-123?x=1',
+        ),
+        serverUrl: server,
+      ),
+      'post-123',
+    );
+    expect(
+      mattermostPostIdFromPermalink(
+        uri: Uri.parse('https://other.example.com/team-a/pl/post-123'),
+        serverUrl: server,
+      ),
+      isNull,
+    );
+    expect(
+      mattermostPostIdFromPermalink(
+        uri: Uri.parse('https://chat.example.com/team-a/pl/post-123'),
+        serverUrl: server,
+      ),
+      isNull,
+    );
+  });
+
+  testWidgets('routes same-server post links internally', (
+    WidgetTester tester,
+  ) async {
+    String? openedPostId;
+    Uri? launchedUri;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MattermostMarkdown(
+            data:
+                '[message](https://chat.example.com/team-a/pl/post-123) '
+                '[external](https://other.example.com/team-a/pl/post-456)',
+            serverUrl: Uri.parse('https://chat.example.com'),
+            onTapPostLink: (String postId) => openedPostId = postId,
+            linkLauncher: (Uri uri) async {
+              launchedUri = uri;
+              return true;
+            },
+          ),
+        ),
+      ),
+    );
+
+    _tapTextSpan(tester, 'message');
+    await tester.pump();
+    expect(openedPostId, 'post-123');
+    expect(launchedUri, isNull);
+
+    _tapTextSpan(tester, 'external');
+    await tester.pump();
+    expect(
+      launchedUri,
+      Uri.parse('https://other.example.com/team-a/pl/post-456'),
+    );
+  });
+
   test('uses Mattermost system emoji aliases generated from emoji.json', () {
     expect(mattermostSystemEmojis['large_green_circle'], '🟢');
     expect(mattermostSystemEmojis, isNot(contains('mattermost')));

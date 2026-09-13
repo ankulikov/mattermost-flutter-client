@@ -20,11 +20,13 @@ class ThreadPane extends ConsumerStatefulWidget {
     required this.rootPostId,
     required this.channel,
     required this.onClose,
+    this.highlightedPostId,
     this.serverUrl,
     this.teamId,
     this.unreadReplies = 0,
     this.positionAtEndWhenRead = false,
     this.onSelectChannel,
+    this.onOpenPostLink,
     this.onReplySent,
     this.onThreadRead,
     this.onThreadUnfollowed,
@@ -34,11 +36,13 @@ class ThreadPane extends ConsumerStatefulWidget {
   final String rootPostId;
   final SidebarChannel channel;
   final VoidCallback onClose;
+  final String? highlightedPostId;
   final Uri? serverUrl;
   final String? teamId;
   final int unreadReplies;
   final bool positionAtEndWhenRead;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String>? onOpenPostLink;
   final ValueChanged<ChannelPost>? onReplySent;
   final ValueChanged<DateTime>? onThreadRead;
   final ValueChanged<String>? onThreadUnfollowed;
@@ -51,7 +55,18 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
   late final ScrollController _scrollController = ScrollController();
   late final int _initialUnreadReplies = widget.unreadReplies;
   final GlobalKey _unreadDividerKey = GlobalKey();
+  final GlobalKey _highlightedPostKey = GlobalKey();
+  GlobalKey _threadFocusCenterKey = GlobalKey();
   DateTime? _scheduledLoadedAt;
+  String? _scheduledHighlightedPostId;
+
+  @override
+  void didUpdateWidget(covariant ThreadPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.highlightedPostId != widget.highlightedPostId) {
+      _threadFocusCenterKey = GlobalKey();
+    }
+  }
 
   @override
   void dispose() {
@@ -106,6 +121,22 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                     : state.thread.replies.length;
                 final int firstUnreadIndex =
                     state.thread.replies.length - unreadReplies;
+                final int? highlightedIndex =
+                    switch (widget.highlightedPostId) {
+                      final String id when id == root.id => 0,
+                      final String id => () {
+                        final int replyIndex = state.thread.replies.indexWhere(
+                          (ChannelPost reply) => reply.id == id,
+                        );
+                        if (replyIndex < 0) return null;
+                        return 2 +
+                            replyIndex +
+                            (unreadReplies > 0 && replyIndex >= firstUnreadIndex
+                                ? 1
+                                : 0);
+                      }(),
+                      null => null,
+                    };
                 return Column(
                   children: <Widget>[
                     if (state.refreshFailed)
@@ -131,17 +162,18 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                         ],
                       ),
                     Expanded(
-                      child: ListView(
-                        key: ValueKey<String>(
-                          'thread-message-list-${widget.rootPostId}',
-                        ),
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      child: _buildThreadMessages(
+                        highlightedIndex: highlightedIndex,
                         children: <Widget>[
                           _ThreadPost(
+                            key: widget.highlightedPostId == root.id
+                                ? _highlightedPostKey
+                                : ValueKey<String>('thread-post-${root.id}'),
                             post: root,
+                            highlighted: widget.highlightedPostId == root.id,
                             serverUrl: widget.serverUrl,
                             onSelectChannel: widget.onSelectChannel,
+                            onOpenPostLink: widget.onOpenPostLink,
                             onToggleReaction: (PostReaction reaction) =>
                                 _toggleReaction(root, reaction.emojiName),
                             onAddReaction: (String emojiName) =>
@@ -175,9 +207,20 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),
                               child: _ThreadPost(
+                                key:
+                                    widget.highlightedPostId ==
+                                        state.thread.replies[index].id
+                                    ? _highlightedPostKey
+                                    : ValueKey<String>(
+                                        'thread-post-${state.thread.replies[index].id}',
+                                      ),
                                 post: state.thread.replies[index],
+                                highlighted:
+                                    widget.highlightedPostId ==
+                                    state.thread.replies[index].id,
                                 serverUrl: widget.serverUrl,
                                 onSelectChannel: widget.onSelectChannel,
+                                onOpenPostLink: widget.onOpenPostLink,
                                 onToggleReaction: (PostReaction reaction) =>
                                     _toggleReaction(
                                       state.thread.replies[index],
@@ -227,16 +270,78 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
     );
   }
 
+  Widget _buildThreadMessages({
+    required List<Widget> children,
+    required int? highlightedIndex,
+  }) {
+    final Key listKey = ValueKey<String>(
+      'thread-message-list-${widget.rootPostId}',
+    );
+    if (highlightedIndex == null) {
+      return ListView(
+        key: listKey,
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: children,
+      );
+    }
+    return CustomScrollView(
+      key: listKey,
+      controller: _scrollController,
+      center: _threadFocusCenterKey,
+      anchor: 0.35,
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate(
+              // Slivers before the center grow upward, so reverse their
+              // builder order to preserve root -> divider -> replies visually.
+              children
+                  .sublist(0, highlightedIndex)
+                  .reversed
+                  .toList(growable: false),
+            ),
+          ),
+        ),
+        SliverPadding(
+          key: _threadFocusCenterKey,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate(
+              children.sublist(highlightedIndex),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _scheduleInitialPosition(ThreadViewState state) {
     final DateTime? loadedAt = state.thread.loadedAt;
     if (!state.thread.isComplete ||
         loadedAt == null ||
-        _scheduledLoadedAt == loadedAt) {
+        (_scheduledLoadedAt == loadedAt &&
+            _scheduledHighlightedPostId == widget.highlightedPostId)) {
       return;
     }
     _scheduledLoadedAt = loadedAt;
+    _scheduledHighlightedPostId = widget.highlightedPostId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (widget.highlightedPostId != null) {
+        final BuildContext? postContext = _highlightedPostKey.currentContext;
+        if (postContext != null) {
+          unawaited(
+            Scrollable.ensureVisible(
+              postContext,
+              alignment: 0.35,
+              duration: const Duration(milliseconds: 180),
+            ),
+          );
+          return;
+        }
+      }
       if (_initialUnreadReplies > 0) {
         final BuildContext? dividerContext = _unreadDividerKey.currentContext;
         if (dividerContext != null) {
@@ -417,17 +522,22 @@ class _ThreadHeader extends StatelessWidget {
 class _ThreadPost extends StatelessWidget {
   const _ThreadPost({
     required this.post,
+    required this.highlighted,
     required this.serverUrl,
     required this.onSelectChannel,
+    required this.onOpenPostLink,
     required this.onToggleReaction,
     required this.onAddReaction,
     required this.emojiRepositoryFactory,
     required this.accountId,
+    super.key,
   });
 
   final ChannelPost post;
+  final bool highlighted;
   final Uri? serverUrl;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String>? onOpenPostLink;
   final Future<void> Function(PostReaction reaction) onToggleReaction;
   final Future<bool> Function(String emojiName) onAddReaction;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
@@ -440,39 +550,53 @@ class _ThreadPost extends StatelessWidget {
       onToggleReaction: onAddReaction,
       emojiRepositoryFactory: emojiRepositoryFactory,
       accountId: accountId,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          MessageAvatar(author: post.author),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                MessageAuthorLine(author: post.author, sentAt: post.sentAt),
-                const SizedBox(height: 4),
-                MessageBody(
-                  post: post,
-                  serverUrl: serverUrl,
-                  onSelectChannel: onSelectChannel,
-                  deletedMessage: ThreadStrings.deletedMessage,
+      child: AnimatedContainer(
+        key: highlighted
+            ? ValueKey<String>('highlighted-thread-post-${post.id}')
+            : null,
+        duration: const Duration(milliseconds: 180),
+        color: highlighted
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Colors.transparent,
+        child: Semantics(
+          label: highlighted ? ThreadStrings.highlightedMessage : null,
+          container: highlighted,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              MessageAvatar(author: post.author),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    MessageAuthorLine(author: post.author, sentAt: post.sentAt),
+                    const SizedBox(height: 4),
+                    MessageBody(
+                      post: post,
+                      serverUrl: serverUrl,
+                      onSelectChannel: onSelectChannel,
+                      onOpenPostLink: onOpenPostLink,
+                      deletedMessage: ThreadStrings.deletedMessage,
+                    ),
+                    if (post.attachments.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 8),
+                      MessageAttachments(attachments: post.attachments),
+                    ],
+                    if (post.reactions.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 8),
+                      MessageReactions(
+                        post: post,
+                        semanticsLabel: ThreadStrings.reactions,
+                        onToggle: onToggleReaction,
+                      ),
+                    ],
+                  ],
                 ),
-                if (post.attachments.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 8),
-                  MessageAttachments(attachments: post.attachments),
-                ],
-                if (post.reactions.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 8),
-                  MessageReactions(
-                    post: post,
-                    semanticsLabel: ThreadStrings.reactions,
-                    onToggle: onToggleReaction,
-                  ),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

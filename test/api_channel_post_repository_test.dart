@@ -9,6 +9,70 @@ import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart'
 import 'support/fake_user_repository.dart';
 
 void main() {
+  test('resolves a reply permalink to its channel and thread root', () async {
+    final _FakePostApi api = _FakePostApi();
+    api.postsById['reply-link'] = api._post(
+      'reply-link',
+      2000,
+      rootId: 'root-link',
+    );
+    final MattermostPostRepository repository = MattermostPostRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
+    );
+
+    final target = await repository.resolveNavigationTarget(
+      session: _session,
+      postId: 'reply-link',
+    );
+
+    expect(target.linkedPostId, 'reply-link');
+    expect(target.channelPostId, 'root-link');
+    expect(target.threadRootPostId, 'root-link');
+    expect(target.threadHighlightedPostId, 'reply-link');
+    expect(target.channel.id, 'channel-1');
+  });
+
+  test('loads and pages a bidirectional window around a root post', () async {
+    final _FakePostApi api = _FakePostApi();
+    api.postsById['focus'] = api._post('focus', 2000);
+    final MattermostPostRepository repository = MattermostPostRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
+    );
+
+    final ChannelPostPage around = await repository.loadAround(
+      session: _session,
+      channelId: 'channel-1',
+      postId: 'focus',
+    );
+
+    expect(api.afterId, 'focus');
+    expect(api.afterPerPage, MattermostPostRepository.aroundPageSize);
+    expect(api.beforePerPage, MattermostPostRepository.aroundPageSize);
+    expect(around.posts.map((post) => post.id), <String>[
+      'post-0',
+      'focus',
+      'post-after',
+    ]);
+    expect(around.beforePostId, 'post-0');
+    expect(around.afterPostId, 'post-after');
+    expect(around.hasOlder, isFalse);
+    expect(around.hasNewer, isTrue);
+
+    final ChannelPostPage newer = await repository.loadNewer(
+      session: _session,
+      channelId: 'channel-1',
+      afterPostId: around.afterPostId!,
+    );
+    expect(api.afterId, 'post-after');
+    expect(api.afterPerPage, MattermostPostRepository.pageSize);
+    expect(newer.posts.single.id, 'post-newer');
+    expect(newer.hasNewer, isFalse);
+  });
+
   test(
     'loads latest roots and pages older posts from the raw cursor',
     () async {
@@ -88,6 +152,12 @@ void main() {
     },
   );
 }
+
+final AuthSession _session = AuthSession(
+  serverUrl: Uri.parse('https://chat.example.com'),
+  userId: 'me',
+  username: 'current',
+);
 
 final class _FakePostApi implements MattermostApi {
   _FakePostApi({this.hasReplyOnlyLatest = false});
@@ -171,6 +241,11 @@ final class _FakePostApi implements MattermostApi {
   final bool hasReplyOnlyLatest;
   int? latestPerPage;
   String? beforeId;
+  int? beforePerPage;
+  String? afterId;
+  int? afterPerPage;
+  final Map<String, MattermostPostDto> postsById =
+      <String, MattermostPostDto>{};
 
   @override
   Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post) =>
@@ -217,6 +292,7 @@ final class _FakePostApi implements MattermostApi {
     int perPage = 60,
   }) async {
     beforeId = postId;
+    beforePerPage = perPage;
     return MattermostPostListDto(
       order: const <String>['post-0'],
       posts: <String, MattermostPostDto>{'post-0': _post('post-0', 0)},
@@ -225,6 +301,42 @@ final class _FakePostApi implements MattermostApi {
       hasNext: false,
     );
   }
+
+  @override
+  Future<MattermostPostListDto> getPostsAfter({
+    required String channelId,
+    required String postId,
+    int page = 0,
+    int perPage = 60,
+  }) async {
+    afterId = postId;
+    afterPerPage = perPage;
+    final bool firstPage = postId == 'focus';
+    final MattermostPostDto post = _post(
+      firstPage ? 'post-after' : 'post-newer',
+      firstPage ? 3000 : 4000,
+    );
+    return MattermostPostListDto(
+      order: <String>[post.id],
+      posts: <String, MattermostPostDto>{post.id: post},
+      nextPostId: firstPage ? 'post-newer' : '',
+      previousPostId: '',
+      hasNext: false,
+    );
+  }
+
+  @override
+  Future<MattermostPostDto> getPost(String postId) async => postsById[postId]!;
+
+  @override
+  Future<MattermostChannelDto> getChannel(String channelId) async =>
+      const MattermostChannelDto(
+        id: 'channel-1',
+        teamId: 'team-1',
+        type: 'O',
+        displayName: 'Town Square',
+        name: 'town-square',
+      );
 
   @override
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds) async =>

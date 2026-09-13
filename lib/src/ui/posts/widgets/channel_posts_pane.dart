@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
@@ -24,12 +25,16 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
   const ChannelPostsPane({
     required this.channel,
     this.onSelectChannel,
+    this.onOpenPostLink,
+    this.navigationTarget,
     this.onBack,
     super.key,
   });
 
   final SidebarChannel channel;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String>? onOpenPostLink;
+  final PostNavigationTarget? navigationTarget;
   final VoidCallback? onBack;
 
   @override
@@ -38,12 +43,21 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
 
 class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
   String? _selectedRootPostId;
+  String? _highlightedThreadPostId;
+  PostNavigationTarget? _scheduledFocusTarget;
+  PostNavigationTarget? _openedThreadTarget;
 
   @override
   void didUpdateWidget(covariant ChannelPostsPane oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.channel.id != widget.channel.id) {
       _selectedRootPostId = null;
+      _highlightedThreadPostId = null;
+    }
+    if (!identical(oldWidget.navigationTarget, widget.navigationTarget)) {
+      _openedThreadTarget = null;
+      _selectedRootPostId = null;
+      _highlightedThreadPostId = null;
     }
   }
 
@@ -56,19 +70,43 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
       channelPostsProvider(channel.id),
     );
     final ChannelPostsViewState? viewState = posts.value;
+    _scheduleFocus(widget.navigationTarget);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool showSideThread =
             constraints.maxWidth >= AppBreakpoints.sideThread;
+        _scheduleTargetThread(
+          target: widget.navigationTarget,
+          state: viewState,
+          showSideThread: showSideThread,
+          serverUrl: serverUrl,
+        );
         final Widget channelPane = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             _ChannelHeader(
               channel: channel,
-              isLoading: viewState?.isLoadingOlder == true,
+              isLoading:
+                  viewState?.isLoadingOlder == true ||
+                  viewState?.isLoadingNewer == true ||
+                  viewState?.isFocusing == true,
               onBack: widget.onBack,
             ),
             const Divider(height: 1),
+            if (viewState?.focusFailed == true)
+              MaterialBanner(
+                content: const Text(
+                  ChannelPostsStrings.linkedMessageLoadFailed,
+                ),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: () => ref
+                        .read(channelPostsProvider(channel.id).notifier)
+                        .retryFocus(),
+                    child: const Text(ChannelPostsStrings.retry),
+                  ),
+                ],
+              ),
             Expanded(
               child: posts.when(
                 loading: () => const _PostsLoading(),
@@ -94,11 +132,17 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                     serverUrl: serverUrl,
                     posts: items,
                     isLoadingOlder: state.isLoadingOlder,
+                    isLoadingNewer: state.isLoadingNewer,
                     hasOlder: state.hasOlder,
-                    autoLoadOlder: !state.loadFailed,
+                    hasNewer: state.hasNewer,
+                    focusedPostId: state.focusPostId,
+                    autoLoadOlder: !state.loadFailed && !state.isFocusing,
                     onLoadOlder: () => ref
                         .read(channelPostsProvider(channel.id).notifier)
                         .loadOlder(),
+                    onLoadNewer: () => ref
+                        .read(channelPostsProvider(channel.id).notifier)
+                        .loadNewer(),
                     onOpenThread: (ChannelPost post) {
                       if (showSideThread) {
                         setState(() => _selectedRootPostId = post.id);
@@ -120,6 +164,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                         : () => ref.read(customEmojiRepositoryProvider),
                     accountId: session?.durableDataScopeId ?? '',
                     onSelectChannel: widget.onSelectChannel,
+                    onOpenPostLink: widget.onOpenPostLink,
                   );
                 },
               ),
@@ -148,10 +193,12 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
         final Widget thread = ThreadPane(
           key: ValueKey<String>('thread-$rootPostId'),
           rootPostId: rootPostId,
+          highlightedPostId: _highlightedThreadPostId,
           channel: channel,
           serverUrl: serverUrl,
           teamId: channel.teamId,
           onSelectChannel: widget.onSelectChannel,
+          onOpenPostLink: widget.onOpenPostLink,
           onReplySent: (ChannelPost reply) => ref
               .read(channelPostsProvider(channel.id).notifier)
               .recordSentReply(reply),
@@ -176,15 +223,73 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
     );
   }
 
+  void _scheduleFocus(PostNavigationTarget? target) {
+    if (target == null ||
+        target.channel.id != widget.channel.id ||
+        identical(_scheduledFocusTarget, target)) {
+      return;
+    }
+    _scheduledFocusTarget = target;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || !identical(widget.navigationTarget, target)) return;
+      try {
+        await ref.read(channelPostsProvider(widget.channel.id).future);
+      } on Object {
+        // The controller retains the session and can replace an initial error
+        // with the historical window on the focus request below.
+      }
+      if (!mounted || !identical(widget.navigationTarget, target)) return;
+      await ref
+          .read(channelPostsProvider(widget.channel.id).notifier)
+          .focusOn(target.channelPostId);
+    });
+  }
+
+  void _scheduleTargetThread({
+    required PostNavigationTarget? target,
+    required ChannelPostsViewState? state,
+    required bool showSideThread,
+    required Uri? serverUrl,
+  }) {
+    if (target == null ||
+        target.threadRootPostId == null ||
+        state?.focusPostId != target.channelPostId ||
+        identical(_openedThreadTarget, target)) {
+      return;
+    }
+    _openedThreadTarget = target;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !identical(widget.navigationTarget, target)) return;
+      if (showSideThread) {
+        setState(() {
+          _selectedRootPostId = target.threadRootPostId;
+          _highlightedThreadPostId = target.threadHighlightedPostId;
+        });
+        return;
+      }
+      unawaited(
+        _openThreadRoute(
+          context: context,
+          rootPostId: target.threadRootPostId!,
+          highlightedPostId: target.threadHighlightedPostId,
+          channel: widget.channel,
+          serverUrl: serverUrl,
+        ),
+      );
+    });
+  }
+
   Future<void> _openThreadRoute({
     required BuildContext context,
     required String rootPostId,
+    String? highlightedPostId,
     required SidebarChannel channel,
     required Uri? serverUrl,
   }) => ThreadRoute.open(
     context,
     ThreadRouteArguments(
       rootPostId: rootPostId,
+      highlightedPostId: highlightedPostId,
       channel: channel,
       serverUrl: serverUrl,
       teamId: channel.teamId,
@@ -197,6 +302,12 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
       onReplySent: (ChannelPost reply) => ref
           .read(channelPostsProvider(channel.id).notifier)
           .recordSentReply(reply),
+      onOpenPostLink: widget.onOpenPostLink == null
+          ? null
+          : (String postId) {
+              if (context.mounted) context.pop();
+              widget.onOpenPostLink!(postId);
+            },
     ),
   );
 
@@ -316,28 +427,38 @@ class _PostList extends StatefulWidget {
     required this.serverUrl,
     required this.posts,
     required this.isLoadingOlder,
+    required this.isLoadingNewer,
     required this.hasOlder,
+    required this.hasNewer,
+    required this.focusedPostId,
     required this.autoLoadOlder,
     required this.onLoadOlder,
+    required this.onLoadNewer,
     required this.onOpenThread,
     required this.onToggleReaction,
     required this.emojiRepositoryFactory,
     required this.accountId,
     required this.onSelectChannel,
+    required this.onOpenPostLink,
   });
 
   final String channelId;
   final Uri? serverUrl;
   final List<ChannelPost> posts;
   final bool isLoadingOlder;
+  final bool isLoadingNewer;
   final bool hasOlder;
+  final bool hasNewer;
+  final String? focusedPostId;
   final bool autoLoadOlder;
   final Future<void> Function() onLoadOlder;
+  final Future<void> Function() onLoadNewer;
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String>? onOpenPostLink;
 
   @override
   State<_PostList> createState() => _PostListState();
@@ -350,8 +471,10 @@ class _PostListState extends State<_PostList> {
     keepScrollOffset: true,
   )..addListener(_onScroll);
   bool _autoLoadPending = false;
+  bool _newerLoadPending = false;
   bool _viewportCheckScheduled = false;
   int _automaticLoadCount = 0;
+  GlobalKey _focusCenterKey = GlobalKey();
 
   @override
   void initState() {
@@ -369,6 +492,13 @@ class _PostListState extends State<_PostList> {
         (oldWidget.isLoadingOlder && !widget.isLoadingOlder)) {
       _autoLoadPending = false;
     }
+    if (oldWidget.channelId != widget.channelId ||
+        (oldWidget.isLoadingNewer && !widget.isLoadingNewer)) {
+      _newerLoadPending = false;
+    }
+    if (oldWidget.focusedPostId != widget.focusedPostId) {
+      _focusCenterKey = GlobalKey();
+    }
     if (oldWidget.channelId != widget.channelId) _automaticLoadCount = 0;
     _scheduleViewportCheck();
   }
@@ -382,6 +512,12 @@ class _PostListState extends State<_PostList> {
   }
 
   void _onScroll() {
+    if (!_controller.hasClients) return;
+    if (widget.focusedPostId != null) {
+      if (_controller.position.extentBefore < 160) _requestOlder();
+      if (_controller.position.extentAfter < 160) _requestNewer();
+      return;
+    }
     if (_controller.position.extentAfter < 160) _requestOlder();
   }
 
@@ -419,8 +555,26 @@ class _PostListState extends State<_PostList> {
     );
   }
 
+  void _requestNewer() {
+    if (_newerLoadPending || widget.isLoadingNewer || !widget.hasNewer) return;
+    _newerLoadPending = true;
+    unawaited(
+      widget.onLoadNewer().whenComplete(() {
+        if (!mounted) return;
+        _newerLoadPending = false;
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final String? focusedPostId = widget.focusedPostId;
+    final int focusIndex = focusedPostId == null
+        ? -1
+        : widget.posts.indexWhere(
+            (ChannelPost post) => post.id == focusedPostId,
+          );
+    if (focusIndex >= 0) return _buildFocusedList(focusIndex);
     final bool showManualLoad =
         _automaticLoadCount >= _maxAutomaticLoads &&
         widget.hasOlder &&
@@ -465,23 +619,75 @@ class _PostListState extends State<_PostList> {
             );
           }
           final int postIndex = widget.posts.length - 1 - index;
-          final ChannelPost post = widget.posts[postIndex];
-          final bool continuesAuthor =
-              postIndex > 0 &&
-              widget.posts[postIndex - 1].author.id == post.author.id;
-          return _PostRow(
-            key: ValueKey<String>(post.id),
-            post: post,
-            serverUrl: widget.serverUrl,
-            continuesAuthor: continuesAuthor,
-            onOpenThread: widget.onOpenThread,
-            onToggleReaction: widget.onToggleReaction,
-            emojiRepositoryFactory: widget.emojiRepositoryFactory,
-            accountId: widget.accountId,
-            onSelectChannel: widget.onSelectChannel,
-          );
+          return _buildPostRow(postIndex);
         },
       ),
+    );
+  }
+
+  Widget _buildFocusedList(int focusIndex) => CustomScrollView(
+    key: PageStorageKey<String>(
+      'channel-posts-${widget.channelId}-${widget.focusedPostId}',
+    ),
+    controller: _controller,
+    center: _focusCenterKey,
+    anchor: 0.35,
+    slivers: <Widget>[
+      if (widget.isLoadingOlder)
+        _loadingSliver(ChannelPostsStrings.loadingOlder),
+      SliverList(
+        delegate: SliverChildBuilderDelegate(
+          // Slivers before the center grow upward, so their builder order must
+          // run backward to keep the visual timeline chronological.
+          (BuildContext context, int index) =>
+              _buildPostRow(focusIndex - 1 - index),
+          childCount: focusIndex,
+        ),
+      ),
+      SliverList(
+        key: _focusCenterKey,
+        delegate: SliverChildBuilderDelegate(
+          (BuildContext context, int index) =>
+              _buildPostRow(focusIndex + index),
+          childCount: widget.posts.length - focusIndex,
+        ),
+      ),
+      if (widget.isLoadingNewer) _loadingSliver(ChannelPostsStrings.loading),
+    ],
+  );
+
+  Widget _loadingSliver(String label) => SliverToBoxAdapter(
+    child: Semantics(
+      label: label,
+      child: const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(
+          child: SizedBox.square(
+            dimension: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _buildPostRow(int postIndex) {
+    final ChannelPost post = widget.posts[postIndex];
+    final bool continuesAuthor =
+        postIndex > 0 &&
+        widget.posts[postIndex - 1].author.id == post.author.id;
+    return _PostRow(
+      key: ValueKey<String>(post.id),
+      post: post,
+      serverUrl: widget.serverUrl,
+      continuesAuthor: continuesAuthor,
+      highlighted: post.id == widget.focusedPostId,
+      onOpenThread: widget.onOpenThread,
+      onToggleReaction: widget.onToggleReaction,
+      emojiRepositoryFactory: widget.emojiRepositoryFactory,
+      accountId: widget.accountId,
+      onSelectChannel: widget.onSelectChannel,
+      onOpenPostLink: widget.onOpenPostLink,
     );
   }
 }
@@ -491,22 +697,26 @@ class _PostRow extends StatelessWidget {
     required this.post,
     required this.serverUrl,
     required this.continuesAuthor,
+    required this.highlighted,
     required this.onOpenThread,
     required this.onToggleReaction,
     required this.emojiRepositoryFactory,
     required this.accountId,
     required this.onSelectChannel,
+    required this.onOpenPostLink,
     super.key,
   });
 
   final ChannelPost post;
   final Uri? serverUrl;
   final bool continuesAuthor;
+  final bool highlighted;
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String>? onOpenPostLink;
 
   @override
   Widget build(BuildContext context) {
@@ -515,65 +725,84 @@ class _PostRow extends StatelessWidget {
       onToggleReaction: (String emojiName) => onToggleReaction(post, emojiName),
       emojiRepositoryFactory: emojiRepositoryFactory,
       accountId: accountId,
-      child: Padding(
-        padding: EdgeInsets.only(
-          top: continuesAuthor ? 2 : 8,
-          bottom: continuesAuthor ? 2 : 4,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            if (continuesAuthor)
-              const SizedBox(width: 44)
-            else
-              MessageAvatar(author: post.author),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  if (!continuesAuthor) ...<Widget>[
-                    MessageAuthorLine(author: post.author, sentAt: post.sentAt),
-                    const SizedBox(height: 5),
-                  ],
-                  MessageBody(
-                    post: post,
-                    serverUrl: serverUrl,
-                    onSelectChannel: onSelectChannel,
-                  ),
-                  if (post.attachments.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: 8),
-                    MessageAttachments(attachments: post.attachments),
-                  ],
-                  if (post.reactions.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: 8),
-                    MessageReactions(
-                      post: post,
-                      semanticsLabel: ChannelPostsStrings.reactions,
-                      onToggle: (PostReaction reaction) =>
-                          onToggleReaction(post, reaction.emojiName),
-                    ),
-                  ],
-                  if (post.replyCount > 0) ...<Widget>[
-                    const SizedBox(height: 6),
-                    Semantics(
-                      button: true,
-                      label: ThreadStrings.replyCount(post.replyCount),
-                      child: TextButton.icon(
-                        onPressed: () => onOpenThread(post),
-                        icon: const Icon(Icons.forum_outlined, size: 18),
-                        label: Text(_threadSummary(context, post)),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          minimumSize: const Size(44, 44),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+      child: AnimatedContainer(
+        key: highlighted
+            ? ValueKey<String>('highlighted-post-${post.id}')
+            : null,
+        duration: const Duration(milliseconds: 180),
+        color: highlighted
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Colors.transparent,
+        child: Semantics(
+          label: highlighted ? ChannelPostsStrings.highlightedMessage : null,
+          container: highlighted,
+          child: Padding(
+            padding: EdgeInsets.only(
+              top: continuesAuthor ? 2 : 8,
+              bottom: continuesAuthor ? 2 : 4,
             ),
-          ],
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (continuesAuthor)
+                  const SizedBox(width: 44)
+                else
+                  MessageAvatar(author: post.author),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      if (!continuesAuthor) ...<Widget>[
+                        MessageAuthorLine(
+                          author: post.author,
+                          sentAt: post.sentAt,
+                        ),
+                        const SizedBox(height: 5),
+                      ],
+                      MessageBody(
+                        post: post,
+                        serverUrl: serverUrl,
+                        onSelectChannel: onSelectChannel,
+                        onOpenPostLink: onOpenPostLink,
+                      ),
+                      if (post.attachments.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 8),
+                        MessageAttachments(attachments: post.attachments),
+                      ],
+                      if (post.reactions.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 8),
+                        MessageReactions(
+                          post: post,
+                          semanticsLabel: ChannelPostsStrings.reactions,
+                          onToggle: (PostReaction reaction) =>
+                              onToggleReaction(post, reaction.emojiName),
+                        ),
+                      ],
+                      if (post.replyCount > 0) ...<Widget>[
+                        const SizedBox(height: 6),
+                        Semantics(
+                          button: true,
+                          label: ThreadStrings.replyCount(post.replyCount),
+                          child: TextButton.icon(
+                            onPressed: () => onOpenThread(post),
+                            icon: const Icon(Icons.forum_outlined, size: 18),
+                            label: Text(_threadSummary(context, post)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              minimumSize: const Size(44, 44),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -73,6 +73,47 @@ void main() {
     expect(status.status, 'online');
   });
 
+  test('loads permalink post and channel details', () async {
+    final _RecordingAdapter postAdapter = _RecordingAdapter(
+      body:
+          '{"id":"post%2B1","user_id":"ada",'
+          '"channel_id":"channel+1","message":"linked"}',
+    );
+    final Dio postDio = Dio(
+      BaseOptions(baseUrl: 'https://chat.example.com/api/v4'),
+    )..httpClientAdapter = postAdapter;
+    await DioMattermostApi(dio: postDio).getPost('post+1');
+    expect(postAdapter.request?.path, '/posts/post%2B1');
+
+    final _RecordingAdapter channelAdapter = _RecordingAdapter(
+      body:
+          '{"id":"channel+1","team_id":"team-1","type":"O",'
+          '"display_name":"Town Square","name":"town-square"}',
+    );
+    final Dio channelDio = Dio(
+      BaseOptions(baseUrl: 'https://chat.example.com/api/v4'),
+    )..httpClientAdapter = channelAdapter;
+    await DioMattermostApi(dio: channelDio).getChannel('channel+1');
+    expect(channelAdapter.request?.path, '/channels/channel%2B1');
+  });
+
+  test('loads posts after the historical channel cursor', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter();
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    await DioMattermostApi(
+      dio: dio,
+    ).getPostsAfter(channelId: 'channel+1', postId: 'post-1', perPage: 30);
+
+    expect(adapter.request?.path, '/channels/channel%2B1/posts');
+    expect(adapter.request?.queryParameters, <String, Object?>{
+      'after': 'post-1',
+      'page': 0,
+      'per_page': 30,
+    });
+  });
+
   test('updates a timed user status in epoch seconds', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:

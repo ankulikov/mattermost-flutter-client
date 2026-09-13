@@ -1,7 +1,9 @@
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
@@ -17,6 +19,7 @@ final class MattermostPostRepository extends PostRepository {
        _users = users;
 
   static const int pageSize = 60;
+  static const int aroundPageSize = pageSize ~/ 2;
 
   final MattermostApi _api;
   final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
@@ -46,6 +49,91 @@ final class MattermostPostRepository extends PostRepository {
       perPage: pageSize,
     );
     return _mapPage(session: session, response: response);
+  }
+
+  @override
+  Future<PostNavigationTarget> resolveNavigationTarget({
+    required AuthSession session,
+    required String postId,
+  }) async {
+    final MattermostPostDto post = await _api.getPost(postId);
+    final MattermostChannelDto channel = await _api.getChannel(post.channelId);
+    final bool isReply = post.rootId.isNotEmpty;
+    final String channelPostId = isReply ? post.rootId : post.id;
+    return PostNavigationTarget(
+      linkedPostId: post.id,
+      channelPostId: channelPostId,
+      channel: mapChannel(channel),
+      threadRootPostId: isReply
+          ? post.rootId
+          : post.replyCount > 0
+          ? post.id
+          : null,
+      threadHighlightedPostId: isReply ? post.id : null,
+    );
+  }
+
+  @override
+  Future<ChannelPostPage> loadAround({
+    required AuthSession session,
+    required String channelId,
+    required String postId,
+  }) async {
+    final (
+      MattermostPostListDto after,
+      MattermostPostDto post,
+      MattermostPostListDto before,
+    ) = await (
+      _api.getPostsAfter(
+        channelId: channelId,
+        postId: postId,
+        perPage: aroundPageSize,
+      ),
+      _api.getPost(postId),
+      _api.getPostsBefore(
+        channelId: channelId,
+        postId: postId,
+        perPage: aroundPageSize,
+      ),
+    ).wait;
+    final MattermostPostListDto response = MattermostPostListDto(
+      order: <String>[...after.order, post.id, ...before.order],
+      posts: <String, MattermostPostDto>{
+        ...before.posts,
+        post.id: post,
+        ...after.posts,
+      },
+      nextPostId: after.nextPostId,
+      previousPostId: before.previousPostId,
+      hasNext: false,
+    );
+    return _mapPage(
+      session: session,
+      response: response,
+      beforePostId: before.order.lastOrNull,
+      afterPostId: after.order.firstOrNull ?? post.id,
+      hasOlder: before.previousPostId.isNotEmpty,
+      hasNewer: after.nextPostId.isNotEmpty,
+    );
+  }
+
+  @override
+  Future<ChannelPostPage> loadNewer({
+    required AuthSession session,
+    required String channelId,
+    required String afterPostId,
+  }) async {
+    final MattermostPostListDto response = await _api.getPostsAfter(
+      channelId: channelId,
+      postId: afterPostId,
+      perPage: pageSize,
+    );
+    return _mapPage(
+      session: session,
+      response: response,
+      afterPostId: response.order.firstOrNull,
+      hasNewer: response.nextPostId.isNotEmpty,
+    );
   }
 
   @override
@@ -109,6 +197,10 @@ final class MattermostPostRepository extends PostRepository {
   Future<ChannelPostPage> _mapPage({
     required AuthSession session,
     required MattermostPostListDto response,
+    String? beforePostId,
+    String? afterPostId,
+    bool? hasOlder,
+    bool? hasNewer,
   }) async {
     final List<MattermostPostDto> orderedPosts = response.order
         .map((String id) => response.posts[id])
@@ -137,14 +229,19 @@ final class MattermostPostRepository extends PostRepository {
             )
             .toList(growable: false)
           ..sort(compareMessagesBySentAt);
-    final String? beforePostId = response.order.lastOrNull;
+    final String? resolvedBeforePostId =
+        beforePostId ?? response.order.lastOrNull;
     return ChannelPostPage(
       posts: List<ChannelPost>.unmodifiable(roots),
       replySummaries: Map<String, ChannelReplySummary>.unmodifiable(
         replySummaries,
       ),
-      beforePostId: beforePostId,
-      hasOlder: beforePostId != null && response.previousPostId.isNotEmpty,
+      beforePostId: resolvedBeforePostId,
+      afterPostId: afterPostId,
+      hasOlder:
+          hasOlder ??
+          (resolvedBeforePostId != null && response.previousPostId.isNotEmpty),
+      hasNewer: hasNewer ?? false,
     );
   }
 

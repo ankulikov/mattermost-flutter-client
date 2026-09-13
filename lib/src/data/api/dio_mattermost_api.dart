@@ -41,6 +41,14 @@ final class DioMattermostApi
   }
 
   @override
+  Future<MattermostChannelDto> getChannel(String channelId) async {
+    final Response<Object?> response = await _get(
+      '/channels/${Uri.encodeComponent(channelId)}',
+    );
+    return MattermostChannelDto.fromJson(_object(response.data));
+  }
+
+  @override
   Future<MattermostChannelCategoriesDto> getChannelCategories({
     required String userId,
     required String teamId,
@@ -311,6 +319,32 @@ final class DioMattermostApi
       },
     );
     return MattermostPostListDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<MattermostPostListDto> getPostsAfter({
+    required String channelId,
+    required String postId,
+    int page = 0,
+    int perPage = 60,
+  }) async {
+    final Response<Object?> response = await _get(
+      '/channels/${Uri.encodeComponent(channelId)}/posts',
+      queryParameters: <String, Object?>{
+        'after': postId,
+        'page': page,
+        'per_page': perPage,
+      },
+    );
+    return MattermostPostListDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<MattermostPostDto> getPost(String postId) async {
+    final Response<Object?> response = await _get(
+      '/posts/${Uri.encodeComponent(postId)}',
+    );
+    return MattermostPostDto.fromJson(_object(response.data));
   }
 
   @override
