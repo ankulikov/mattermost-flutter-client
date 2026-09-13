@@ -4,6 +4,7 @@ import 'package:mattermost_flutter/src/data/providers/repository_providers.dart'
 import 'package:mattermost_flutter/src/domain/models/attachment.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
@@ -12,6 +13,7 @@ import 'package:mattermost_flutter/src/features/profile/presentation/current_use
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
+import 'package:mattermost_flutter/src/ui/posts/post_permalink_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_controller.dart';
 
@@ -143,11 +145,41 @@ final channelPostsProvider = AsyncNotifierProvider.autoDispose
       ),
     );
 
+/// A route-local post timeline. It prevents a linked historical window from
+/// replacing the snapshot owned by the route beneath it.
+typedef ScopedChannelPostsRequest = ({String channelId, String scopeId});
+
+final scopedChannelPostsProvider = AsyncNotifierProvider.autoDispose
+    .family<
+      ChannelPostsController,
+      ChannelPostsViewState,
+      ScopedChannelPostsRequest
+    >(
+      (ScopedChannelPostsRequest request) => ChannelPostsController(
+        request.channelId,
+        authSessionProvider,
+        postRepositoryProvider,
+      ),
+    );
+
+/// Route-scoped resolver for one `/post/:postId` navigation entry.
+final postPermalinkProvider = AsyncNotifierProvider.autoDispose
+    .family<PostPermalinkController, PostNavigationTarget, String>(
+      (String postId) => PostPermalinkController(
+        postId,
+        authSessionProvider,
+        postRepositoryProvider,
+      ),
+    );
+
 typedef ThreadRequest = ({
   String rootPostId,
   String teamId,
   bool allowsFollowing,
 });
+
+/// A route-local thread snapshot for permalink targets.
+typedef ScopedThreadRequest = ({ThreadRequest request, String scopeId});
 
 final threadProvider = AsyncNotifierProvider.autoDispose
     .family<ThreadController, ThreadViewState, ThreadRequest>(
@@ -159,6 +191,19 @@ final threadProvider = AsyncNotifierProvider.autoDispose
         postponedRepositoryProvider,
         request.teamId,
         request.allowsFollowing,
+      ),
+    );
+
+final scopedThreadProvider = AsyncNotifierProvider.autoDispose
+    .family<ThreadController, ThreadViewState, ScopedThreadRequest>(
+      (ScopedThreadRequest scoped) => ThreadController(
+        scoped.request.rootPostId,
+        authSessionProvider,
+        threadRepositoryProvider,
+        postRepositoryProvider,
+        postponedRepositoryProvider,
+        scoped.request.teamId,
+        scoped.request.allowsFollowing,
       ),
     );
 

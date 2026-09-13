@@ -772,6 +772,7 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => appRouter.go('/'));
     final _PermalinkPostRepository posts = _PermalinkPostRepository();
 
     await tester.pumpWidget(
@@ -781,7 +782,7 @@ void main() {
           channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
           postRepositoryProvider.overrideWithValue(posts),
         ],
-        child: const MaterialApp(home: BootstrapPage()),
+        child: const MattermostApp(),
       ),
     );
     await tester.pumpAndSettle();
@@ -868,7 +869,69 @@ void main() {
   );
 
   testWidgets(
-    'opens and highlights a linked reply; Back returns to its channel',
+    'wide linked thread Close keeps target channel and Back restores source',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      addTearDown(() => appRouter.go('/'));
+      final _PermalinkPostRepository posts = _PermalinkPostRepository(
+        replyTarget: true,
+        replyPostId: 'reply-1',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+            postRepositoryProvider.overrideWithValue(posts),
+            threadRepositoryProvider.overrideWithValue(
+              const _ThreadRepository(),
+            ),
+          ],
+          child: const MattermostApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Town Square'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.textContaining('Open linked reply', findRichText: true),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('highlighted-post-town-square-post')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('highlighted-thread-post-reply-1')),
+        findsOneWidget,
+      );
+      expect(find.byType(ThreadPane), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ThreadPane), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('highlighted-post-town-square-post')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Open linked reply', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.byType(ThreadPane), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'opens and highlights a linked reply; Back returns to its source channel',
     (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -899,7 +962,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(posts.resolvedPostId, 'reply-20');
-      expect(posts.aroundPostId, 'town-square-post');
+      expect(posts.aroundPostId, isNull);
       expect(
         find.byKey(const ValueKey<String>('highlighted-thread-post-reply-20')),
         findsOneWidget,
@@ -928,7 +991,7 @@ void main() {
 
       expect(find.byType(ThreadPane), findsNothing);
       expect(
-        find.byKey(const ValueKey<String>('highlighted-post-town-square-post')),
+        find.textContaining('Open linked reply', findRichText: true),
         findsOneWidget,
       );
     },

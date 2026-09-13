@@ -128,10 +128,23 @@ root-пост. Окно имеет независимые курсоры ста�
 обычную canonicalization policy. Обычный вход в канал по-прежнему начинает с
 последней страницы и использует только пагинацию назад.
 
-Root выделяется в канале. Если он имеет ответы, открывается тред; для permalink
-на reply полный тред прокручивается к этому reply и выделяет его. На compact
-layout прежний маршрут треда сначала снимается со стека, поэтому Back из нового
-треда ведет в уже подготовленный целевой канал, а не к сообщению-источнику.
+Каждый permalink открывается отдельным route `/post/:postId`, в location
+которого входит только id поста. Route-scoped presentation controller разрешает
+цель, показывает initial loading/error с retry и отменяет запрос при pop. Это
+не меняет global shell state: исходный route остаётся смонтированным ниже
+permalink route и сохраняет свой snapshot, scroll position, focus и composer
+draft. Даже ссылка на тот же канал или тред использует отдельный route-scoped
+volatile provider, поэтому historical focus не заменяет snapshot источника;
+после pop providers цели освобождаются.
+
+На wide layout permalink показывает целевой канал с выделенным root; если
+целью является root с replies или reply, рядом открывается side-thread, а reply
+дополнительно выделяется и прокручивается в видимую область. Крестик
+side-thread закрывает только его, тогда как Back в заголовке канала снимает
+permalink route. На compact layout permalink без треда показывает канал, а
+permalink c тредом сразу показывает fullscreen `ThreadPane` без скрытого или
+промежуточного канала. Его Close, system Back, edge-swipe, Escape и header Back
+снимают весь permalink route и возвращают ровно к экрану-источнику.
 
 ## Отправка сообщений
 

@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
-import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
-import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
@@ -36,8 +34,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     with WidgetsBindingObserver {
   bool _showCompactChannel = false;
   bool _profileSelected = false;
-  PostNavigationTarget? _postNavigationTarget;
-  int _postNavigationRequest = 0;
   late final ProviderSubscription<InboxInAppNotification?>
   _notificationSubscription;
 
@@ -178,8 +174,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       threadsSelected: false,
       sidebar: sidebar,
       onSelectChannel: _selectChannelNamed,
-      onOpenPostLink: _openPostLink,
-      navigationTarget: _postNavigationTarget,
     );
     return Scaffold(
       body: SafeArea(
@@ -215,7 +209,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                       background: mainContent,
                       showAdjacentWorkspace: true,
                       onSelectChannel: _selectChannelNamed,
-                      onOpenPostLink: _openPostLink,
                     )
                   : Row(
                       children: <Widget>[
@@ -259,8 +252,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         threadsSelected: false,
         sidebar: sidebar,
         onSelectChannel: _selectChannelNamed,
-        onOpenPostLink: _openPostLink,
-        navigationTarget: _postNavigationTarget,
         onBackToChannels: _showChannelsDestination,
       );
     } else if (threadsSelected) {
@@ -320,7 +311,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showChannelsDestination() {
-    _clearPostNavigation();
     if (_profileSelected) setState(() => _profileSelected = false);
     ref.read(threadsDestinationProvider.notifier).clear();
     if (_showCompactChannel) {
@@ -329,7 +319,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showThreadsDestination() {
-    _clearPostNavigation();
     if (_profileSelected) setState(() => _profileSelected = false);
     ref.read(threadsDestinationProvider.notifier).select();
     if (_showCompactChannel) {
@@ -338,7 +327,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showProfileDestination() {
-    _clearPostNavigation();
     ref.read(threadsDestinationProvider.notifier).clear();
     unawaited(ref.read(currentUserProfileProvider.notifier).refresh());
     if (!_profileSelected || _showCompactChannel) {
@@ -375,13 +363,10 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showSelectedChannel() {
-    if (_profileSelected ||
-        !_showCompactChannel ||
-        _postNavigationTarget != null) {
+    if (_profileSelected || !_showCompactChannel) {
       setState(() {
         _profileSelected = false;
         _showCompactChannel = true;
-        _postNavigationTarget = null;
       });
     }
   }
@@ -402,40 +387,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         }
       }
     }
-  }
-
-  void _openPostLink(String postId) {
-    unawaited(_resolvePostLink(postId));
-  }
-
-  Future<void> _resolvePostLink(String postId) async {
-    final AuthSession? session = ref.read(authSessionProvider);
-    if (session == null) return;
-    final int request = ++_postNavigationRequest;
-    try {
-      final PostNavigationTarget target = await ref
-          .read(postRepositoryProvider)
-          .resolveNavigationTarget(session: session, postId: postId);
-      if (!mounted || request != _postNavigationRequest) return;
-      ref.read(threadsDestinationProvider.notifier).clear();
-      ref.read(selectedChannelProvider.notifier).select(target.channel);
-      setState(() {
-        _profileSelected = false;
-        _showCompactChannel = true;
-        _postNavigationTarget = target;
-      });
-    } on Object {
-      if (!mounted || request != _postNavigationRequest) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text(ShellStrings.linkedMessageLoadFailed)),
-      );
-    }
-  }
-
-  void _clearPostNavigation() {
-    _postNavigationRequest += 1;
-    if (_postNavigationTarget == null || !mounted) return;
-    setState(() => _postNavigationTarget = null);
   }
 }
 
@@ -617,8 +568,6 @@ class _MainContent extends StatelessWidget {
     required this.threadsSelected,
     required this.sidebar,
     required this.onSelectChannel,
-    this.onOpenPostLink,
-    this.navigationTarget,
     this.onBackToChannels,
   });
 
@@ -627,8 +576,6 @@ class _MainContent extends StatelessWidget {
   final bool threadsSelected;
   final ChannelSidebarSnapshot? sidebar;
   final ValueChanged<String> onSelectChannel;
-  final ValueChanged<String>? onOpenPostLink;
-  final PostNavigationTarget? navigationTarget;
   final VoidCallback? onBackToChannels;
 
   @override
@@ -645,17 +592,12 @@ class _MainContent extends StatelessWidget {
           background: const SizedBox.shrink(),
           showAdjacentWorkspace: false,
           onSelectChannel: onSelectChannel,
-          onOpenPostLink: onOpenPostLink,
         );
       }
       if (selectedChannel case final SidebarChannel channel) {
         return ChannelPostsPane(
           channel: channel,
           onSelectChannel: onSelectChannel,
-          onOpenPostLink: onOpenPostLink,
-          navigationTarget: navigationTarget?.channel.id == channel.id
-              ? navigationTarget
-              : null,
           onBack: onBackToChannels,
         );
       }

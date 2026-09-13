@@ -34,6 +34,51 @@ void main() {
     expect(target.channel.id, 'channel-1');
   });
 
+  test(
+    'resolves a root permalink without replies to the channel only',
+    () async {
+      final _FakePostApi api = _FakePostApi();
+      api.postsById['root-link'] = api._post('root-link', 2000);
+      final MattermostPostRepository repository = MattermostPostRepository(
+        api: api,
+        messageMapper: const MattermostMessageMapper(),
+        users: FakeUserRepository(),
+      );
+
+      final target = await repository.resolveNavigationTarget(
+        session: _session,
+        postId: 'root-link',
+      );
+
+      expect(target.channelPostId, 'root-link');
+      expect(target.threadRootPostId, isNull);
+      expect(target.threadHighlightedPostId, isNull);
+    },
+  );
+
+  test('resolves a root permalink with replies to its thread root', () async {
+    final _FakePostApi api = _FakePostApi();
+    api.postsById['thread-root'] = api._post(
+      'thread-root',
+      2000,
+      replyCount: 2,
+    );
+    final MattermostPostRepository repository = MattermostPostRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
+    );
+
+    final target = await repository.resolveNavigationTarget(
+      session: _session,
+      postId: 'thread-root',
+    );
+
+    expect(target.channelPostId, 'thread-root');
+    expect(target.threadRootPostId, 'thread-root');
+    expect(target.threadHighlightedPostId, isNull);
+  });
+
   test('loads and pages a bidirectional window around a root post', () async {
     final _FakePostApi api = _FakePostApi();
     api.postsById['focus'] = api._post('focus', 2000);
@@ -349,16 +394,21 @@ final class _FakePostApi implements MattermostApi {
         ),
       ];
 
-  MattermostPostDto _post(String id, int createAt, {String rootId = ''}) =>
-      MattermostPostDto(
-        id: id,
-        userId: 'ada',
-        channelId: 'channel-1',
-        message: id,
-        createAt: createAt,
-        updateAt: createAt,
-        rootId: rootId,
-      );
+  MattermostPostDto _post(
+    String id,
+    int createAt, {
+    String rootId = '',
+    int replyCount = 0,
+  }) => MattermostPostDto(
+    id: id,
+    userId: 'ada',
+    channelId: 'channel-1',
+    message: id,
+    createAt: createAt,
+    updateAt: createAt,
+    rootId: rootId,
+    replyCount: replyCount,
+  );
 
   @override
   Future<MattermostPostListDto> getPostThread({

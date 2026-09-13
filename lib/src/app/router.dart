@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_channel_route.dart';
+import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -11,6 +12,21 @@ final GoRouter appRouter = GoRouter(
       path: '/',
       builder: (BuildContext context, GoRouterState state) =>
           const BootstrapPage(),
+    ),
+    GoRoute(
+      name: PostPermalinkRoute.name,
+      path: PostPermalinkRoute.path,
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        final String postId = state.pathParameters['postId']!;
+        return MaterialPage<void>(
+          key: state.pageKey,
+          maintainState: true,
+          child: PostPermalinkRoute(
+            postId: postId,
+            stateScopeId: state.pageKey.toString(),
+          ),
+        );
+      },
     ),
     GoRoute(
       name: InboxChannelRoute.name,
@@ -63,7 +79,6 @@ final GoRouter appRouter = GoRouter(
                 unreadReplies: arguments.unreadReplies,
                 positionAtEndWhenRead: arguments.positionAtEndWhenRead,
                 onSelectChannel: arguments.onSelectChannel,
-                onOpenPostLink: arguments.onOpenPostLink,
                 onReplySent: arguments.onReplySent,
                 onThreadRead: arguments.onThreadRead,
                 onThreadUnfollowed: arguments.onThreadUnfollowed,

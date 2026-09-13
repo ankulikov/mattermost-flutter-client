@@ -85,7 +85,6 @@ class InboxThreadHost extends ConsumerStatefulWidget {
     required this.background,
     required this.showAdjacentWorkspace,
     this.onSelectChannel,
-    this.onOpenPostLink,
     this.inboxWidth = 380,
     super.key,
   });
@@ -94,7 +93,6 @@ class InboxThreadHost extends ConsumerStatefulWidget {
   final Widget background;
   final bool showAdjacentWorkspace;
   final ValueChanged<String>? onSelectChannel;
-  final ValueChanged<String>? onOpenPostLink;
   final double inboxWidth;
 
   @override
@@ -130,7 +128,6 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
             InboxChannelRouteArguments(
               channel: channel,
               onSelectChannel: widget.onSelectChannel,
-              onOpenPostLink: widget.onOpenPostLink,
             ),
           ),
         );
@@ -186,7 +183,6 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
                   unreadReplies: target.unreadReplies,
                   positionAtEndWhenRead: target.positionAtEndWhenRead,
                   onSelectChannel: widget.onSelectChannel,
-                  onOpenPostLink: widget.onOpenPostLink,
                   onThreadUnfollowed: _removeUnfollowedThread,
                   onClose: () => setState(() => _selectedTarget = null),
                 ),
@@ -199,7 +195,6 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
                     key: ValueKey<String>('inbox-channel-${channel.id}'),
                     channel: channel,
                     onSelectChannel: widget.onSelectChannel,
-                    onOpenPostLink: widget.onOpenPostLink,
                     onBack: () => setState(() => _selectedChannel = null),
                   ),
                 ),
@@ -230,12 +225,6 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
               if (context.mounted) Navigator.of(context).pop();
             },
       onThreadUnfollowed: _removeUnfollowedThread,
-      onOpenPostLink: widget.onOpenPostLink == null
-          ? null
-          : (String postId) {
-              if (context.mounted) Navigator.of(context).pop();
-              widget.onOpenPostLink!(postId);
-            },
     ),
   );
 

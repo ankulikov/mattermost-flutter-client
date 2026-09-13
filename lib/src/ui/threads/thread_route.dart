@@ -17,7 +17,6 @@ final class ThreadRouteArguments {
     this.unreadReplies = 0,
     this.positionAtEndWhenRead = false,
     this.onSelectChannel,
-    this.onOpenPostLink,
     this.onReplySent,
     this.onThreadRead,
     this.onThreadUnfollowed,
@@ -31,7 +30,6 @@ final class ThreadRouteArguments {
   final int unreadReplies;
   final bool positionAtEndWhenRead;
   final ValueChanged<String>? onSelectChannel;
-  final ValueChanged<String>? onOpenPostLink;
   final ValueChanged<ChannelPost>? onReplySent;
   final ValueChanged<DateTime>? onThreadRead;
   final ValueChanged<String>? onThreadUnfollowed;

@@ -16,6 +16,7 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_s
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_strings.dart';
+import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_strings.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -25,16 +26,16 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
   const ChannelPostsPane({
     required this.channel,
     this.onSelectChannel,
-    this.onOpenPostLink,
     this.navigationTarget,
+    this.stateScopeId,
     this.onBack,
     super.key,
   });
 
   final SidebarChannel channel;
   final ValueChanged<String>? onSelectChannel;
-  final ValueChanged<String>? onOpenPostLink;
   final PostNavigationTarget? navigationTarget;
+  final String? stateScopeId;
   final VoidCallback? onBack;
 
   @override
@@ -46,6 +47,17 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
   String? _highlightedThreadPostId;
   PostNavigationTarget? _scheduledFocusTarget;
   PostNavigationTarget? _openedThreadTarget;
+
+  AsyncNotifierProvider<ChannelPostsController, ChannelPostsViewState>
+  get _postsProvider {
+    final String? scopeId = widget.stateScopeId;
+    return scopeId == null
+        ? channelPostsProvider(widget.channel.id)
+        : scopedChannelPostsProvider((
+            channelId: widget.channel.id,
+            scopeId: scopeId,
+          ));
+  }
 
   @override
   void didUpdateWidget(covariant ChannelPostsPane oldWidget) {
@@ -66,9 +78,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
     final SidebarChannel channel = widget.channel;
     final AuthSession? session = ref.watch(authSessionProvider);
     final Uri? serverUrl = session?.serverUrl;
-    final AsyncValue<ChannelPostsViewState> posts = ref.watch(
-      channelPostsProvider(channel.id),
-    );
+    final AsyncValue<ChannelPostsViewState> posts = ref.watch(_postsProvider);
     final ChannelPostsViewState? viewState = posts.value;
     _scheduleFocus(widget.navigationTarget);
     return LayoutBuilder(
@@ -100,9 +110,8 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                 ),
                 actions: <Widget>[
                   TextButton(
-                    onPressed: () => ref
-                        .read(channelPostsProvider(channel.id).notifier)
-                        .retryFocus(),
+                    onPressed: () =>
+                        ref.read(_postsProvider.notifier).retryFocus(),
                     child: const Text(ChannelPostsStrings.retry),
                   ),
                 ],
@@ -111,17 +120,13 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
               child: posts.when(
                 loading: () => const _PostsLoading(),
                 error: (Object error, StackTrace stackTrace) => _PostsError(
-                  onRetry: () => ref
-                      .read(channelPostsProvider(channel.id).notifier)
-                      .retry(),
+                  onRetry: () => ref.read(_postsProvider.notifier).retry(),
                 ),
                 data: (ChannelPostsViewState state) {
                   final List<ChannelPost> items = state.posts;
                   if (items.isEmpty && state.loadFailed) {
                     return _PostsError(
-                      onRetry: () => ref
-                          .read(channelPostsProvider(channel.id).notifier)
-                          .retry(),
+                      onRetry: () => ref.read(_postsProvider.notifier).retry(),
                     );
                   }
                   if (items.isEmpty && !state.hasOlder) {
@@ -137,12 +142,10 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                     hasNewer: state.hasNewer,
                     focusedPostId: state.focusPostId,
                     autoLoadOlder: !state.loadFailed && !state.isFocusing,
-                    onLoadOlder: () => ref
-                        .read(channelPostsProvider(channel.id).notifier)
-                        .loadOlder(),
-                    onLoadNewer: () => ref
-                        .read(channelPostsProvider(channel.id).notifier)
-                        .loadNewer(),
+                    onLoadOlder: () =>
+                        ref.read(_postsProvider.notifier).loadOlder(),
+                    onLoadNewer: () =>
+                        ref.read(_postsProvider.notifier).loadNewer(),
                     onOpenThread: (ChannelPost post) {
                       if (showSideThread) {
                         setState(() => _selectedRootPostId = post.id);
@@ -164,7 +167,6 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                         : () => ref.read(customEmojiRepositoryProvider),
                     accountId: session?.durableDataScopeId ?? '',
                     onSelectChannel: widget.onSelectChannel,
-                    onOpenPostLink: widget.onOpenPostLink,
                   );
                 },
               ),
@@ -182,7 +184,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                 accountId: session?.durableDataScopeId ?? '',
                 onSubmit: (String message, String pendingPostId) async {
                   await ref
-                      .read(channelPostsProvider(channel.id).notifier)
+                      .read(_postsProvider.notifier)
                       .sendText(message: message, pendingPostId: pendingPostId);
                 },
               ),
@@ -198,10 +200,9 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
           serverUrl: serverUrl,
           teamId: channel.teamId,
           onSelectChannel: widget.onSelectChannel,
-          onOpenPostLink: widget.onOpenPostLink,
-          onReplySent: (ChannelPost reply) => ref
-              .read(channelPostsProvider(channel.id).notifier)
-              .recordSentReply(reply),
+          stateScopeId: widget.stateScopeId,
+          onReplySent: (ChannelPost reply) =>
+              ref.read(_postsProvider.notifier).recordSentReply(reply),
           onClose: () => setState(() => _selectedRootPostId = null),
         );
         if (showSideThread) {
@@ -233,15 +234,13 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || !identical(widget.navigationTarget, target)) return;
       try {
-        await ref.read(channelPostsProvider(widget.channel.id).future);
+        await ref.read(_postsProvider.future);
       } on Object {
         // The controller retains the session and can replace an initial error
         // with the historical window on the focus request below.
       }
       if (!mounted || !identical(widget.navigationTarget, target)) return;
-      await ref
-          .read(channelPostsProvider(widget.channel.id).notifier)
-          .focusOn(target.channelPostId);
+      await ref.read(_postsProvider.notifier).focusOn(target.channelPostId);
     });
   }
 
@@ -299,15 +298,8 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
               widget.onSelectChannel!(name);
               if (context.mounted) context.pop();
             },
-      onReplySent: (ChannelPost reply) => ref
-          .read(channelPostsProvider(channel.id).notifier)
-          .recordSentReply(reply),
-      onOpenPostLink: widget.onOpenPostLink == null
-          ? null
-          : (String postId) {
-              if (context.mounted) context.pop();
-              widget.onOpenPostLink!(postId);
-            },
+      onReplySent: (ChannelPost reply) =>
+          ref.read(_postsProvider.notifier).recordSentReply(reply),
     ),
   );
 
@@ -317,7 +309,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
     String emojiName,
   ) async {
     final bool succeeded = await ref
-        .read(channelPostsProvider(widget.channel.id).notifier)
+        .read(_postsProvider.notifier)
         .toggleReaction(postId: post.id, emojiName: emojiName);
     if (!succeeded && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -439,7 +431,6 @@ class _PostList extends StatefulWidget {
     required this.emojiRepositoryFactory,
     required this.accountId,
     required this.onSelectChannel,
-    required this.onOpenPostLink,
   });
 
   final String channelId;
@@ -458,7 +449,6 @@ class _PostList extends StatefulWidget {
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
   final ValueChanged<String>? onSelectChannel;
-  final ValueChanged<String>? onOpenPostLink;
 
   @override
   State<_PostList> createState() => _PostListState();
@@ -687,7 +677,6 @@ class _PostListState extends State<_PostList> {
       emojiRepositoryFactory: widget.emojiRepositoryFactory,
       accountId: widget.accountId,
       onSelectChannel: widget.onSelectChannel,
-      onOpenPostLink: widget.onOpenPostLink,
     );
   }
 }
@@ -703,7 +692,6 @@ class _PostRow extends StatelessWidget {
     required this.emojiRepositoryFactory,
     required this.accountId,
     required this.onSelectChannel,
-    required this.onOpenPostLink,
     super.key,
   });
 
@@ -716,7 +704,6 @@ class _PostRow extends StatelessWidget {
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
   final ValueChanged<String>? onSelectChannel;
-  final ValueChanged<String>? onOpenPostLink;
 
   @override
   Widget build(BuildContext context) {
@@ -764,7 +751,8 @@ class _PostRow extends StatelessWidget {
                         post: post,
                         serverUrl: serverUrl,
                         onSelectChannel: onSelectChannel,
-                        onOpenPostLink: onOpenPostLink,
+                        onOpenPostLink: (String postId) =>
+                            unawaited(PostPermalinkRoute.push(context, postId)),
                       ),
                       if (post.attachments.isNotEmpty) ...<Widget>[
                         const SizedBox(height: 8),

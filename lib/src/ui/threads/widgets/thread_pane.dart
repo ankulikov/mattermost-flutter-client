@@ -11,6 +11,7 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/message_attachments.d
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
+import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_strings.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
@@ -26,7 +27,7 @@ class ThreadPane extends ConsumerStatefulWidget {
     this.unreadReplies = 0,
     this.positionAtEndWhenRead = false,
     this.onSelectChannel,
-    this.onOpenPostLink,
+    this.stateScopeId,
     this.onReplySent,
     this.onThreadRead,
     this.onThreadUnfollowed,
@@ -42,7 +43,7 @@ class ThreadPane extends ConsumerStatefulWidget {
   final int unreadReplies;
   final bool positionAtEndWhenRead;
   final ValueChanged<String>? onSelectChannel;
-  final ValueChanged<String>? onOpenPostLink;
+  final String? stateScopeId;
   final ValueChanged<ChannelPost>? onReplySent;
   final ValueChanged<DateTime>? onThreadRead;
   final ValueChanged<String>? onThreadUnfollowed;
@@ -59,6 +60,14 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
   GlobalKey _threadFocusCenterKey = GlobalKey();
   DateTime? _scheduledLoadedAt;
   String? _scheduledHighlightedPostId;
+
+  AsyncNotifierProvider<ThreadController, ThreadViewState>
+  get _threadStateProvider {
+    final String? scopeId = widget.stateScopeId;
+    return scopeId == null
+        ? threadProvider(_request)
+        : scopedThreadProvider((request: _request, scopeId: scopeId));
+  }
 
   @override
   void didUpdateWidget(covariant ThreadPane oldWidget) {
@@ -77,9 +86,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
   @override
   Widget build(BuildContext context) {
     final AuthSession? session = ref.watch(authSessionProvider);
-    final AsyncValue<ThreadViewState> value = ref.watch(
-      threadProvider(_request),
-    );
+    final AsyncValue<ThreadViewState> value = ref.watch(_threadStateProvider);
     final ThreadViewState? displayedState = value.asData?.value;
     return Material(
       color: Theme.of(context).colorScheme.surface,
@@ -99,8 +106,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
             child: value.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, _) => _ThreadError(
-                onRetry: () =>
-                    ref.read(threadProvider(_request).notifier).retry(),
+                onRetry: () => ref.read(_threadStateProvider.notifier).retry(),
               ),
               data: (ThreadViewState state) {
                 final ChannelPost? root = state.thread.root;
@@ -111,7 +117,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                   return _ThreadError(
                     message: ThreadStrings.missingRoot,
                     onRetry: () =>
-                        ref.read(threadProvider(_request).notifier).retry(),
+                        ref.read(_threadStateProvider.notifier).retry(),
                   );
                 }
                 _scheduleInitialPosition(state);
@@ -144,9 +150,8 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                         content: const Text(ThreadStrings.loadFailed),
                         actions: <Widget>[
                           TextButton(
-                            onPressed: () => ref
-                                .read(threadProvider(_request).notifier)
-                                .retry(),
+                            onPressed: () =>
+                                ref.read(_threadStateProvider.notifier).retry(),
                             child: const Text(ThreadStrings.retry),
                           ),
                         ],
@@ -173,7 +178,6 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                             highlighted: widget.highlightedPostId == root.id,
                             serverUrl: widget.serverUrl,
                             onSelectChannel: widget.onSelectChannel,
-                            onOpenPostLink: widget.onOpenPostLink,
                             onToggleReaction: (PostReaction reaction) =>
                                 _toggleReaction(root, reaction.emojiName),
                             onAddReaction: (String emojiName) =>
@@ -220,7 +224,6 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                     state.thread.replies[index].id,
                                 serverUrl: widget.serverUrl,
                                 onSelectChannel: widget.onSelectChannel,
-                                onOpenPostLink: widget.onOpenPostLink,
                                 onToggleReaction: (PostReaction reaction) =>
                                     _toggleReaction(
                                       state.thread.replies[index],
@@ -361,14 +364,14 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
     final DateTime? loadedAt = state.thread.loadedAt;
     if (teamId.isEmpty || loadedAt == null) return;
     final bool marked = await ref
-        .read(threadProvider(_request).notifier)
+        .read(_threadStateProvider.notifier)
         .markRead(teamId: teamId);
     if (mounted && marked) widget.onThreadRead?.call(loadedAt);
   }
 
   Future<void> _sendReply(String message, String pendingPostId) async {
     final ChannelPost sent = await ref
-        .read(threadProvider(_request).notifier)
+        .read(_threadStateProvider.notifier)
         .sendText(
           channelId: widget.channel.id,
           message: message,
@@ -389,7 +392,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
 
   Future<bool> _toggleReaction(ChannelPost post, String emojiName) async {
     final bool succeeded = await ref
-        .read(threadProvider(_request).notifier)
+        .read(_threadStateProvider.notifier)
         .toggleReaction(postId: post.id, emojiName: emojiName);
     if (!succeeded && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -407,9 +410,9 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
 
   Future<void> _toggleFollowing() async {
     final bool wasFollowing =
-        ref.read(threadProvider(_request)).asData?.value.isFollowing ?? false;
+        ref.read(_threadStateProvider).asData?.value.isFollowing ?? false;
     final bool succeeded = await ref
-        .read(threadProvider(_request).notifier)
+        .read(_threadStateProvider.notifier)
         .toggleFollowing();
     if (!mounted) return;
     if (succeeded && wasFollowing) {
@@ -525,7 +528,6 @@ class _ThreadPost extends StatelessWidget {
     required this.highlighted,
     required this.serverUrl,
     required this.onSelectChannel,
-    required this.onOpenPostLink,
     required this.onToggleReaction,
     required this.onAddReaction,
     required this.emojiRepositoryFactory,
@@ -537,7 +539,6 @@ class _ThreadPost extends StatelessWidget {
   final bool highlighted;
   final Uri? serverUrl;
   final ValueChanged<String>? onSelectChannel;
-  final ValueChanged<String>? onOpenPostLink;
   final Future<void> Function(PostReaction reaction) onToggleReaction;
   final Future<bool> Function(String emojiName) onAddReaction;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
@@ -576,7 +577,8 @@ class _ThreadPost extends StatelessWidget {
                       post: post,
                       serverUrl: serverUrl,
                       onSelectChannel: onSelectChannel,
-                      onOpenPostLink: onOpenPostLink,
+                      onOpenPostLink: (String postId) =>
+                          unawaited(PostPermalinkRoute.push(context, postId)),
                       deletedMessage: ThreadStrings.deletedMessage,
                     ),
                     if (post.attachments.isNotEmpty) ...<Widget>[
