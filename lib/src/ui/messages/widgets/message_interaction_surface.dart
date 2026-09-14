@@ -7,6 +7,44 @@ import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart
 import 'package:mattermost_flutter/src/ui/messages/message_actions_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/emoji_picker.dart';
 
+/// Shares post-level touch interactions with an interactive Markdown body.
+///
+/// [MattermostMarkdown] consumes this scope only when it is rendered inside a
+/// [MessageInteractionSurface]. Its touch-only recognizers call these callbacks
+/// so that the local [SelectionArea] does not win the gesture arena. Markdown
+/// rendered without this scope remains independently selectable.
+class MessageInteractionScope extends InheritedWidget {
+  const MessageInteractionScope({
+    required this.onTouchTap,
+    required this.onTouchLongPressStart,
+    required super.child,
+    super.key,
+  });
+
+  /// Opens the thread when touch tap wins over Markdown selection.
+  ///
+  /// This is deliberately non-null even when the row has no open-thread action:
+  /// the no-op still prevents touch selection in an already open thread.
+  final VoidCallback onTouchTap;
+
+  /// Starts a recognized touch long press and opens post actions.
+  final VoidCallback onTouchLongPressStart;
+
+  static MessageInteractionScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<MessageInteractionScope>();
+
+  static MessageInteractionScope of(BuildContext context) {
+    final MessageInteractionScope? scope = maybeOf(context);
+    assert(scope != null, 'No MessageInteractionScope found in context.');
+    return scope!;
+  }
+
+  @override
+  bool updateShouldNotify(MessageInteractionScope oldWidget) =>
+      onTouchTap != oldWidget.onTouchTap ||
+      onTouchLongPressStart != oldWidget.onTouchLongPressStart;
+}
+
 /// Adapts a message row to touch and precise pointer interactions.
 class MessageInteractionSurface extends StatefulWidget {
   const MessageInteractionSurface({
@@ -32,12 +70,11 @@ class MessageInteractionSurface extends StatefulWidget {
 class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
   final OverlayPortalController _quickActionsController =
       OverlayPortalController();
-  Timer? _touchHighlightTimer;
   Timer? _hoverExitTimer;
-  int? _activeTouchPointer;
   bool _messageHovered = false;
   bool _quickActionsHovered = false;
   bool _touchHighlighted = false;
+  bool _actionsSheetOpen = false;
 
   bool get _hovered => _messageHovered || _quickActionsHovered;
 
@@ -63,49 +100,53 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     });
   }
 
-  void _handlePointerDown(PointerDownEvent event) {
-    if (!_isTouch(event.kind)) return;
-    _activeTouchPointer = event.pointer;
-    _showTouchHighlight();
+  void _openThread() {
+    widget.onOpenThread?.call();
   }
 
-  void _handlePointerEnd(PointerEvent event) {
-    if (event.pointer != _activeTouchPointer) return;
-    _activeTouchPointer = null;
-    _hideTouchHighlightSoon();
-  }
-
-  void _showTouchHighlight() {
-    _touchHighlightTimer?.cancel();
+  void _handleTouchLongPressStart() {
     if (!_touchHighlighted) setState(() => _touchHighlighted = true);
-  }
-
-  void _hideTouchHighlightSoon() {
-    _touchHighlightTimer?.cancel();
-    _touchHighlightTimer = Timer(const Duration(milliseconds: 180), () {
-      if (mounted) setState(() => _touchHighlighted = false);
-    });
-  }
-
-  void _handleLongPress() {
-    if (_activeTouchPointer == null) return;
-    unawaited(HapticFeedback.lightImpact());
     unawaited(_showActionsSheet());
   }
 
+  void _handleTouchLongPressEnd() {
+    if (_touchHighlighted && mounted) {
+      setState(() => _touchHighlighted = false);
+    }
+  }
+
+  void _handleTouchPointerUp(PointerUpEvent event) {
+    if (_isTouchLike(event.kind)) _handleTouchLongPressEnd();
+  }
+
+  void _handleTouchPointerCancel(PointerCancelEvent event) {
+    if (_isTouchLike(event.kind) && !_actionsSheetOpen) {
+      _handleTouchLongPressEnd();
+    }
+  }
+
   Future<void> _showActionsSheet() async {
-    final _MessageSheetResult? result =
-        await showModalBottomSheet<_MessageSheetResult>(
-          context: context,
-          showDragHandle: true,
-          isScrollControlled: true,
-          builder: (BuildContext context) => const _MessageActionsBottomSheet(),
-        );
-    if (!mounted || result == null) return;
-    if (result.openPicker) {
-      await _openTouchPicker();
-    } else if (result.emojiName case final String name) {
-      await _submitReaction(name);
+    if (_actionsSheetOpen || !mounted) return;
+    _actionsSheetOpen = true;
+    try {
+      unawaited(HapticFeedback.lightImpact());
+      final _MessageSheetResult? result =
+          await showModalBottomSheet<_MessageSheetResult>(
+            context: context,
+            showDragHandle: true,
+            isScrollControlled: true,
+            builder: (BuildContext context) =>
+                const _MessageActionsBottomSheet(),
+          );
+      if (!mounted || result == null) return;
+      if (result.openPicker) {
+        await _openTouchPicker();
+      } else if (result.emojiName case final String name) {
+        await _submitReaction(name);
+      }
+    } finally {
+      _actionsSheetOpen = false;
+      _handleTouchLongPressEnd();
     }
   }
 
@@ -157,7 +198,6 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
 
   @override
   void dispose() {
-    _touchHighlightTimer?.cancel();
     _hoverExitTimer?.cancel();
     super.dispose();
   }
@@ -167,8 +207,9 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final bool highlighted = _hovered || _touchHighlighted;
     return Semantics(
-      button: true,
+      button: widget.onOpenThread != null,
       label: MessageActionsStrings.actions,
+      onTap: widget.onOpenThread == null ? null : _openThread,
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           final bool isLeftToRight =
@@ -203,13 +244,32 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
               onEnter: (_) => _handleMessageHover(true),
               onExit: (_) => _handleMessageHover(false),
               child: Listener(
-                onPointerDown: _handlePointerDown,
-                onPointerUp: _handlePointerEnd,
-                onPointerCancel: _handlePointerEnd,
-                child: GestureDetector(
+                onPointerUp: _handleTouchPointerUp,
+                onPointerCancel: _handleTouchPointerCancel,
+                child: RawGestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: widget.onOpenThread,
-                  onLongPress: _handleLongPress,
+                  gestures: <Type, GestureRecognizerFactory>{
+                    TapGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                          TapGestureRecognizer
+                        >(TapGestureRecognizer.new, (
+                          TapGestureRecognizer recognizer,
+                        ) {
+                          recognizer.onTap = _openThread;
+                        }),
+                    LongPressGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                          LongPressGestureRecognizer
+                        >(
+                          () => LongPressGestureRecognizer(
+                            supportedDevices: _touchLikePointerKinds,
+                          ),
+                          (LongPressGestureRecognizer recognizer) {
+                            recognizer.onLongPressStart = (_) =>
+                                _handleTouchLongPressStart();
+                          },
+                        ),
+                  },
                   child: Container(
                     key: const ValueKey<String>('message-highlight'),
                     decoration: BoxDecoration(
@@ -222,7 +282,11 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
                       horizontal: 6,
                       vertical: 2,
                     ),
-                    child: widget.child,
+                    child: MessageInteractionScope(
+                      onTouchTap: _openThread,
+                      onTouchLongPressStart: _handleTouchLongPressStart,
+                      child: widget.child,
+                    ),
                   ),
                 ),
               ),
@@ -233,6 +297,15 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     );
   }
 }
+
+const Set<PointerDeviceKind> _touchLikePointerKinds = <PointerDeviceKind>{
+  PointerDeviceKind.touch,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+};
+
+bool _isTouchLike(PointerDeviceKind kind) =>
+    _touchLikePointerKinds.contains(kind);
 
 class _QuickMessageActions extends StatelessWidget {
   const _QuickMessageActions({
@@ -449,8 +522,3 @@ String _emojiName(String emoji) => switch (emoji) {
   '❤️' => 'heart',
   _ => emoji,
 };
-
-bool _isTouch(PointerDeviceKind kind) =>
-    kind == PointerDeviceKind.touch ||
-    kind == PointerDeviceKind.stylus ||
-    kind == PointerDeviceKind.invertedStylus;

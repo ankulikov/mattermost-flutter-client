@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -8,6 +9,7 @@ import 'package:highlight/highlight.dart' as syntax;
 import 'package:markdown/markdown.dart' as md;
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 typedef MattermostLinkLauncher = Future<bool> Function(Uri uri);
@@ -116,6 +118,8 @@ class MattermostMarkdown extends StatefulWidget {
 }
 
 class _MattermostMarkdownState extends State<MattermostMarkdown> {
+  final GlobalKey<SelectionAreaState> _selectionAreaKey =
+      GlobalKey<SelectionAreaState>();
   late String _preparedData;
   ThemeData? _cachedTheme;
   TextStyle? _cachedBodyStyle;
@@ -205,40 +209,55 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
       };
     }
 
-    return SelectionArea(
-      child: MarkdownBody(
-        key: ValueKey<Object?>(widget.inlineParserKey),
-        data: _preparedData,
-        softLineBreak: true,
-        extensionSet: _extensionSet,
-        styleSheet: _cachedStyleSheet,
-        imageBuilder: _buildImage,
-        builders: _cachedBuilders!,
-        onTapLink: (String text, String? href, String title) {
-          if (href == null) return;
-          if (_handleInlineLinkReplacement(context, text, href)) return;
-          if (href.startsWith(_MattermostChannelLinkSyntax.schemePrefix)) {
-            final String channelName = Uri.decodeComponent(
-              href.substring(_MattermostChannelLinkSyntax.schemePrefix.length),
-            );
-            widget.onTapChannel?.call(channelName);
-            return;
-          }
-          final Uri? resolved = _resolvedLink(href);
-          final String? postId = resolved == null || widget.serverUrl == null
-              ? null
-              : mattermostPostIdFromPermalink(
-                  uri: resolved,
-                  serverUrl: widget.serverUrl!,
-                );
-          if (postId != null && widget.onTapPostLink != null) {
-            widget.onTapPostLink!(postId);
-            return;
-          }
-          unawaited(_openExternalLink(context, href));
-        },
-      ),
+    final Widget body = MarkdownBody(
+      key: ValueKey<Object?>(widget.inlineParserKey),
+      data: _preparedData,
+      softLineBreak: true,
+      extensionSet: _extensionSet,
+      styleSheet: _cachedStyleSheet,
+      imageBuilder: _buildImage,
+      builders: _cachedBuilders!,
+      onTapLink: (String text, String? href, String title) {
+        if (href == null) return;
+        if (_handleInlineLinkReplacement(context, text, href)) return;
+        if (href.startsWith(_MattermostChannelLinkSyntax.schemePrefix)) {
+          final String channelName = Uri.decodeComponent(
+            href.substring(_MattermostChannelLinkSyntax.schemePrefix.length),
+          );
+          widget.onTapChannel?.call(channelName);
+          return;
+        }
+        final Uri? resolved = _resolvedLink(href);
+        final String? postId = resolved == null || widget.serverUrl == null
+            ? null
+            : mattermostPostIdFromPermalink(
+                uri: resolved,
+                serverUrl: widget.serverUrl!,
+              );
+        if (postId != null && widget.onTapPostLink != null) {
+          widget.onTapPostLink!(postId);
+          return;
+        }
+        unawaited(_openExternalLink(context, href));
+      },
     );
+    final MessageInteractionScope? interactionScope =
+        MessageInteractionScope.maybeOf(context);
+    return SelectionArea(
+      key: _selectionAreaKey,
+      child: interactionScope == null
+          ? body
+          : _TouchMessageInteractionBridge(
+              onTouchStart: _clearSelection,
+              onTap: interactionScope.onTouchTap,
+              onLongPressStart: interactionScope.onTouchLongPressStart,
+              child: body,
+            ),
+    );
+  }
+
+  void _clearSelection() {
+    _selectionAreaKey.currentState?.selectableRegion.clearSelection();
   }
 
   md.ExtensionSet _buildExtensionSet(
@@ -361,6 +380,65 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
     );
   }
 }
+
+/// Captures touch-like Markdown gestures inside a message interaction scope.
+///
+/// The bridge stays below [SelectionArea], so it wins touch gesture contests
+/// against text selection without changing mouse or keyboard selection. It is
+/// intentionally excluded from semantics: links and the parent post surface
+/// remain the meaningful accessible controls.
+class _TouchMessageInteractionBridge extends StatelessWidget {
+  const _TouchMessageInteractionBridge({
+    required this.onTouchStart,
+    required this.onTap,
+    required this.onLongPressStart,
+    required this.child,
+  });
+
+  final VoidCallback onTouchStart;
+  final VoidCallback onTap;
+  final VoidCallback onLongPressStart;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: (PointerDownEvent event) {
+      if (_touchLikePointerKinds.contains(event.kind)) onTouchStart();
+    },
+    child: ExcludeSemantics(
+      child: RawGestureDetector(
+        behavior: HitTestBehavior.translucent,
+        gestures: <Type, GestureRecognizerFactory>{
+          TapGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+                () => TapGestureRecognizer(
+                  supportedDevices: _touchLikePointerKinds,
+                ),
+                (TapGestureRecognizer recognizer) {
+                  recognizer.onTap = onTap;
+                },
+              ),
+          LongPressGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+                () => LongPressGestureRecognizer(
+                  supportedDevices: _touchLikePointerKinds,
+                ),
+                (LongPressGestureRecognizer recognizer) {
+                  recognizer.onLongPressStart = (_) => onLongPressStart();
+                },
+              ),
+        },
+        child: child,
+      ),
+    ),
+  );
+}
+
+const Set<PointerDeviceKind> _touchLikePointerKinds = <PointerDeviceKind>{
+  PointerDeviceKind.touch,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+};
 
 /// Returns the post ID for a same-server `/<team>/pl/<post-id>` URL.
 String? mattermostPostIdFromPermalink({

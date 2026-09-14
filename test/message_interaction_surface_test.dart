@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
+import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_actions_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 
 import 'support/fake_emoji_repository.dart';
 
 void main() {
-  testWidgets('touch tap highlights the message and opens its thread', (
+  testWidgets('touch tap on Markdown text opens its thread exactly once', (
     WidgetTester tester,
   ) async {
     var openCount = 0;
@@ -24,15 +25,7 @@ void main() {
       find.byKey(const ValueKey<String>('message-highlight')),
     );
     final BoxDecoration decoration = highlight.decoration! as BoxDecoration;
-    expect(decoration.color, _expectedHighlightColor(tester));
-
-    await tester.pump(const Duration(milliseconds: 700));
-    final Container fadedHighlight = tester.widget(
-      find.byKey(const ValueKey<String>('message-highlight')),
-    );
-    final BoxDecoration fadedDecoration =
-        fadedHighlight.decoration! as BoxDecoration;
-    expect(fadedDecoration.color, Colors.transparent);
+    expect(decoration.color, Colors.transparent);
   });
 
   testWidgets('touch long press opens the message actions bottom sheet', (
@@ -60,28 +53,18 @@ void main() {
       kind: PointerDeviceKind.touch,
     );
     await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
 
     final Container highlight = tester.widget(
       find.byKey(const ValueKey<String>('message-highlight')),
     );
     final BoxDecoration decoration = highlight.decoration! as BoxDecoration;
     expect(decoration.color, _expectedHighlightColor(tester));
-    expect(
-      platformCalls,
-      contains(
-        isA<MethodCall>()
-            .having(
-              (MethodCall call) => call.method,
-              'method',
-              'HapticFeedback.vibrate',
-            )
-            .having(
-              (MethodCall call) => call.arguments,
-              'type',
-              'HapticFeedbackType.lightImpact',
-            ),
-      ),
-    );
+    final List<MethodCall> hapticCalls = platformCalls
+        .where((MethodCall call) => call.method == 'HapticFeedback.vibrate')
+        .toList(growable: false);
+    expect(hapticCalls, hasLength(1));
+    expect(hapticCalls.single.arguments, 'HapticFeedbackType.lightImpact');
 
     await touch.up();
     await tester.pumpAndSettle();
@@ -92,44 +75,176 @@ void main() {
       findsOneWidget,
     );
     expect(find.text(MessageActionsStrings.followThread), findsOneWidget);
+    await _dismissActionsSheet(tester);
   });
 
-  testWidgets('mouse click opens thread and hover exposes quick actions', (
+  testWidgets('touch tap on message padding opens its thread exactly once', (
     WidgetTester tester,
   ) async {
     var openCount = 0;
     await tester.pumpWidget(_app(onOpenThread: () => openCount += 1));
-    final TestGesture mouse = await tester.createGesture(
-      kind: PointerDeviceKind.mouse,
-    );
-    addTearDown(mouse.removePointer);
 
-    await mouse.addPointer(location: tester.getCenter(find.text('Message')));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey<String>('quick-message-actions')),
-      findsOneWidget,
-    );
-    expect(find.byType(AnimatedContainer), findsNothing);
-    final Container highlight = tester.widget(
+    final Rect surface = tester.getRect(
       find.byKey(const ValueKey<String>('message-highlight')),
     );
-    final BoxDecoration decoration = highlight.decoration! as BoxDecoration;
-    expect(decoration.color, _expectedHighlightColor(tester));
+    await tester.tapAt(
+      Offset(surface.left + 2, surface.bottom - 2),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump();
 
-    await mouse.down(tester.getCenter(find.text('Message')));
-    await mouse.up();
+    expect(openCount, 1);
+  });
+
+  testWidgets(
+    'touch long press on Markdown text opens one sheet, not a thread',
+    (WidgetTester tester) async {
+      var openCount = 0;
+      await tester.pumpWidget(_app(onOpenThread: () => openCount += 1));
+
+      await tester.longPress(
+        find.text('Message'),
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pumpAndSettle();
+
+      expect(openCount, 0);
+      expect(
+        find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+        findsOneWidget,
+      );
+      await _dismissActionsSheet(tester);
+    },
+  );
+
+  testWidgets('touch long press on message padding opens one sheet', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_app(onOpenThread: () {}));
+    final Rect surface = tester.getRect(
+      find.byKey(const ValueKey<String>('message-highlight')),
+    );
+
+    final TestGesture touch = await tester.startGesture(
+      Offset(surface.left + 2, surface.bottom - 2),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await touch.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+      findsOneWidget,
+    );
+    await _dismissActionsSheet(tester);
+  });
+
+  testWidgets('touch double tap and drag on Markdown text do not select it', (
+    WidgetTester tester,
+  ) async {
+    var openCount = 0;
+    await tester.pumpWidget(_app(onOpenThread: () => openCount += 1));
+
+    await tester.tap(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.tap(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pump();
+
+    final TestGesture drag = await tester.startGesture(
+      tester.getCenter(find.text('Message')),
+      kind: PointerDeviceKind.touch,
+    );
+    await drag.moveBy(const Offset(48, 0));
+    await drag.up();
+    await tester.pump();
+
+    expect(openCount, 2);
+    expect(_selectionOverlay(tester), isNull);
+    expect(
+      find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('thread Markdown blocks touch selection without a tap action', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_app(onOpenThread: null));
+
+    await tester.tap(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pump();
+    expect(_selectionOverlay(tester), isNull);
+
+    await tester.longPress(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+      findsOneWidget,
+    );
+    await _dismissActionsSheet(tester);
+  });
+
+  testWidgets('stylus tap uses the Markdown touch interaction', (
+    WidgetTester tester,
+  ) async {
+    var openCount = 0;
+    await tester.pumpWidget(_app(onOpenThread: () => openCount += 1));
+
+    await tester.tap(find.text('Message'), kind: PointerDeviceKind.stylus);
     await tester.pump();
     expect(openCount, 1);
+  });
 
-    await tester.tap(
-      find.byKey(const ValueKey<String>('more-message-actions')),
+  testWidgets('inverted stylus long press opens message actions', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_app(onOpenThread: () {}));
+
+    final Rect markdown = tester.getRect(find.text('Message'));
+    await tester.longPressAt(
+      Offset(markdown.left + 4, markdown.center.dy),
+      kind: PointerDeviceKind.invertedStylus,
     );
     await tester.pumpAndSettle();
-    expect(openCount, 1);
-    expect(find.text(MessageActionsStrings.forward), findsOneWidget);
-    expect(find.text(MessageActionsStrings.delete), findsOneWidget);
+
+    expect(
+      find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+      findsOneWidget,
+    );
+    await _dismissActionsSheet(tester);
   });
+
+  testWidgets(
+    'mouse click keeps Markdown selection behavior and hover actions',
+    (WidgetTester tester) async {
+      var openCount = 0;
+      await tester.pumpWidget(_app(onOpenThread: () => openCount += 1));
+      final TestGesture mouse = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+      );
+      addTearDown(mouse.removePointer);
+
+      await mouse.addPointer(location: tester.getCenter(find.text('Message')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('quick-message-actions')),
+        findsOneWidget,
+      );
+      expect(find.byType(AnimatedContainer), findsNothing);
+      final Container highlight = tester.widget(
+        find.byKey(const ValueKey<String>('message-highlight')),
+      );
+      final BoxDecoration decoration = highlight.decoration! as BoxDecoration;
+      expect(decoration.color, _expectedHighlightColor(tester));
+
+      await mouse.down(tester.getCenter(find.text('Message')));
+      await mouse.up();
+      await tester.pump();
+      expect(openCount, 0);
+    },
+  );
 
   testWidgets('quick actions stay interactive above the following message', (
     WidgetTester tester,
@@ -180,7 +295,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mouse long press does not open touch bottom sheet', (
+  testWidgets('mouse long press on Markdown text does not open touch sheet', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(_app(onOpenThread: () {}));
@@ -299,7 +414,7 @@ void main() {
 }
 
 Widget _app({
-  required VoidCallback onOpenThread,
+  required VoidCallback? onOpenThread,
   double width = 600,
   double messageHeight = 100,
   bool followingMessage = false,
@@ -328,7 +443,7 @@ Widget _app({
               onToggleReaction: onToggleReaction,
               child: SizedBox(
                 height: messageHeight,
-                child: const Text('Message'),
+                child: const MattermostMarkdown(data: 'Message'),
               ),
             ),
             if (followingMessage)
@@ -352,4 +467,14 @@ Color _expectedHighlightColor(WidgetTester tester) {
     find.byKey(const ValueKey<String>('message-highlight')),
   );
   return Theme.of(context).colorScheme.primary.withValues(alpha: 0.10);
+}
+
+SelectionOverlay? _selectionOverlay(WidgetTester tester) => tester
+    .state<SelectionAreaState>(find.byType(SelectionArea))
+    .selectableRegion
+    .selectionOverlay;
+
+Future<void> _dismissActionsSheet(WidgetTester tester) async {
+  tester.state<NavigatorState>(find.byType(Navigator)).pop();
+  await tester.pumpAndSettle();
 }

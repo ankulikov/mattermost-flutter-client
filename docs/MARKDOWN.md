@@ -44,8 +44,15 @@ avoids passing server-provided HTML through to a platform renderer.
 - Syntax highlighting is bounded to 20,000 characters per code block. Larger
   blocks remain selectable monospace text and keep the Copy action.
 - Post bodies contain no nested scrollables: tables and code wrap to the post
-  width, and oversized formulas scale down. Selection is provided by one
-  non-scrolling `SelectionArea` around the rendered body.
+  width, and oversized formulas scale down. One non-scrolling `SelectionArea`
+  around the rendered body preserves mouse drag, double/triple click, Copy and
+  keyboard selection. When the renderer is inside a post interaction scope, a
+  touch-only bridge handles touch, stylus and inverted-stylus tap/long press on
+  the Markdown body, so these gestures open the post thread or action sheet
+  without creating a text selection; this bridge is absent for mouse and when
+  `MattermostMarkdown` is used outside that scope. Interactive descendants such
+  as links retain their own short-tap behavior, while an existing mouse
+  selection is cleared when touch interaction begins.
 - Soft line breaks are preserved because Mattermost users create message line
   breaks with Shift+Enter.
 - Custom emoji keep their shortcode as an immediate loading/error fallback.
