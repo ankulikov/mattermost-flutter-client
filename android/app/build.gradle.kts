@@ -53,8 +53,6 @@ android {
 
     buildTypes {
         release {
-            // Local release builds remain possible without a key. The release
-            // workflow supplies this file from encrypted GitHub Secrets.
             if (keystorePropertiesFile.isFile) {
                 signingConfig = signingConfigs.getByName("release")
             }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/mention_query.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_editor_controller.dart';
 
 void main() {
@@ -87,6 +89,80 @@ void main() {
       selection: const TextSelection.collapsed(offset: 9),
     );
     expect(controller.messageText, 'Now Look ');
+  });
+
+  test('mention is an atomic display object and serializes to username', () {
+    final MessageEditorController controller = MessageEditorController(
+      customEmojiBuilder: (_, _) => const SizedBox.shrink(),
+      userMentionBuilder: (_, UserMention mention) =>
+          Text('@${mention.displayName}'),
+    );
+    addTearDown(controller.dispose);
+    controller.value = const TextEditingValue(
+      text: 'Hi @and',
+      selection: TextSelection.collapsed(offset: 7),
+    );
+
+    controller.replaceQueryWithMention(
+      const MentionQuery(
+        start: 3,
+        end: 7,
+        trigger: '@',
+        term: 'and',
+        key: 'and',
+      ),
+      const UserMention(
+        userId: 'u1',
+        username: 'andrey',
+        displayName: 'Andrey Kulikov',
+      ),
+    );
+
+    expect(controller.text, 'Hi \uFFFC ');
+    expect(controller.messageText, 'Hi @andrey ');
+    expect(
+      controller.messageTextForRange(const TextRange(start: 3, end: 4)),
+      '@andrey',
+    );
+
+    controller.value = controller.value.copyWith(
+      text: 'Say ${controller.text}',
+      selection: const TextSelection.collapsed(offset: 8),
+    );
+    expect(controller.messageText, 'Say Hi @andrey ');
+
+    controller.value = controller.value.copyWith(
+      text: 'Say Hi ',
+      selection: const TextSelection.collapsed(offset: 7),
+    );
+    expect(controller.messageText, 'Say Hi ');
+  });
+
+  test('backspace removes a mention and its automatic trailing separator', () {
+    final MessageEditorController controller = MessageEditorController(
+      customEmojiBuilder: (_, _) => const SizedBox.shrink(),
+    );
+    addTearDown(controller.dispose);
+    controller.value = const TextEditingValue(
+      text: '@an',
+      selection: TextSelection.collapsed(offset: 3),
+    );
+    controller.replaceQueryWithMention(
+      const MentionQuery(start: 0, end: 3, trigger: '@', term: 'an', key: 'an'),
+      const UserMention(
+        userId: 'u1',
+        username: 'andrey',
+        displayName: 'Andrey Kulikov',
+      ),
+    );
+
+    controller.value = controller.value.copyWith(
+      text: ' ',
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+
+    expect(controller.text, isEmpty);
+    expect(controller.messageText, isEmpty);
   });
 }
 

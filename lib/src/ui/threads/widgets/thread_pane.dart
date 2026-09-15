@@ -260,6 +260,11 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                       emojiRepositoryFactory: session == null
                           ? null
                           : () => ref.read(customEmojiRepositoryProvider),
+                      mentionRepositoryFactory: session == null
+                          ? null
+                          : () => ref.read(mentionRepositoryProvider),
+                      teamId: widget.teamId ?? widget.channel.teamId,
+                      channelId: widget.channel.id,
                       accountId: session?.durableDataScopeId ?? '',
                       onSubmit: _sendReply,
                     ),

@@ -3,11 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/find_mention_query.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/mention_query.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/mention_candidate.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
+import 'package:mattermost_flutter/src/features/mentions/presentation/mention_autocomplete_controller.dart';
+import 'package:mattermost_flutter/src/features/mentions/presentation/mention_suggestion_panel.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_editor_controller.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/emoji_picker.dart';
+import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
 typedef SubmitMessage =
     Future<void> Function(String message, String pendingPostId);
@@ -19,6 +27,9 @@ class MessageComposer extends StatefulWidget {
     required this.placeholder,
     required this.onSubmit,
     this.emojiRepositoryFactory,
+    this.mentionRepositoryFactory,
+    this.teamId,
+    this.channelId,
     this.accountId = '',
     super.key,
   });
@@ -27,6 +38,9 @@ class MessageComposer extends StatefulWidget {
   final String placeholder;
   final SubmitMessage onSubmit;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
+  final MentionRepository Function()? mentionRepositoryFactory;
+  final String? teamId;
+  final String? channelId;
   final String accountId;
 
   @override
@@ -38,13 +52,17 @@ class _MessageComposerState extends State<MessageComposer> {
   late final FocusNode _focusNode;
   final EmojiSearchNavigationController _emojiNavigation =
       EmojiSearchNavigationController();
+  final MentionSuggestionNavigationController _mentionNavigation =
+      MentionSuggestionNavigationController();
   final Object _textFieldTapGroup = Object();
   CustomEmojiRepository? _emojiRepository;
+  MentionAutocompleteController? _mentionController;
   bool _sending = false;
   bool _failed = false;
   String? _pendingPostId;
   String? _pendingDraft;
   String? _dismissedEmojiQuery;
+  String? _dismissedMentionQuery;
 
   bool get _canSend => !_sending && _controller.messageText.trim().isNotEmpty;
 
@@ -55,6 +73,27 @@ class _MessageComposerState extends State<MessageComposer> {
     return _emojiRepository ??= factory();
   }
 
+  MentionAutocompleteController? get _availableMentionController {
+    final MentionRepository Function()? factory =
+        widget.mentionRepositoryFactory;
+    final String? teamId = widget.teamId;
+    final String? channelId = widget.channelId;
+    if (factory == null ||
+        teamId == null ||
+        channelId == null ||
+        teamId.isEmpty ||
+        channelId.isEmpty ||
+        widget.accountId.isEmpty) {
+      return null;
+    }
+    return _mentionController ??= MentionAutocompleteController(
+      repository: factory(),
+      teamId: teamId,
+      channelId: channelId,
+      limit: 25,
+    )..addListener(_onMentionChanged);
+  }
+
   EmojiAutocompleteQuery? get _visibleEmojiQuery {
     if (_sending || !_focusNode.hasFocus) return null;
     final EmojiAutocompleteQuery? query = _controller.emojiAutocompleteQuery;
@@ -62,6 +101,23 @@ class _MessageComposerState extends State<MessageComposer> {
         _emojiQueryKey(query) == _dismissedEmojiQuery ||
         widget.emojiRepositoryFactory == null ||
         widget.accountId.isEmpty) {
+      return null;
+    }
+    return query;
+  }
+
+  MentionQuery? get _visibleMentionQuery {
+    if (_sending || !_focusNode.hasFocus || _visibleEmojiQuery != null) {
+      return null;
+    }
+    final MentionQuery? query = findMentionQuery(
+      text: _controller.text,
+      selectionStart: _controller.selection.start,
+      selectionEnd: _controller.selection.end,
+    );
+    if (query == null ||
+        _mentionQueryKey(query) == _dismissedMentionQuery ||
+        _availableMentionController == null) {
       return null;
     }
     return query;
@@ -82,6 +138,25 @@ class _MessageComposerState extends State<MessageComposer> {
           emoji: emoji,
         );
       },
+      userMentionBuilder: (BuildContext context, UserMention mention) =>
+          GestureDetector(
+            onTap: () => unawaited(
+              showUserProfileCard(
+                context,
+                userId: mention.userId,
+                onMessage: (_) async {},
+              ),
+            ),
+            child: Text(
+              '@${mention.displayName}',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                decoration: TextDecoration.underline,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
     )..addListener(_onTextChanged);
   }
 
@@ -93,10 +168,15 @@ class _MessageComposerState extends State<MessageComposer> {
       _pendingPostId = null;
       _pendingDraft = null;
       _failed = false;
+      _dismissedMentionQuery = null;
+      _mentionController?.dispose();
+      _mentionController = null;
     }
     if (oldWidget.accountId != widget.accountId) {
       _emojiRepository = null;
       _controller.clear();
+      _mentionController?.dispose();
+      _mentionController = null;
     }
   }
 
@@ -109,6 +189,8 @@ class _MessageComposerState extends State<MessageComposer> {
       ..removeListener(_onFocusChanged)
       ..dispose();
     _emojiNavigation.dispose();
+    _mentionController?.dispose();
+    _mentionNavigation.dispose();
     super.dispose();
   }
 
@@ -122,15 +204,45 @@ class _MessageComposerState extends State<MessageComposer> {
     if (query == null || _emojiQueryKey(query) != _dismissedEmojiQuery) {
       _dismissedEmojiQuery = null;
     }
+    final MentionQuery? mentionQuery = findMentionQuery(
+      text: _controller.text,
+      selectionStart: _controller.selection.start,
+      selectionEnd: _controller.selection.end,
+    );
+    if (mentionQuery == null ||
+        _mentionQueryKey(mentionQuery) != _dismissedMentionQuery) {
+      _dismissedMentionQuery = null;
+    }
+    if (mentionQuery == null) {
+      _mentionController?.updateQuery(null);
+    } else {
+      _availableMentionController?.updateQuery(mentionQuery);
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _onMentionChanged() {
+    final MentionAutocompleteController? controller = _mentionController;
+    final result = controller?.state.result;
+    if (result != null) {
+      _mentionNavigation.setOptions(<MentionCandidate>[
+        ...result.channelMembers,
+        ...result.notInChannel,
+      ]);
+    }
     if (mounted) setState(() {});
   }
 
   void _onFocusChanged() {
+    if (!_focusNode.hasFocus) _mentionController?.updateQuery(null);
     if (mounted) setState(() {});
   }
 
   String _emojiQueryKey(EmojiAutocompleteQuery query) =>
       '${query.range.start}:${query.term}';
+
+  String _mentionQueryKey(MentionQuery query) =>
+      '${query.start}:${query.end}:${query.key}';
 
   Future<void> _submit({bool finalizeComposing = false}) async {
     if (!_canSend) return;
@@ -144,7 +256,7 @@ class _MessageComposerState extends State<MessageComposer> {
     }
 
     final String message = _controller.messageText;
-    final String draft = _controller.text;
+    final String draft = _controller.messageText;
     final String pendingPostId =
         _pendingPostId ??
         'flutter:${DateTime.now().microsecondsSinceEpoch}:${widget.destinationId}';
@@ -157,7 +269,7 @@ class _MessageComposerState extends State<MessageComposer> {
     try {
       await widget.onSubmit(message, pendingPostId);
       if (!mounted) return;
-      if (_controller.text == draft) _controller.clear();
+      if (_controller.messageText == draft) _controller.clear();
       _pendingPostId = null;
       _pendingDraft = null;
       _focusNode.unfocus();
@@ -191,6 +303,13 @@ class _MessageComposerState extends State<MessageComposer> {
   }
 
   void _submitOrSelectEmoji() {
+    final MentionCandidate? mention = _visibleMentionQuery == null
+        ? null
+        : _mentionNavigation.highlightedCandidate;
+    if (mention != null) {
+      _selectMention(mention);
+      return;
+    }
     final EmojiSuggestion? suggestion = _visibleEmojiQuery == null
         ? null
         : _emojiNavigation.highlightedSuggestion;
@@ -199,6 +318,18 @@ class _MessageComposerState extends State<MessageComposer> {
       return;
     }
     unawaited(_submit());
+  }
+
+  void _selectMention(MentionCandidate candidate) {
+    final MentionQuery? query = _visibleMentionQuery;
+    if (query == null) return;
+    _controller.replaceQueryWithMention(
+      query,
+      userMentionFromSummary(candidate.user),
+    );
+    _dismissedMentionQuery = null;
+    _mentionController?.dismiss();
+    _focusNode.requestFocus();
   }
 
   void _selectEmoji(EmojiSuggestion suggestion) {
@@ -236,6 +367,13 @@ class _MessageComposerState extends State<MessageComposer> {
     final EmojiAutocompleteQuery? query = _controller.emojiAutocompleteQuery;
     if (query == null) return;
     setState(() => _dismissedEmojiQuery = _emojiQueryKey(query));
+  }
+
+  void _dismissMentionAutocomplete() {
+    final MentionQuery? query = _visibleMentionQuery;
+    if (query == null) return;
+    setState(() => _dismissedMentionQuery = _mentionQueryKey(query));
+    _mentionController?.dismiss();
   }
 
   void _copySelection({required bool cut}) {
@@ -299,6 +437,9 @@ class _MessageComposerState extends State<MessageComposer> {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
     final EmojiAutocompleteQuery? emojiQuery = _visibleEmojiQuery;
+    final MentionQuery? mentionQuery = _visibleMentionQuery;
+    final MentionAutocompleteController? mentionController =
+        mentionQuery == null ? null : _availableMentionController;
     final CustomEmojiRepository? emojiRepository = emojiQuery == null
         ? null
         : _availableEmojiRepository;
@@ -313,6 +454,34 @@ class _MessageComposerState extends State<MessageComposer> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
+              if (mentionQuery != null && mentionController != null)
+                TextFieldTapRegion(
+                  groupId: _textFieldTapGroup,
+                  child: Align(
+                    alignment: AlignmentDirectional.bottomStart,
+                    child: SizedBox(
+                      width: constraints.maxWidth < 560
+                          ? constraints.maxWidth
+                          : 560,
+                      height: constraints.maxWidth < AppBreakpoints.compact
+                          ? 208
+                          : 264,
+                      child: Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        clipBehavior: Clip.antiAlias,
+                        elevation: 6,
+                        child: MentionSuggestionPanel(
+                          state: mentionController.state,
+                          highlightedIndex: _mentionNavigation.highlightedIndex,
+                          onSelected: _selectMention,
+                          onHighlighted: _mentionNavigation.highlight,
+                          onRetry: mentionController.retry,
+                          onDismissed: _dismissMentionAutocomplete,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               if (emojiQuery != null && emojiRepository != null) ...<Widget>[
                 TextFieldTapRegion(
                   groupId: _textFieldTapGroup,
@@ -381,7 +550,21 @@ class _MessageComposerState extends State<MessageComposer> {
                               LogicalKeyboardKey.numpadEnter,
                               shift: true,
                             ): _insertNewLine,
-                            if (emojiQuery !=
+                            if (mentionQuery !=
+                                null) ...<ShortcutActivator, VoidCallback>{
+                              const SingleActivator(
+                                LogicalKeyboardKey.arrowDown,
+                              ): () =>
+                                  _mentionNavigation.move(1),
+                              const SingleActivator(
+                                LogicalKeyboardKey.arrowUp,
+                              ): () =>
+                                  _mentionNavigation.move(-1),
+                              const SingleActivator(LogicalKeyboardKey.escape):
+                                  _dismissMentionAutocomplete,
+                              const SingleActivator(LogicalKeyboardKey.tab):
+                                  _submitOrSelectEmoji,
+                            } else if (emojiQuery !=
                                 null) ...<ShortcutActivator, VoidCallback>{
                               const SingleActivator(
                                 LogicalKeyboardKey.arrowDown,

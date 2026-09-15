@@ -26,6 +26,8 @@ import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermo
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_postponed_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
+import 'package:mattermost_flutter/src/features/mentions/data/repositories/mattermost_mention_repository.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
 import 'package:mattermost_flutter/src/features/profile/data/repositories/mattermost_current_user_profile_repository.dart';
 import 'package:mattermost_flutter/src/features/profile/domain/repositories/current_user_profile_repository.dart';
 
@@ -91,6 +93,13 @@ final Provider<CustomEmojiRepository> customEmojiRepositoryProvider =
         api: ref.watch(activeMattermostApiProvider),
         cache: ref.watch(customEmojiCacheProvider),
         recentCache: ref.watch(recentEmojiCacheProvider),
+      ),
+    );
+
+final Provider<MentionRepository> mentionRepositoryProvider =
+    Provider<MentionRepository>(
+      (Ref ref) => MattermostMentionRepository(
+        api: ref.watch(activeMattermostApiProvider),
       ),
     );
 

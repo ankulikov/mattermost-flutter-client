@@ -36,6 +36,15 @@ abstract interface class MattermostApi {
   /// Returns users matching the supplied exact usernames.
   Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames);
 
+  /// Returns people eligible for a channel mention, grouped by channel
+  /// membership by the server.
+  Future<MattermostUserAutocompleteDto> autocompleteUsers({
+    required String teamId,
+    required String channelId,
+    required String name,
+    required int limit,
+  }) => throw UnimplementedError();
+
   /// Returns a fresh user projection without the batch profile cache.
   Future<MattermostUserDto> getUserById(String userId);
 

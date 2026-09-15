@@ -2,6 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 
 void main() {
+  test('parses autocomplete users and leaves optional sections absent', () {
+    final MattermostUserAutocompleteDto result =
+        MattermostUserAutocompleteDto.fromJson(<String, Object?>{
+          'users': <Object?>[
+            <String, Object?>{'id': 'ada-id', 'username': 'ada'},
+          ],
+        });
+
+    expect(result.users.single.username, 'ada');
+    expect(result.outOfChannel, isNull);
+    expect(result.agents, isNull);
+  });
+
   test('decodes profile picture versions for people and bots', () {
     final MattermostUserDto person = MattermostUserDto.fromJson(
       <String, Object?>{
