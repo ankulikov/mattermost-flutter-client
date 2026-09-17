@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/mention_query.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/mention_candidate.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/mention_search_result.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
@@ -107,4 +108,8 @@ final class _FakeRepository implements MentionRepository {
       notInChannel: const <MentionCandidate>[],
     );
   }
+
+  @override
+  Future<List<GroupMention>> resolveGroupsByNames(List<String> names) async =>
+      const <GroupMention>[];
 }

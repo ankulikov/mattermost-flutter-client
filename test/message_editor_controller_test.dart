@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/mention_query.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_editor_controller.dart';
 
 void main() {
@@ -163,6 +164,48 @@ void main() {
 
     expect(controller.text, isEmpty);
     expect(controller.messageText, isEmpty);
+  });
+
+  test('group mention keeps its handle and serializes unchanged', () {
+    final MessageEditorController controller = MessageEditorController(
+      customEmojiBuilder: (_, _) => const SizedBox.shrink(),
+      groupMentionBuilder: (_, GroupMention mention) =>
+          Text('@${mention.name}'),
+    );
+    addTearDown(controller.dispose);
+    controller.value = const TextEditingValue(
+      text: 'Hi @back',
+      selection: TextSelection.collapsed(offset: 8),
+    );
+
+    controller.replaceQueryWithGroupMention(
+      const MentionQuery(
+        start: 3,
+        end: 8,
+        trigger: '@',
+        term: 'back',
+        key: 'back',
+      ),
+      const GroupMention(
+        id: 'group-1',
+        name: 'backend',
+        displayName: 'Backend Team',
+        memberCount: 18,
+      ),
+    );
+
+    expect(controller.text, 'Hi \uFFFC ');
+    expect(controller.messageText, 'Hi @backend ');
+    expect(
+      controller.messageTextForRange(const TextRange(start: 3, end: 4)),
+      '@backend',
+    );
+
+    controller.value = controller.value.copyWith(
+      text: 'Hi ',
+      selection: const TextSelection.collapsed(offset: 3),
+    );
+    expect(controller.text, 'Hi ');
   });
 }
 

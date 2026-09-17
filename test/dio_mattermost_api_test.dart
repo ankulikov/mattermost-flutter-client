@@ -66,6 +66,51 @@ void main() {
     expect(result.users.single.id, 'ada-id');
   });
 
+  test('searches referenceable groups with member counts', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"id":"group-1","name":"backend",'
+          '"display_name":"Backend Team","allow_reference":true,'
+          '"member_count":18}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostGroupDto> groups = await DioMattermostApi(
+      dio: dio,
+    ).searchMentionGroups(name: 'back', limit: 25);
+
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/groups');
+    expect(adapter.request?.queryParameters, <String, dynamic>{
+      'q': 'back',
+      'filter_allow_reference': true,
+      'page': 0,
+      'per_page': 25,
+      'include_member_count': true,
+    });
+    expect(groups.single.memberCount, 18);
+  });
+
+  test('resolves exact group names in one request', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"id":"group-1","name":"backend",'
+          '"display_name":"Backend Team","allow_reference":true}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostGroupDto> groups = await DioMattermostApi(
+      dio: dio,
+    ).getGroupsByNames(<String>['backend']);
+
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/groups/names');
+    expect(adapter.request?.data, '["backend"]');
+    expect(groups.single.name, 'backend');
+  });
+
   test('loads a fresh complete user profile by id', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:

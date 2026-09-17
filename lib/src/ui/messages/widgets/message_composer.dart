@@ -7,6 +7,7 @@ import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/find_mention_query.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/mention_query.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/mention_candidate.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
 import 'package:mattermost_flutter/src/features/mentions/presentation/mention_autocomplete_controller.dart';
@@ -157,6 +158,15 @@ class _MessageComposerState extends State<MessageComposer> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+      groupMentionBuilder: (BuildContext context, GroupMention mention) => Text(
+        '@${mention.name}',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.primary,
+          decoration: TextDecoration.underline,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
     )..addListener(_onTextChanged);
   }
 
@@ -225,10 +235,7 @@ class _MessageComposerState extends State<MessageComposer> {
     final MentionAutocompleteController? controller = _mentionController;
     final result = controller?.state.result;
     if (result != null) {
-      _mentionNavigation.setOptions(<MentionCandidate>[
-        ...result.channelMembers,
-        ...result.notInChannel,
-      ]);
+      _mentionNavigation.setOptions(result.orderedSuggestions);
     }
     if (mounted) setState(() {});
   }
@@ -303,7 +310,7 @@ class _MessageComposerState extends State<MessageComposer> {
   }
 
   void _submitOrSelectEmoji() {
-    final MentionCandidate? mention = _visibleMentionQuery == null
+    final MentionSuggestion? mention = _visibleMentionQuery == null
         ? null
         : _mentionNavigation.highlightedCandidate;
     if (mention != null) {
@@ -320,13 +327,18 @@ class _MessageComposerState extends State<MessageComposer> {
     unawaited(_submit());
   }
 
-  void _selectMention(MentionCandidate candidate) {
+  void _selectMention(MentionSuggestion candidate) {
     final MentionQuery? query = _visibleMentionQuery;
     if (query == null) return;
-    _controller.replaceQueryWithMention(
-      query,
-      userMentionFromSummary(candidate.user),
-    );
+    switch (candidate) {
+      case MentionCandidate(:final user):
+        _controller.replaceQueryWithMention(
+          query,
+          userMentionFromSummary(user),
+        );
+      case GroupMentionCandidate(:final group):
+        _controller.replaceQueryWithGroupMention(query, group);
+    }
     _dismissedMentionQuery = null;
     _mentionController?.dismiss();
     _focusNode.requestFocus();

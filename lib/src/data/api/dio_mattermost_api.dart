@@ -113,6 +113,34 @@ final class DioMattermostApi
   }
 
   @override
+  Future<List<MattermostGroupDto>> searchMentionGroups({
+    required String name,
+    required int limit,
+  }) async {
+    final Response<Object?> response = await _get(
+      '/groups',
+      queryParameters: <String, Object?>{
+        'q': name,
+        'filter_allow_reference': true,
+        'page': 0,
+        'per_page': limit,
+        'include_member_count': true,
+      },
+    );
+    return _dtoList(response.data, MattermostGroupDto.fromJson);
+  }
+
+  @override
+  Future<List<MattermostGroupDto>> getGroupsByNames(List<String> names) async {
+    if (names.isEmpty) return const <MattermostGroupDto>[];
+    final Response<Object?> response = await _post(
+      '/groups/names',
+      data: jsonEncode(names),
+    );
+    return _dtoList(response.data, MattermostGroupDto.fromJson);
+  }
+
+  @override
   Future<MattermostUserDto> getUserById(String userId) async {
     final Response<Object?> response = await _get('/users/$userId');
     return MattermostUserDto.fromJson(_object(response.data));

@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
@@ -280,6 +281,44 @@ void main() {
     final InlineSpan span = tester.widget<RichText>(richText).text;
     expect(_findTapRecognizer(span, '@Ada Lovelace'), isNotNull);
     expect(_containsWidgetSpan(span), isFalse);
+  });
+
+  testWidgets('keeps a resolved group handle unchanged and tap is a no-op', (
+    WidgetTester tester,
+  ) async {
+    const String message = 'Hello @backend';
+    final String lookupKey = userMentionLookupKey(message);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          userMentionsProvider(lookupKey).overrideWithValue(
+            const AsyncValue<List<UserMention>>.data(<UserMention>[]),
+          ),
+          groupMentionsProvider(lookupKey).overrideWithValue(
+            const AsyncValue<List<GroupMention>>.data(<GroupMention>[
+              GroupMention(
+                id: 'backend-id',
+                name: 'backend',
+                displayName: 'Backend Team',
+                memberCount: 18,
+              ),
+            ]),
+          ),
+        ],
+        child: MaterialApp(home: Scaffold(body: _messageBody(message))),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder richText = find.textContaining('@backend', findRichText: true);
+    expect(richText, findsOneWidget);
+    final InlineSpan span = tester.widget<RichText>(richText).text;
+    expect(_findTapRecognizer(span, '@backend'), isNotNull);
+
+    _tapTextSpan(tester, '@backend');
+    await tester.pump();
+    expect(find.byType(UserProfileCard), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }
 

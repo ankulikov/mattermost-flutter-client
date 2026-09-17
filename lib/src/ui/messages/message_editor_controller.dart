@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/mention_query.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 
 const String _objectReplacementCharacter = '\uFFFC';
 
@@ -10,6 +11,9 @@ typedef CustomEmojiSpanBuilder =
 
 typedef UserMentionSpanBuilder =
     Widget Function(BuildContext context, UserMention mention);
+
+typedef GroupMentionSpanBuilder =
+    Widget Function(BuildContext context, GroupMention mention);
 
 /// Rich content represented by a single object-replacement character in the
 /// editable value. Keeping the wire representation out of the editing value
@@ -38,6 +42,15 @@ final class UserMentionInlineObject extends MessageInlineObject {
   String get wireText => '@${mention.username}';
 }
 
+final class GroupMentionInlineObject extends MessageInlineObject {
+  const GroupMentionInlineObject(this.mention);
+
+  final GroupMention mention;
+
+  @override
+  String get wireText => '@${mention.name}';
+}
+
 /// The active `:shortcode` query and the complete token range it will replace.
 final class EmojiAutocompleteQuery {
   const EmojiAutocompleteQuery({required this.range, required this.term});
@@ -56,10 +69,13 @@ final class MessageEditorController extends TextEditingController {
   MessageEditorController({
     required this.customEmojiBuilder,
     UserMentionSpanBuilder? userMentionBuilder,
-  }) : userMentionBuilder = userMentionBuilder ?? _defaultUserMentionBuilder;
+    GroupMentionSpanBuilder? groupMentionBuilder,
+  }) : userMentionBuilder = userMentionBuilder ?? _defaultUserMentionBuilder,
+       groupMentionBuilder = groupMentionBuilder ?? _defaultGroupMentionBuilder;
 
   final CustomEmojiSpanBuilder customEmojiBuilder;
   final UserMentionSpanBuilder userMentionBuilder;
+  final GroupMentionSpanBuilder groupMentionBuilder;
   Map<int, MessageInlineObject> _inlineObjectAt = <int, MessageInlineObject>{};
   final Set<int> _autoMentionSeparatorAt = <int>{};
   bool _applyingRichEdit = false;
@@ -121,12 +137,24 @@ final class MessageEditorController extends TextEditingController {
   /// newly selected mention can be continued naturally without altering an
   /// existing punctuation or whitespace token.
   void replaceQueryWithMention(MentionQuery query, UserMention mention) {
+    _replaceQueryWithMentionObject(query, UserMentionInlineObject(mention));
+  }
+
+  /// Inserts a group mention without replacing its handle with a display name.
+  void replaceQueryWithGroupMention(MentionQuery query, GroupMention mention) {
+    _replaceQueryWithMentionObject(query, GroupMentionInlineObject(mention));
+  }
+
+  void _replaceQueryWithMentionObject(
+    MentionQuery query,
+    MessageInlineObject object,
+  ) {
     final TextRange range = TextRange(start: query.start, end: query.end);
     final bool appendSeparator = range.end == text.length;
     _replaceRange(
       range,
       _objectReplacementCharacter,
-      object: UserMentionInlineObject(mention),
+      object: object,
       appendMentionSeparator: appendSeparator,
     );
   }
@@ -202,7 +230,8 @@ final class MessageEditorController extends TextEditingController {
       // separator. This is intentionally limited to a separator that we added.
       final bool deletedMention = previousObjects.entries.any(
         (MapEntry<int, MessageInlineObject> entry) =>
-            entry.value is UserMentionInlineObject &&
+            (entry.value is UserMentionInlineObject ||
+                entry.value is GroupMentionInlineObject) &&
             entry.key >= edit.prefix &&
             entry.key < edit.replacedEnd,
       );
@@ -349,6 +378,18 @@ final class MessageEditorController extends TextEditingController {
               ),
             ),
           );
+        case GroupMentionInlineObject(:final GroupMention mention):
+          children.add(
+            WidgetSpan(
+              alignment: PlaceholderAlignment.baseline,
+              baseline: TextBaseline.alphabetic,
+              child: Semantics(
+                link: true,
+                label: '@${mention.name}',
+                child: groupMentionBuilder(context, mention),
+              ),
+            ),
+          );
       }
       offset = position + 1;
     }
@@ -403,6 +444,11 @@ final class MessageEditorController extends TextEditingController {
 
 Widget _defaultUserMentionBuilder(BuildContext context, UserMention mention) =>
     Text('@${mention.displayName}');
+
+Widget _defaultGroupMentionBuilder(
+  BuildContext context,
+  GroupMention mention,
+) => Text('@${mention.name}');
 
 TextSelection _shiftSelectionAfterRemoval(
   TextSelection selection,

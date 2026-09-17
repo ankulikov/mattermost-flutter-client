@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/mention_candidate.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/mention_search_result.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
 
@@ -418,6 +422,52 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('selects a group mention and submits its unchanged handle', (
+    WidgetTester tester,
+  ) async {
+    String? submitted;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageComposer(
+            destinationId: 'group-mention',
+            placeholder: 'Write a message',
+            accountId: 'account-a',
+            teamId: 'team-1',
+            channelId: 'channel-1',
+            mentionRepositoryFactory: _GroupMentionRepository.new,
+            onSubmit: (String message, String pendingPostId) async {
+              submitted = message;
+            },
+          ),
+        ),
+      ),
+    );
+
+    final Finder input = find.byKey(
+      const ValueKey<String>('message-input-group-mention'),
+    );
+    await tester.enterText(input, '@back');
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+
+    final Finder group = find.byKey(
+      const ValueKey<String>('mention-group-backend-id'),
+    );
+    expect(group, findsOneWidget);
+    await tester.tap(group);
+    await tester.pump();
+
+    expect(tester.widget<TextField>(input).controller?.text, '\uFFFC ');
+    await tester.tap(
+      find.byKey(const ValueKey<String>('send-message-group-mention')),
+    );
+    await tester.pump();
+
+    expect(submitted, '@backend ');
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Widget _emojiComposerApp({
@@ -434,3 +484,30 @@ Widget _emojiComposerApp({
     ),
   ),
 );
+
+final class _GroupMentionRepository implements MentionRepository {
+  @override
+  Future<MentionSearchResult> autocomplete({
+    required String teamId,
+    required String channelId,
+    required String term,
+    int limit = 30,
+  }) async => const MentionSearchResult(
+    channelMembers: <MentionCandidate>[],
+    groupMentions: <GroupMentionCandidate>[
+      GroupMentionCandidate(
+        group: GroupMention(
+          id: 'backend-id',
+          name: 'backend',
+          displayName: 'Backend Team',
+          memberCount: 18,
+        ),
+      ),
+    ],
+    notInChannel: <MentionCandidate>[],
+  );
+
+  @override
+  Future<List<GroupMention>> resolveGroupsByNames(List<String> names) async =>
+      const <GroupMention>[];
+}

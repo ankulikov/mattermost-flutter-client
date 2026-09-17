@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/current_user_profile_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
@@ -100,6 +101,19 @@ final userMentionsProvider = FutureProvider.autoDispose
                     .resolveUsersByUsernames(usernames))
                 .map(userMentionFromSummary)
                 .toList(growable: false),
+      );
+    });
+
+final groupMentionsProvider = FutureProvider.autoDispose
+    .family<List<GroupMention>, String>((Ref ref, String lookupKey) {
+      final List<String> names = lookupKey.isEmpty
+          ? const <String>[]
+          : lookupKey.split(',');
+      if (names.isEmpty) return const <GroupMention>[];
+      final RequestCancellation cancellation = RequestCancellation();
+      ref.onDispose(cancellation.cancel);
+      return cancellation.run(
+        () => ref.watch(mentionRepositoryProvider).resolveGroupsByNames(names),
       );
     });
 

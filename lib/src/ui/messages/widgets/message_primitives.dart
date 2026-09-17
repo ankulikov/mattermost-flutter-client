@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
+import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_avatar_image.dart';
@@ -158,25 +159,41 @@ class MessageBody extends ConsumerWidget {
         );
     final List<String> resolvedMentionNames = mentionsByUsername.keys.toList()
       ..sort();
+    final Map<String, GroupMention> groupsByName = ref
+        .watch(groupMentionsProvider(userMentionLookupKey(post.message)))
+        .maybeWhen(
+          data: (List<GroupMention> groups) => <String, GroupMention>{
+            for (final GroupMention group in groups)
+              group.name.toLowerCase(): group,
+          },
+          orElse: () => const <String, GroupMention>{},
+        );
+    final List<String> resolvedGroupNames = groupsByName.keys.toList()..sort();
     return MattermostMarkdown(
       data: post.message,
       serverUrl: serverUrl,
       onTapChannel: onSelectChannel,
       onTapPostLink: onOpenPostLink,
       textStyle: bodyStyle,
-      inlineParserKey: resolvedMentionNames.join(','),
+      inlineParserKey:
+          '${resolvedMentionNames.join(',')}|${resolvedGroupNames.join(',')}',
       inlineLinkReplacements: <MattermostInlineLinkReplacement>[
         MattermostInlineLinkReplacement(
-          elementName: 'user-mention',
+          elementName: 'resolved-mention',
           pattern: r'\B@([a-zA-Z0-9][a-zA-Z0-9._-]*)',
           startCharacter: 0x40,
-          shouldReplace: (String username) =>
-              mentionsByUsername.containsKey(username.toLowerCase()),
-          textBuilder: (String username) =>
-              '@${mentionsByUsername[username.toLowerCase()]!.displayName}',
-          onTap: (BuildContext context, String username) {
-            final UserMention mention =
-                mentionsByUsername[username.toLowerCase()]!;
+          shouldReplace: (String name) {
+            final String normalized = name.toLowerCase();
+            return mentionsByUsername.containsKey(normalized) ||
+                groupsByName.containsKey(normalized);
+          },
+          textBuilder: (String name) {
+            final UserMention? mention = mentionsByUsername[name.toLowerCase()];
+            return mention == null ? '@$name' : '@${mention.displayName}';
+          },
+          onTap: (BuildContext context, String name) {
+            final UserMention? mention = mentionsByUsername[name.toLowerCase()];
+            if (mention == null) return;
             showUserProfileCard(
               context,
               userId: mention.userId,

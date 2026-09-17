@@ -22,7 +22,7 @@ final class MentionSuggestionPanel extends StatelessWidget {
 
   final MentionAutocompleteState state;
   final int highlightedIndex;
-  final ValueChanged<MentionCandidate> onSelected;
+  final ValueChanged<MentionSuggestion> onSelected;
   final ValueChanged<int> onHighlighted;
   final VoidCallback onRetry;
   final VoidCallback onDismissed;
@@ -30,14 +30,13 @@ final class MentionSuggestionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final MentionSearchResult? result = state.result;
-    final List<MentionCandidate> candidates = result == null
-        ? const <MentionCandidate>[]
-        : <MentionCandidate>[...result.channelMembers, ...result.notInChannel];
+    final List<MentionSuggestion> candidates =
+        result?.orderedSuggestions ?? const <MentionSuggestion>[];
     return Material(
       key: const ValueKey<String>('mention-suggestion-panel'),
       color: Theme.of(context).colorScheme.surface,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 320, maxWidth: 420),
+        constraints: const BoxConstraints(maxHeight: 320, maxWidth: 560),
         child: switch (state.status) {
           MentionAutocompleteStatus.idle => const SizedBox.shrink(),
           MentionAutocompleteStatus.loading when candidates.isEmpty =>
@@ -87,7 +86,7 @@ final class _SuggestionList extends StatelessWidget {
   final int highlightedIndex;
   final bool isLoading;
   final bool hasError;
-  final ValueChanged<MentionCandidate> onSelected;
+  final ValueChanged<MentionSuggestion> onSelected;
   final ValueChanged<int> onHighlighted;
   final VoidCallback onRetry;
 
@@ -98,6 +97,12 @@ final class _SuggestionList extends StatelessWidget {
     if (result.channelMembers.isNotEmpty) {
       entries.add(const _Entry.heading(MentionStrings.channelMembers));
       for (final MentionCandidate candidate in result.channelMembers) {
+        entries.add(_Entry.candidate(candidate, candidateIndex++));
+      }
+    }
+    if (result.groupMentions.isNotEmpty) {
+      entries.add(const _Entry.heading(MentionStrings.groupMentions));
+      for (final GroupMentionCandidate candidate in result.groupMentions) {
         entries.add(_Entry.candidate(candidate, candidateIndex++));
       }
     }
@@ -133,21 +138,30 @@ final class _SuggestionList extends StatelessWidget {
             onPressed: entry.onRetry,
             child: const Text(MentionStrings.retry),
           ),
-          _EntryKind.candidate => _CandidateTile(
-            candidate: entry.candidate!,
-            index: entry.candidateIndex!,
-            highlighted: entry.candidateIndex == highlightedIndex,
-            onSelected: onSelected,
-            onHighlighted: onHighlighted,
-          ),
+          _EntryKind.candidate => switch (entry.candidate!) {
+            final MentionCandidate candidate => _UserCandidateTile(
+              candidate: candidate,
+              index: entry.candidateIndex!,
+              highlighted: entry.candidateIndex == highlightedIndex,
+              onSelected: onSelected,
+              onHighlighted: onHighlighted,
+            ),
+            final GroupMentionCandidate candidate => _GroupCandidateTile(
+              candidate: candidate,
+              index: entry.candidateIndex!,
+              highlighted: entry.candidateIndex == highlightedIndex,
+              onSelected: onSelected,
+              onHighlighted: onHighlighted,
+            ),
+          },
         };
       },
     );
   }
 }
 
-final class _CandidateTile extends StatelessWidget {
-  const _CandidateTile({
+final class _UserCandidateTile extends StatelessWidget {
+  const _UserCandidateTile({
     required this.candidate,
     required this.index,
     required this.highlighted,
@@ -158,7 +172,7 @@ final class _CandidateTile extends StatelessWidget {
   final MentionCandidate candidate;
   final int index;
   final bool highlighted;
-  final ValueChanged<MentionCandidate> onSelected;
+  final ValueChanged<MentionSuggestion> onSelected;
   final ValueChanged<int> onHighlighted;
 
   @override
@@ -216,6 +230,96 @@ final class _CandidateTile extends StatelessWidget {
   }
 }
 
+final class _GroupCandidateTile extends StatelessWidget {
+  const _GroupCandidateTile({
+    required this.candidate,
+    required this.index,
+    required this.highlighted,
+    required this.onSelected,
+    required this.onHighlighted,
+  });
+
+  final GroupMentionCandidate candidate;
+  final int index;
+  final bool highlighted;
+  final ValueChanged<MentionSuggestion> onSelected;
+  final ValueChanged<int> onHighlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final group = candidate.group;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final String count = MentionStrings.groupMemberCount(group.memberCount);
+    return Semantics(
+      button: true,
+      selected: highlighted,
+      label: '@${group.name}, ${group.displayName}, $count',
+      child: MouseRegion(
+        onEnter: (_) => onHighlighted(index),
+        child: Material(
+          color: highlighted ? colors.primaryContainer : Colors.transparent,
+          child: InkWell(
+            key: ValueKey<String>('mention-group-${group.id}'),
+            onTap: () => onSelected(candidate),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: <Widget>[
+                  SizedBox.square(
+                    dimension: 36,
+                    child: Icon(
+                      Icons.group_outlined,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        children: <InlineSpan>[
+                          TextSpan(text: '@${group.name}'),
+                          TextSpan(
+                            text: ' - ${group.displayName}',
+                            style: TextStyle(color: colors.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 120),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          count,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 enum _EntryKind { heading, candidate, loading, retry }
 
 final class _Entry {
@@ -241,7 +345,7 @@ final class _Entry {
       candidateIndex = null;
   final _EntryKind kind;
   final String? label;
-  final MentionCandidate? candidate;
+  final MentionSuggestion? candidate;
   final int? candidateIndex;
   final VoidCallback? onRetry;
 }
