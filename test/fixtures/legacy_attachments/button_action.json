@@ -1,0 +1,30 @@
+{
+  "id": "post-button-action",
+  "user_id": "user-bot",
+  "channel_id": "channel-town-square",
+  "message": "Review deployment",
+  "props": {
+    "attachments": [
+      {
+        "fallback": "Deployment approval is required",
+        "text": "Approve the production deployment?",
+        "actions": [
+          {
+            "id": "approve-deployment",
+            "type": "button",
+            "name": "Approve",
+            "tooltip": "Approve the production deployment",
+            "style": "primary",
+            "disabled": false,
+            "integration": {
+              "url": "/plugins/deploy/actions/approve",
+              "context": {
+                "deployment_id": "deploy-184"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

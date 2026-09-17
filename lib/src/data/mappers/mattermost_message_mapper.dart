@@ -2,6 +2,7 @@ import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/rich_attachment.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/policies/user_display_name.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
@@ -64,6 +65,9 @@ final class MattermostMessageMapper
                       )
                       .toList(growable: false)
                 : const <PostAttachment>[],
+            richAttachments: post.deleteAt == 0
+                ? _mapRichAttachments(post.props?.legacyAttachments)
+                : const <RichAttachment>[],
             rootId: post.rootId,
             replyCount: post.replyCount,
             isDeleted: post.deleteAt != 0,
@@ -118,3 +122,129 @@ List<PostReaction> _mapReactions(MattermostPostDto post, String currentUserId) {
 }
 
 String _emojiLabel(String name) => mattermostSystemEmojis[name] ?? ':$name:';
+
+List<RichAttachment> _mapRichAttachments(
+  List<MattermostLegacyAttachmentDto>? attachments,
+) => (attachments ?? const <MattermostLegacyAttachmentDto>[])
+    .map(
+      (MattermostLegacyAttachmentDto attachment) => RichAttachment(
+        fallback: attachment.fallback,
+        color: attachment.color,
+        pretext: attachment.pretext,
+        authorName: attachment.authorName,
+        authorLink: attachment.authorLink,
+        authorIconUrl: attachment.authorIcon,
+        title: attachment.title,
+        titleLink: attachment.titleLink,
+        text: attachment.text,
+        fields: attachment.fields
+            .map(
+              (MattermostLegacyAttachmentFieldDto field) => RichAttachmentField(
+                title: field.title,
+                value: field.value,
+                isShort: field.isShort,
+              ),
+            )
+            .toList(growable: false),
+        imageUrl: attachment.imageUrl,
+        thumbnailUrl: attachment.thumbUrl,
+        footer: attachment.footer,
+        footerIconUrl: attachment.footerIcon,
+        timestamp: _mapAttachmentTimestamp(attachment.timestamp),
+        actions: attachment.actions
+            .map(_mapRichAttachmentAction)
+            .toList(growable: false),
+      ),
+    )
+    .toList(growable: false);
+
+RichAttachmentAction _mapRichAttachmentAction(
+  MattermostLegacyActionDto action,
+) {
+  final RichAttachmentActionToken? token = switch (action.cookie) {
+    final String value when value.isNotEmpty => RichAttachmentActionToken(
+      value,
+    ),
+    _ => null,
+  };
+  return switch (action) {
+    MattermostLegacyButtonActionDto() => _mapButtonAction(action, token),
+    MattermostLegacySelectActionDto() => RichAttachmentSelectAction(
+      id: action.id,
+      name: action.name,
+      token: token,
+      options: action.options
+          .map(
+            (MattermostLegacyActionOptionDto option) =>
+                RichAttachmentOption(text: option.text, value: option.value),
+          )
+          .toList(growable: false),
+      defaultOption: action.defaultOption,
+      dataSource: _mapSelectDataSource(action.dataSource),
+    ),
+    MattermostLegacyUnknownActionDto() => RichAttachmentUnknownAction(
+      id: action.id,
+      name: action.name,
+      type: action.type,
+      token: token,
+    ),
+  };
+}
+
+RichAttachmentButtonAction _mapButtonAction(
+  MattermostLegacyButtonActionDto action,
+  RichAttachmentActionToken? token,
+) {
+  final String trimmedStyle = action.style.trim();
+  final String normalizedStyle = trimmedStyle.toLowerCase();
+  final RichAttachmentButtonStyle style = switch (normalizedStyle) {
+    '' || 'default' => RichAttachmentButtonStyle.defaultStyle,
+    'primary' => RichAttachmentButtonStyle.primary,
+    'good' => RichAttachmentButtonStyle.good,
+    'success' => RichAttachmentButtonStyle.success,
+    'warning' => RichAttachmentButtonStyle.warning,
+    'danger' => RichAttachmentButtonStyle.danger,
+    _ when _hexColor.hasMatch(normalizedStyle) =>
+      RichAttachmentButtonStyle.customColor,
+    _ => RichAttachmentButtonStyle.unknown,
+  };
+  return RichAttachmentButtonAction(
+    id: action.id,
+    name: action.name,
+    token: token,
+    tooltip: action.tooltip,
+    style: style,
+    customColor: style == RichAttachmentButtonStyle.customColor
+        ? trimmedStyle
+        : '',
+  );
+}
+
+final RegExp _hexColor = RegExp(
+  r'^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$',
+  caseSensitive: false,
+);
+
+RichAttachmentSelectDataSource? _mapSelectDataSource(String value) =>
+    switch (value.trim().toLowerCase()) {
+      '' => null,
+      'channels' => RichAttachmentSelectDataSource.channels,
+      'users' => RichAttachmentSelectDataSource.users,
+      _ => RichAttachmentSelectDataSource.unknown,
+    };
+
+DateTime? _mapAttachmentTimestamp(JsonValueDto? timestamp) {
+  final num? seconds = switch (timestamp) {
+    JsonNumberDto(:final num value) => value,
+    JsonStringDto(:final String value) => num.tryParse(value),
+    _ => null,
+  };
+  if (seconds == null || !seconds.isFinite) return null;
+  final num milliseconds = seconds * 1000;
+  const int maxDateTimeMilliseconds = 8640000000000000;
+  if (milliseconds < -maxDateTimeMilliseconds ||
+      milliseconds > maxDateTimeMilliseconds) {
+    return null;
+  }
+  return DateTime.fromMillisecondsSinceEpoch(milliseconds.round());
+}

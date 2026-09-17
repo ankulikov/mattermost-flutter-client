@@ -1,0 +1,28 @@
+{
+  "id": "post-action-cookie",
+  "user_id": "user-bot",
+  "channel_id": "channel-town-square",
+  "message": "Ephemeral deployment action",
+  "props": {
+    "attachments": [
+      {
+        "fallback": "Retry the deployment",
+        "actions": [
+          {
+            "id": "retry-deployment",
+            "type": "button",
+            "name": "Retry",
+            "style": "warning",
+            "cookie": "opaque-server-generated-action-token",
+            "integration": {
+              "url": "/plugins/deploy/actions/retry",
+              "context": {
+                "deployment_id": "deploy-184"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

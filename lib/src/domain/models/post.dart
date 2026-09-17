@@ -1,5 +1,6 @@
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
+import 'package:mattermost_flutter/src/domain/models/rich_attachment.dart';
 
 final class PostAuthor {
   const PostAuthor({
@@ -76,6 +77,7 @@ final class Post {
     required this.message,
     this.customEmojis = const <CustomEmojiReference>[],
     this.attachments = const <PostAttachment>[],
+    this.richAttachments = const <RichAttachment>[],
     this.reactions = const <PostReaction>[],
     this.rootId = '',
     this.replyCount = 0,
@@ -90,6 +92,7 @@ final class Post {
   final String message;
   final List<CustomEmojiReference> customEmojis;
   final List<PostAttachment> attachments;
+  final List<RichAttachment> richAttachments;
   final List<PostReaction> reactions;
   final String rootId;
   final int replyCount;
@@ -97,6 +100,17 @@ final class Post {
   final bool isDeleted;
 
   bool get isReply => rootId.isNotEmpty;
+
+  /// Whether this post has content a message surface can render.
+  ///
+  /// Rich cards and uploaded files remain visible even when Mattermost sends
+  /// an empty plain-text message. Deleted posts deliberately expose only their
+  /// deletion placeholder, not their former content.
+  bool get hasVisibleContent =>
+      !isDeleted &&
+      (message.trim().isNotEmpty ||
+          attachments.isNotEmpty ||
+          richAttachments.isNotEmpty);
 
   Post withThreadSummary({required int replyCount, DateTime? lastReplyAt}) =>
       Post(
@@ -107,6 +121,7 @@ final class Post {
         message: message,
         customEmojis: customEmojis,
         attachments: attachments,
+        richAttachments: richAttachments,
         reactions: reactions,
         rootId: rootId,
         replyCount: replyCount,
@@ -122,6 +137,7 @@ final class Post {
     message: message,
     customEmojis: customEmojis,
     attachments: attachments,
+    richAttachments: richAttachments,
     reactions: List<PostReaction>.unmodifiable(reactions),
     rootId: rootId,
     replyCount: replyCount,

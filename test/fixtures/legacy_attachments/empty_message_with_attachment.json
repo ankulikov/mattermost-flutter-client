@@ -1,0 +1,16 @@
+{
+  "id": "post-empty-message-with-attachment",
+  "user_id": "user-bot",
+  "channel_id": "channel-town-square",
+  "message": "",
+  "props": {
+    "attachments": [
+      {
+        "fallback": "Build 184 passed",
+        "color": "good",
+        "title": "Build 184",
+        "text": "All checks passed."
+      }
+    ]
+  }
+}

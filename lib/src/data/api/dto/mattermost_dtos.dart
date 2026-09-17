@@ -771,6 +771,241 @@ final class MattermostPostPropsDto {
       MattermostPostPropsDto(_jsonValues(json));
 
   final Map<String, JsonValueDto> values;
+
+  /// Legacy rich attachments carried in `post.props.attachments`.
+  ///
+  /// The lossless [values] map remains the protocol source. This projection is
+  /// deliberately tolerant: a malformed attachment is omitted without making
+  /// the containing post undecodable.
+  List<MattermostLegacyAttachmentDto> get legacyAttachments => _jsonDtoList(
+    values['attachments'],
+    MattermostLegacyAttachmentDto.fromValues,
+  );
+}
+
+final class MattermostLegacyAttachmentDto {
+  const MattermostLegacyAttachmentDto({
+    required this.rawProps,
+    this.fallback = '',
+    this.color = '',
+    this.pretext = '',
+    this.authorName = '',
+    this.authorLink = '',
+    this.authorIcon = '',
+    this.title = '',
+    this.titleLink = '',
+    this.text = '',
+    this.fields = const <MattermostLegacyAttachmentFieldDto>[],
+    this.imageUrl = '',
+    this.thumbUrl = '',
+    this.footer = '',
+    this.footerIcon = '',
+    this.timestamp,
+    this.actions = const <MattermostLegacyActionDto>[],
+  });
+
+  factory MattermostLegacyAttachmentDto.fromJson(JsonMap json) =>
+      MattermostLegacyAttachmentDto.fromValues(_jsonValues(json));
+
+  factory MattermostLegacyAttachmentDto.fromValues(
+    Map<String, JsonValueDto> values,
+  ) => MattermostLegacyAttachmentDto(
+    rawProps: values,
+    fallback: _jsonString(values, 'fallback'),
+    color: _jsonString(values, 'color'),
+    pretext: _jsonString(values, 'pretext'),
+    authorName: _jsonString(values, 'author_name'),
+    authorLink: _jsonString(values, 'author_link'),
+    authorIcon: _jsonString(values, 'author_icon'),
+    title: _jsonString(values, 'title'),
+    titleLink: _jsonString(values, 'title_link'),
+    text: _jsonString(values, 'text'),
+    fields: _jsonDtoList(
+      values['fields'],
+      MattermostLegacyAttachmentFieldDto.fromValues,
+    ),
+    imageUrl: _jsonString(values, 'image_url'),
+    thumbUrl: _jsonString(values, 'thumb_url'),
+    footer: _jsonString(values, 'footer'),
+    footerIcon: _jsonString(values, 'footer_icon'),
+    timestamp: values['ts'],
+    actions: _jsonDtoList(
+      values['actions'],
+      MattermostLegacyActionDto.fromValues,
+    ),
+  );
+
+  final Map<String, JsonValueDto> rawProps;
+  final String fallback;
+  final String color;
+  final String pretext;
+  final String authorName;
+  final String authorLink;
+  final String authorIcon;
+  final String title;
+  final String titleLink;
+  final String text;
+  final List<MattermostLegacyAttachmentFieldDto> fields;
+  final String imageUrl;
+  final String thumbUrl;
+  final String footer;
+  final String footerIcon;
+  final JsonValueDto? timestamp;
+  final List<MattermostLegacyActionDto> actions;
+}
+
+final class MattermostLegacyAttachmentFieldDto {
+  const MattermostLegacyAttachmentFieldDto({
+    required this.rawProps,
+    this.title = '',
+    this.value = '',
+    this.isShort = false,
+  });
+
+  factory MattermostLegacyAttachmentFieldDto.fromJson(JsonMap json) =>
+      MattermostLegacyAttachmentFieldDto.fromValues(_jsonValues(json));
+
+  factory MattermostLegacyAttachmentFieldDto.fromValues(
+    Map<String, JsonValueDto> values,
+  ) => MattermostLegacyAttachmentFieldDto(
+    rawProps: values,
+    title: _jsonString(values, 'title'),
+    value: _jsonString(values, 'value'),
+    isShort: _jsonBool(values, 'short'),
+  );
+
+  final Map<String, JsonValueDto> rawProps;
+  final String title;
+  final String value;
+  final bool isShort;
+}
+
+sealed class MattermostLegacyActionDto {
+  const MattermostLegacyActionDto({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.rawProps,
+    this.cookie,
+  });
+
+  factory MattermostLegacyActionDto.fromJson(JsonMap json) =>
+      MattermostLegacyActionDto.fromValues(_jsonValues(json));
+
+  factory MattermostLegacyActionDto.fromValues(
+    Map<String, JsonValueDto> values,
+  ) {
+    final String type = _jsonString(values, 'type');
+    final String id = _jsonString(values, 'id');
+    final String name = _jsonString(values, 'name');
+    final String? cookie = _jsonNullableString(values, 'cookie');
+    final Map<String, JsonValueDto> publicRawProps = _withoutPrivateActionProps(
+      values,
+    );
+
+    return switch (type) {
+      'button' => MattermostLegacyButtonActionDto(
+        id: id,
+        name: name,
+        rawProps: publicRawProps,
+        cookie: cookie,
+        tooltip: _jsonString(values, 'tooltip'),
+        style: _jsonString(values, 'style'),
+      ),
+      'select' => MattermostLegacySelectActionDto(
+        id: id,
+        name: name,
+        rawProps: publicRawProps,
+        cookie: cookie,
+        dataSource: _jsonString(values, 'data_source'),
+        options: _jsonDtoList(
+          values['options'],
+          MattermostLegacyActionOptionDto.fromValues,
+        ),
+        defaultOption: _jsonNullableString(values, 'default_option'),
+      ),
+      _ => MattermostLegacyUnknownActionDto(
+        id: id,
+        name: name,
+        type: type,
+        rawProps: publicRawProps,
+        cookie: cookie,
+      ),
+    };
+  }
+
+  final String id;
+  final String name;
+  final String type;
+
+  /// Opaque token which must only be passed through to the domain layer.
+  final String? cookie;
+
+  /// Lossless public action properties, excluding `integration` and `context`.
+  final Map<String, JsonValueDto> rawProps;
+}
+
+final class MattermostLegacyButtonActionDto extends MattermostLegacyActionDto {
+  const MattermostLegacyButtonActionDto({
+    required super.id,
+    required super.name,
+    required super.rawProps,
+    super.cookie,
+    this.tooltip = '',
+    this.style = '',
+  }) : super(type: 'button');
+
+  final String tooltip;
+  final String style;
+}
+
+final class MattermostLegacySelectActionDto extends MattermostLegacyActionDto {
+  const MattermostLegacySelectActionDto({
+    required super.id,
+    required super.name,
+    required super.rawProps,
+    super.cookie,
+    this.dataSource = '',
+    this.options = const <MattermostLegacyActionOptionDto>[],
+    this.defaultOption,
+  }) : super(type: 'select');
+
+  final String dataSource;
+  final List<MattermostLegacyActionOptionDto> options;
+  final String? defaultOption;
+}
+
+final class MattermostLegacyUnknownActionDto extends MattermostLegacyActionDto {
+  const MattermostLegacyUnknownActionDto({
+    required super.id,
+    required super.name,
+    required super.type,
+    required super.rawProps,
+    super.cookie,
+  });
+}
+
+final class MattermostLegacyActionOptionDto {
+  const MattermostLegacyActionOptionDto({
+    required this.rawProps,
+    this.text = '',
+    this.value = '',
+  });
+
+  factory MattermostLegacyActionOptionDto.fromJson(JsonMap json) =>
+      MattermostLegacyActionOptionDto.fromValues(_jsonValues(json));
+
+  factory MattermostLegacyActionOptionDto.fromValues(
+    Map<String, JsonValueDto> values,
+  ) => MattermostLegacyActionOptionDto(
+    rawProps: values,
+    text: _jsonString(values, 'text'),
+    value: _jsonString(values, 'value'),
+  );
+
+  final Map<String, JsonValueDto> rawProps;
+  final String text;
+  final String value;
 }
 
 final class MattermostPostMetadataDto {
@@ -1133,3 +1368,55 @@ Map<String, JsonValueDto> _jsonValues(JsonMap json) =>
             MapEntry<String, JsonValueDto>(key, JsonValueDto.fromJson(value)),
       ),
     );
+
+String _jsonString(Map<String, JsonValueDto> values, String key) {
+  final JsonValueDto? value = values[key];
+  if (value == null || value is JsonNullDto) return '';
+  if (value case JsonStringDto(:final String value)) return value;
+  throw FormatException('Expected string at $key');
+}
+
+String? _jsonNullableString(Map<String, JsonValueDto> values, String key) {
+  final JsonValueDto? value = values[key];
+  if (value == null || value is JsonNullDto) return null;
+  if (value case JsonStringDto(:final String value)) return value;
+  throw FormatException('Expected nullable string at $key');
+}
+
+bool _jsonBool(Map<String, JsonValueDto> values, String key) {
+  final JsonValueDto? value = values[key];
+  if (value == null || value is JsonNullDto) return false;
+  if (value case JsonBooleanDto(:final bool value)) return value;
+  if (value case JsonStringDto(value: final String value)) {
+    if (value.toLowerCase() == 'true') return true;
+    if (value.toLowerCase() == 'false') return false;
+  }
+  throw FormatException('Expected boolean at $key');
+}
+
+List<T> _jsonDtoList<T>(
+  JsonValueDto? value,
+  T Function(Map<String, JsonValueDto>) decode,
+) {
+  if (value == null || value is JsonNullDto) return const <Never>[];
+  if (value is! JsonArrayDto) return const <Never>[];
+
+  final List<T> result = <T>[];
+  for (final JsonValueDto item in value.values) {
+    if (item is! JsonObjectDto) continue;
+    try {
+      result.add(decode(item.values));
+    } on FormatException {
+      // A malformed child must not make its parent object undecodable.
+    }
+  }
+  return List<T>.unmodifiable(result);
+}
+
+Map<String, JsonValueDto> _withoutPrivateActionProps(
+  Map<String, JsonValueDto> values,
+) => Map<String, JsonValueDto>.unmodifiable(
+  Map<String, JsonValueDto>.from(values)
+    ..remove('integration')
+    ..remove('context'),
+);
