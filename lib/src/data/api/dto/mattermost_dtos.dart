@@ -151,6 +151,34 @@ final class MattermostUserAutocompleteDto {
   final List<MattermostUserDto>? agents;
 }
 
+/// Wire projection returned by Mattermost user-group endpoints.
+final class MattermostGroupDto {
+  const MattermostGroupDto({
+    required this.id,
+    required this.name,
+    required this.displayName,
+    this.deleteAt = 0,
+    this.allowReference = false,
+    this.memberCount = 0,
+  });
+
+  factory MattermostGroupDto.fromJson(JsonMap json) => MattermostGroupDto(
+    id: _string(json, 'id'),
+    name: _string(json, 'name'),
+    displayName: _string(json, 'display_name'),
+    deleteAt: _int(json, 'delete_at'),
+    allowReference: _bool(json, 'allow_reference'),
+    memberCount: _int(json, 'member_count'),
+  );
+
+  final String id;
+  final String name;
+  final String displayName;
+  final int deleteAt;
+  final bool allowReference;
+  final int memberCount;
+}
+
 final class MattermostUserStatusDto {
   const MattermostUserStatusDto({
     required this.userId,

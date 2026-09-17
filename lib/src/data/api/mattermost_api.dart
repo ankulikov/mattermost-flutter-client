@@ -45,6 +45,16 @@ abstract interface class MattermostApi {
     required int limit,
   }) => throw UnimplementedError();
 
+  /// Searches groups which the server permits using as at-mentions.
+  Future<List<MattermostGroupDto>> searchMentionGroups({
+    required String name,
+    required int limit,
+  }) => throw UnimplementedError();
+
+  /// Resolves exact group at-mention handles in one request.
+  Future<List<MattermostGroupDto>> getGroupsByNames(List<String> names) =>
+      throw UnimplementedError();
+
   /// Returns a fresh user projection without the batch profile cache.
   Future<MattermostUserDto> getUserById(String userId);
 

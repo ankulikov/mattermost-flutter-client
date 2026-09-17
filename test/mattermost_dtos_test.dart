@@ -15,6 +15,23 @@ void main() {
     expect(result.agents, isNull);
   });
 
+  test('parses a mentionable group and its member count', () {
+    final MattermostGroupDto group =
+        MattermostGroupDto.fromJson(<String, Object?>{
+          'id': 'group-1',
+          'name': 'backend',
+          'display_name': 'Backend Team',
+          'allow_reference': true,
+          'member_count': 18,
+        });
+
+    expect(group.id, 'group-1');
+    expect(group.name, 'backend');
+    expect(group.displayName, 'Backend Team');
+    expect(group.allowReference, isTrue);
+    expect(group.memberCount, 18);
+  });
+
   test('decodes profile picture versions for people and bots', () {
     final MattermostUserDto person = MattermostUserDto.fromJson(
       <String, Object?>{

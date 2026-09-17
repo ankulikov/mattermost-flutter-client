@@ -284,8 +284,10 @@ cache, чтобы не показывать устаревшие или доба
 известная, но истекшая запись обновляется через `/users/ids`, а отсутствующее в
 cache имя проверяется через `/users/usernames`. Только существующий пользователь
 заменяется на кликабельное `@First Last`, открывающее ту же карточку профиля.
-Ошибки и неизвестные имена сохраняют исходный текст. User groups пока не
-разрешаются.
+Ошибки и неизвестные имена сохраняют исходный текст. Те же уникальные handles
+одним запросом проверяются через `POST /groups/names`: существующая user group
+остаётся кликабельным `@group-handle` без замены на display name. Нажатие на неё
+пока не открывает карточку или список участников.
 
 User DTO сохраняет `last_picture_update`; для bot-аккаунта версия изображения
 берется из `bot_last_icon_update`. Message mapper переносит эту версию в автора
@@ -454,17 +456,26 @@ shortcodes реакций `recent_emojis`. Профили разделены п�
 
 ## Упоминания в composer
 
-Autocomplete упоминаний — network-first, composer-scoped состояние: результаты
-`/users/autocomplete` не попадают в Drift или профильный cache и отменяются при
-смене каретки, destination или закрытии composer. Domain repository возвращает
-раздельные server-authoritative секции channel members и users not in channel.
+Autocomplete упоминаний — network-first, composer-scoped состояние: параллельные
+результаты `/users/autocomplete` и `/groups` не попадают в Drift или профильный
+cache и отменяются при смене каретки, destination или закрытии composer. Domain
+repository возвращает server-authoritative секции channel members, referenceable
+group mentions и users not in channel. Group query запрашивает
+`filter_allow_reference=true` и `include_member_count=true`; недоступность
+опционального лицензируемого group endpoint не скрывает подсказки пользователей.
 
-Черновик хранит выбранного пользователя как inline atom с одним object
-replacement character в editable projection. Видимая подпись atom —
-`@Display Name`, но отправляемая и clipboard-строка всегда `@username`; поэтому
-server-side mentions и существующий Markdown read path сохраняют обычный
-контракт. Inline object атомарно удаляется и не позволяет поместить каретку
-внутри display name.
+Группы сортируются независимо от пользователей: exact handle, prefix handle,
+prefix display name, затем case-insensitive handle. Принадлежность текущего
+пользователя к группе не запрашивается и не влияет на ranking — это соответствует
+официальным web/mobile-клиентам. В панели секция `Group Mentions` находится между
+пользователями канала и `Not in channel`, а строка показывает display name и
+количество участников.
+
+Черновик хранит выбранного пользователя или группу как inline atom с одним object
+replacement character в editable projection. Для пользователя видимая подпись —
+`@Display Name`, а wire/clipboard-строка — `@username`. Для группы и видимая, и
+wire/clipboard-строка равны неизменному `@group-handle`. Оба inline object
+атомарно удаляются и не позволяют поместить каретку внутрь подписи.
 
 ## Проверка изменений
 

@@ -44,11 +44,11 @@ final class MentionAutocompleteState {
 
 /// Keyboard highlight state decoupled from the query/result lifecycle.
 final class MentionSuggestionNavigationController extends ChangeNotifier {
-  List<MentionCandidate> _options = const <MentionCandidate>[];
+  List<MentionSuggestion> _options = const <MentionSuggestion>[];
   int _highlightedIndex = 0;
 
   int get highlightedIndex => _options.isEmpty ? -1 : _highlightedIndex;
-  MentionCandidate? get highlightedCandidate => _options.isEmpty
+  MentionSuggestion? get highlightedCandidate => _options.isEmpty
       ? null
       : _options[_highlightedIndex.clamp(0, _options.length - 1)];
 
@@ -68,13 +68,13 @@ final class MentionSuggestionNavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setOptions(List<MentionCandidate> options) {
-    final String? previousId = highlightedCandidate?.user.id;
-    _options = List<MentionCandidate>.unmodifiable(options);
+  void setOptions(List<MentionSuggestion> options) {
+    final String? previousId = highlightedCandidate?.stableId;
+    _options = List<MentionSuggestion>.unmodifiable(options);
     final int retained = previousId == null
         ? -1
         : _options.indexWhere(
-            (MentionCandidate candidate) => candidate.user.id == previousId,
+            (MentionSuggestion candidate) => candidate.stableId == previousId,
           );
     _highlightedIndex = retained < 0 ? 0 : retained;
     notifyListeners();
@@ -249,5 +249,4 @@ final class MentionAutocompleteController extends ChangeNotifier {
   }
 }
 
-bool _isEmpty(MentionSearchResult result) =>
-    result.channelMembers.isEmpty && result.notInChannel.isEmpty;
+bool _isEmpty(MentionSearchResult result) => result.isEmpty;
