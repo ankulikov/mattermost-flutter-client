@@ -181,6 +181,11 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                 emojiRepositoryFactory: session == null
                     ? null
                     : () => ref.read(customEmojiRepositoryProvider),
+                mentionRepositoryFactory: session == null
+                    ? null
+                    : () => ref.read(mentionRepositoryProvider),
+                teamId: channel.teamId,
+                channelId: channel.id,
                 accountId: session?.durableDataScopeId ?? '',
                 onSubmit: (String message, String pendingPostId) async {
                   await ref

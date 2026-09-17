@@ -94,6 +94,25 @@ final class DioMattermostApi
   }
 
   @override
+  Future<MattermostUserAutocompleteDto> autocompleteUsers({
+    required String teamId,
+    required String channelId,
+    required String name,
+    required int limit,
+  }) async {
+    final Response<Object?> response = await _get(
+      '/users/autocomplete',
+      queryParameters: <String, Object?>{
+        'in_team': teamId,
+        'in_channel': channelId,
+        'name': name,
+        'limit': limit,
+      },
+    );
+    return MattermostUserAutocompleteDto.fromJson(_object(response.data));
+  }
+
+  @override
   Future<MattermostUserDto> getUserById(String userId) async {
     final Response<Object?> response = await _get('/users/$userId');
     return MattermostUserDto.fromJson(_object(response.data));

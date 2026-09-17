@@ -40,6 +40,32 @@ void main() {
     expect(users.single.id, 'ada-id');
   });
 
+  test('autocompletes users with the team and channel query', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"users":[{"id":"ada-id","username":"ada"}]}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final MattermostUserAutocompleteDto result =
+        await DioMattermostApi(dio: dio).autocompleteUsers(
+          teamId: 'team id',
+          channelId: 'channel id',
+          name: 'ada',
+          limit: 20,
+        );
+
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/users/autocomplete');
+    expect(adapter.request?.queryParameters, <String, dynamic>{
+      'in_team': 'team id',
+      'in_channel': 'channel id',
+      'name': 'ada',
+      'limit': 20,
+    });
+    expect(result.users.single.id, 'ada-id');
+  });
+
   test('loads a fresh complete user profile by id', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:

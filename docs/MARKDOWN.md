@@ -30,6 +30,11 @@ guide.
 | Custom `:emoji_name:` emoji | Yes | Post metadata plus authenticated, account-scoped image cache |
 | User `@username` mentions | Yes | Batched, account-scoped profile cache lookup and profile-card link |
 
+The composer may display a selected mention as a rich inline atom, but it
+serializes it to ordinary `@username` before a post reaches this renderer. The
+read path therefore stays transport-compatible and resolves the same canonical
+mention syntax.
+
 The Mattermost documentation explicitly says that HTML line breaks in table
 cells are unsupported. `flutter_markdown_plus` does not render inline HTML,
 which is therefore compatible with the documented message dialect and also

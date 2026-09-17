@@ -452,6 +452,20 @@ shortcodes реакций `recent_emojis`. Профили разделены п�
   domain-контракты.
 - Каждый Future await-ится либо явно передается в централизованную обработку.
 
+## Упоминания в composer
+
+Autocomplete упоминаний — network-first, composer-scoped состояние: результаты
+`/users/autocomplete` не попадают в Drift или профильный cache и отменяются при
+смене каретки, destination или закрытии composer. Domain repository возвращает
+раздельные server-authoritative секции channel members и users not in channel.
+
+Черновик хранит выбранного пользователя как inline atom с одним object
+replacement character в editable projection. Видимая подпись atom —
+`@Display Name`, но отправляемая и clipboard-строка всегда `@username`; поэтому
+server-side mentions и существующий Markdown read path сохраняют обычный
+контракт. Inline object атомарно удаляется и не позволяет поместить каретку
+внутри display name.
+
 ## Проверка изменений
 
 Изменения форматируются, проверяются `flutter analyze` и focused tests. Для UI

@@ -124,6 +124,33 @@ final class MattermostUserDto {
       isBot ? botLastIconUpdate : lastPictureUpdate;
 }
 
+/// Wire response for `GET /users/autocomplete`.
+///
+/// The server always returns [users]. Older servers may omit the additional
+/// sections, so they remain nullable rather than being fabricated client-side.
+final class MattermostUserAutocompleteDto {
+  const MattermostUserAutocompleteDto({
+    required this.users,
+    this.outOfChannel,
+    this.agents,
+  });
+
+  factory MattermostUserAutocompleteDto.fromJson(JsonMap json) =>
+      MattermostUserAutocompleteDto(
+        users: _dtoList(json, 'users', MattermostUserDto.fromJson),
+        outOfChannel: json.containsKey('out_of_channel')
+            ? _dtoList(json, 'out_of_channel', MattermostUserDto.fromJson)
+            : null,
+        agents: json.containsKey('agents')
+            ? _dtoList(json, 'agents', MattermostUserDto.fromJson)
+            : null,
+      );
+
+  final List<MattermostUserDto> users;
+  final List<MattermostUserDto>? outOfChannel;
+  final List<MattermostUserDto>? agents;
+}
+
 final class MattermostUserStatusDto {
   const MattermostUserStatusDto({
     required this.userId,
