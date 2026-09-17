@@ -7,8 +7,8 @@ import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
-import 'package:mattermost_flutter/src/ui/messages/widgets/message_attachments.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
@@ -578,7 +578,7 @@ class _ThreadPost extends StatelessWidget {
                   children: <Widget>[
                     MessageAuthorLine(author: post.author, sentAt: post.sentAt),
                     const SizedBox(height: 4),
-                    MessageBody(
+                    MessageContent(
                       post: post,
                       serverUrl: serverUrl,
                       onSelectChannel: onSelectChannel,
@@ -586,10 +586,6 @@ class _ThreadPost extends StatelessWidget {
                           unawaited(PostPermalinkRoute.push(context, postId)),
                       deletedMessage: ThreadStrings.deletedMessage,
                     ),
-                    if (post.attachments.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 8),
-                      MessageAttachments(attachments: post.attachments),
-                    ],
                     if (post.reactions.isNotEmpty) ...<Widget>[
                       const SizedBox(height: 8),
                       MessageReactions(

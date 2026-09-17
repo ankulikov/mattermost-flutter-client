@@ -136,20 +136,57 @@ class MessageBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final TextStyle? bodyStyle = Theme.of(context).textTheme.bodyMedium;
     if (post.isDeleted && deletedMessage != null) {
       return Text(
         deletedMessage!,
-        style: bodyStyle?.copyWith(fontStyle: FontStyle.italic),
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic),
       );
     }
+    return MessageMarkdown(
+      data: post.message,
+      customEmojis: post.customEmojis,
+      serverUrl: serverUrl,
+      onSelectChannel: onSelectChannel,
+      onOpenPostLink: onOpenPostLink,
+    );
+  }
+}
+
+/// Shared safe Markdown projection for a post and its rich attachment fields.
+///
+/// Keeping mentions and permalink behavior here prevents legacy attachment
+/// cards from accidentally using a less restrictive rendering path.
+class MessageMarkdown extends ConsumerWidget {
+  const MessageMarkdown({
+    required this.data,
+    this.customEmojis = const <CustomEmojiReference>[],
+    this.serverUrl,
+    this.onSelectChannel,
+    this.onOpenPostLink,
+    this.textStyle,
+    super.key,
+  });
+
+  final String data;
+  final List<CustomEmojiReference> customEmojis;
+  final Uri? serverUrl;
+  final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String>? onOpenPostLink;
+  final TextStyle? textStyle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final TextStyle? bodyStyle =
+        textStyle ?? Theme.of(context).textTheme.bodyMedium;
     final Map<String, CustomEmojiReference> customEmojiByName =
         <String, CustomEmojiReference>{
-          for (final CustomEmojiReference emoji in post.customEmojis)
+          for (final CustomEmojiReference emoji in customEmojis)
             emoji.name: emoji,
         };
     final Map<String, UserMention> mentionsByUsername = ref
-        .watch(userMentionsProvider(userMentionLookupKey(post.message)))
+        .watch(userMentionsProvider(userMentionLookupKey(data)))
         .maybeWhen(
           data: (List<UserMention> mentions) => <String, UserMention>{
             for (final UserMention mention in mentions)
@@ -160,7 +197,7 @@ class MessageBody extends ConsumerWidget {
     final List<String> resolvedMentionNames = mentionsByUsername.keys.toList()
       ..sort();
     final Map<String, GroupMention> groupsByName = ref
-        .watch(groupMentionsProvider(userMentionLookupKey(post.message)))
+        .watch(groupMentionsProvider(userMentionLookupKey(data)))
         .maybeWhen(
           data: (List<GroupMention> groups) => <String, GroupMention>{
             for (final GroupMention group in groups)
@@ -170,7 +207,7 @@ class MessageBody extends ConsumerWidget {
         );
     final List<String> resolvedGroupNames = groupsByName.keys.toList()..sort();
     return MattermostMarkdown(
-      data: post.message,
+      data: data,
       serverUrl: serverUrl,
       onTapChannel: onSelectChannel,
       onTapPostLink: onOpenPostLink,
