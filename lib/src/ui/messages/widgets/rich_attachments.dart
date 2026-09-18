@@ -1,12 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/post_action.dart';
 import 'package:mattermost_flutter/src/domain/models/rich_attachment.dart';
+import 'package:mattermost_flutter/src/ui/messages/post_action_controller.dart';
 import 'package:mattermost_flutter/src/ui/messages/rich_attachment_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 
 typedef RichAttachmentActionCallback =
-    void Function(RichAttachmentAction action, String? selectedOption);
+    FutureOr<void> Function(
+      RichAttachmentAction action,
+      String? selectedOption,
+    );
 
 /// Renders legacy Mattermost attachment cards without exposing integration data.
 class RichAttachments extends StatelessWidget {
@@ -17,6 +26,10 @@ class RichAttachments extends StatelessWidget {
     this.onSelectChannel,
     this.onOpenPostLink,
     this.onAction,
+    this.postId,
+    this.actionScopeId,
+    this.onPostUpdated,
+    this.onGotoLocation,
     super.key,
   });
 
@@ -26,6 +39,10 @@ class RichAttachments extends StatelessWidget {
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<String>? onOpenPostLink;
   final RichAttachmentActionCallback? onAction;
+  final String? postId;
+  final String? actionScopeId;
+  final ValueChanged<ChannelPost>? onPostUpdated;
+  final ValueChanged<String>? onGotoLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +62,10 @@ class RichAttachments extends StatelessWidget {
                 onSelectChannel: onSelectChannel,
                 onOpenPostLink: onOpenPostLink,
                 onAction: onAction,
+                postId: postId,
+                actionScopeId: actionScopeId,
+                onPostUpdated: onPostUpdated,
+                onGotoLocation: onGotoLocation,
               ),
             ),
         ],
@@ -61,6 +82,10 @@ class _RichAttachmentCard extends StatelessWidget {
     required this.onSelectChannel,
     required this.onOpenPostLink,
     required this.onAction,
+    required this.postId,
+    required this.actionScopeId,
+    required this.onPostUpdated,
+    required this.onGotoLocation,
   });
 
   final RichAttachment attachment;
@@ -69,6 +94,10 @@ class _RichAttachmentCard extends StatelessWidget {
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<String>? onOpenPostLink;
   final RichAttachmentActionCallback? onAction;
+  final String? postId;
+  final String? actionScopeId;
+  final ValueChanged<ChannelPost>? onPostUpdated;
+  final ValueChanged<String>? onGotoLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +146,14 @@ class _RichAttachmentCard extends StatelessWidget {
               ],
               if (attachment.actions.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 10),
-                _Actions(actions: attachment.actions, onAction: onAction),
+                _Actions(
+                  actions: attachment.actions,
+                  onAction: onAction,
+                  postId: postId,
+                  actionScopeId: actionScopeId,
+                  onPostUpdated: onPostUpdated,
+                  onGotoLocation: onGotoLocation,
+                ),
               ],
               if (attachment.footer.isNotEmpty ||
                   attachment.timestamp != null) ...<Widget>[
@@ -269,10 +305,21 @@ class _Footer extends StatelessWidget {
 }
 
 class _Actions extends StatelessWidget {
-  const _Actions({required this.actions, required this.onAction});
+  const _Actions({
+    required this.actions,
+    required this.onAction,
+    required this.postId,
+    required this.actionScopeId,
+    required this.onPostUpdated,
+    required this.onGotoLocation,
+  });
 
   final List<RichAttachmentAction> actions;
   final RichAttachmentActionCallback? onAction;
+  final String? postId;
+  final String? actionScopeId;
+  final ValueChanged<ChannelPost>? onPostUpdated;
+  final ValueChanged<String>? onGotoLocation;
 
   @override
   Widget build(BuildContext context) => Wrap(
@@ -284,10 +331,18 @@ class _Actions extends StatelessWidget {
             RichAttachmentButtonAction() => _ButtonAction(
               action: action,
               onAction: onAction,
+              postId: postId,
+              actionScopeId: actionScopeId,
+              onPostUpdated: onPostUpdated,
+              onGotoLocation: onGotoLocation,
             ),
             RichAttachmentSelectAction() => _SelectAction(
               action: action,
               onAction: onAction,
+              postId: postId,
+              actionScopeId: actionScopeId,
+              onPostUpdated: onPostUpdated,
+              onGotoLocation: onGotoLocation,
             ),
             RichAttachmentUnknownAction() => Tooltip(
               message: RichAttachmentStrings.unsupportedAction,
@@ -299,63 +354,189 @@ class _Actions extends StatelessWidget {
   );
 }
 
-class _ButtonAction extends StatelessWidget {
-  const _ButtonAction({required this.action, required this.onAction});
+class _ButtonAction extends ConsumerWidget {
+  const _ButtonAction({
+    required this.action,
+    required this.onAction,
+    required this.postId,
+    required this.actionScopeId,
+    required this.onPostUpdated,
+    required this.onGotoLocation,
+  });
 
   final RichAttachmentButtonAction action;
   final RichAttachmentActionCallback? onAction;
+  final String? postId;
+  final String? actionScopeId;
+  final ValueChanged<ChannelPost>? onPostUpdated;
+  final ValueChanged<String>? onGotoLocation;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ButtonStyle? style = _buttonStyle(context, action);
-    return Tooltip(
-      message: action.tooltip,
-      child: ElevatedButton(
-        onPressed: onAction == null ? null : () => onAction!(action, null),
-        style: style,
-        child: Text(action.name),
-      ),
+    final PostActionControlKey? key = _controlKey(
+      postId,
+      actionScopeId,
+      action,
+    );
+    final PostActionControlState? actionState = key == null
+        ? null
+        : ref.watch(postActionControlProvider(key));
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Tooltip(
+          message: action.tooltip,
+          child: ElevatedButton(
+            onPressed: onAction == null || (actionState?.isLoading ?? false)
+                ? null
+                : () => unawaited(
+                    _execute(
+                      context,
+                      ref,
+                      key,
+                      action,
+                      null,
+                      onAction,
+                      onPostUpdated,
+                      onGotoLocation,
+                    ),
+                  ),
+            style: style,
+            child: Text(action.name),
+          ),
+        ),
+        if (actionState?.error != null) const _ActionError(),
+      ],
     );
   }
 }
 
-class _SelectAction extends StatelessWidget {
-  const _SelectAction({required this.action, required this.onAction});
+class _SelectAction extends ConsumerWidget {
+  const _SelectAction({
+    required this.action,
+    required this.onAction,
+    required this.postId,
+    required this.actionScopeId,
+    required this.onPostUpdated,
+    required this.onGotoLocation,
+  });
 
   final RichAttachmentSelectAction action;
   final RichAttachmentActionCallback? onAction;
+  final String? postId;
+  final String? actionScopeId;
+  final ValueChanged<ChannelPost>? onPostUpdated;
+  final ValueChanged<String>? onGotoLocation;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final PostActionControlKey? key = _controlKey(
+      postId,
+      actionScopeId,
+      action,
+    );
+    final PostActionControlState? actionState = key == null
+        ? null
+        : ref.watch(postActionControlProvider(key));
     final String? selected = action.options
         .where(
           (RichAttachmentOption option) => option.value == action.defaultOption,
         )
         .map((RichAttachmentOption option) => option.value)
         .firstOrNull;
-    return SizedBox(
-      width: 180,
-      child: DropdownButtonFormField<String>(
-        initialValue: selected,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: action.name),
-        hint: const Text(RichAttachmentStrings.select),
-        items: action.options
-            .map(
-              (RichAttachmentOption option) => DropdownMenuItem<String>(
-                value: option.value,
-                child: Text(option.text, overflow: TextOverflow.ellipsis),
-              ),
-            )
-            .toList(growable: false),
-        onChanged: onAction == null || action.options.isEmpty
-            ? null
-            : (String? value) {
-                if (value != null) onAction!(action, value);
-              },
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        SizedBox(
+          width: 180,
+          child: DropdownButtonFormField<String>(
+            initialValue: selected,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: action.name),
+            hint: const Text(RichAttachmentStrings.select),
+            items: action.options
+                .map(
+                  (RichAttachmentOption option) => DropdownMenuItem<String>(
+                    value: option.value,
+                    child: Text(option.text, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged:
+                onAction == null ||
+                    action.options.isEmpty ||
+                    (actionState?.isLoading ?? false)
+                ? null
+                : (String? value) {
+                    if (value != null) {
+                      unawaited(
+                        _execute(
+                          context,
+                          ref,
+                          key,
+                          action,
+                          value,
+                          onAction,
+                          onPostUpdated,
+                          onGotoLocation,
+                        ),
+                      );
+                    }
+                  },
+          ),
+        ),
+        if (actionState?.error != null) const _ActionError(),
+      ],
     );
   }
+}
+
+class _ActionError extends StatelessWidget {
+  const _ActionError();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 4),
+    child: Text(
+      RichAttachmentStrings.actionFailed,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: Theme.of(context).colorScheme.error,
+      ),
+    ),
+  );
+}
+
+PostActionControlKey? _controlKey(
+  String? postId,
+  String? scopeId,
+  RichAttachmentAction action,
+) => postId == null || scopeId == null
+    ? null
+    : (scopeId: scopeId, postId: postId, actionId: action.id);
+
+Future<void> _execute(
+  BuildContext context,
+  WidgetRef ref,
+  PostActionControlKey? key,
+  RichAttachmentAction action,
+  String? selectedOption,
+  RichAttachmentActionCallback? fallback,
+  ValueChanged<ChannelPost>? onPostUpdated,
+  ValueChanged<String>? onGotoLocation,
+) async {
+  if (key == null) {
+    await fallback?.call(action, selectedOption);
+    return;
+  }
+  final PostActionResult? result = await ref
+      .read(postActionControlProvider(key).notifier)
+      .submit(action: action, selectedOption: selectedOption);
+  if (!context.mounted || result == null) return;
+  onPostUpdated?.call(result.updatedPost);
+  if (result.gotoLocation.isNotEmpty) onGotoLocation?.call(result.gotoLocation);
 }
 
 class _RemoteAttachmentImage extends StatelessWidget {

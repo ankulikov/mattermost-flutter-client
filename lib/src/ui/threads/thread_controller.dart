@@ -3,6 +3,7 @@ import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
+import 'package:mattermost_flutter/src/domain/policies/post_collection.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
@@ -329,7 +330,7 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
       (PostReaction reaction) =>
           reaction.emojiName == emojiName && reaction.reactedByCurrentUser,
     );
-    _replacePost(toggleCurrentUserReaction(original, emojiName));
+    replacePost(toggleCurrentUserReaction(original, emojiName));
     try {
       if (remove) {
         await _cancellation.run(
@@ -359,7 +360,7 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
             ? null
             : _findPost(state.value!.thread, postId);
         if (latest != null) {
-          _replacePost(latest.withReactions(original.reactions));
+          replacePost(latest.withReactions(original.reactions));
         }
       }
       return false;
@@ -376,7 +377,8 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     return null;
   }
 
-  void _replacePost(ChannelPost replacement) {
+  /// Replaces a post in either the root or replies of this volatile thread.
+  void replacePost(ChannelPost replacement) {
     final ThreadViewState? current = state.value;
     if (current == null) return;
     final MessageThread thread = current.thread;
@@ -384,11 +386,20 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
       current.copyWith(
         thread: MessageThread(
           rootPostId: thread.rootPostId,
-          root: thread.root?.id == replacement.id ? replacement : thread.root,
+          root: thread.root?.id == replacement.id
+              ? mergePosts(
+                  <ChannelPost>[thread.root!],
+                  <ChannelPost>[replacement],
+                ).single
+              : thread.root,
           replies: List<ChannelPost>.unmodifiable(
             thread.replies.map(
-              (ChannelPost post) =>
-                  post.id == replacement.id ? replacement : post,
+              (ChannelPost post) => post.id == replacement.id
+                  ? mergePosts(
+                      <ChannelPost>[post],
+                      <ChannelPost>[replacement],
+                    ).single
+                  : post,
             ),
           ),
           isComplete: thread.isComplete,

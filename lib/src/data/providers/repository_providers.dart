@@ -10,6 +10,7 @@ import 'package:mattermost_flutter/src/data/repositories/api_custom_emoji_reposi
 import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_channel_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_post_action_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_post_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_thread_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_user_repository.dart';
@@ -19,6 +20,7 @@ import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart'
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
+import 'package:mattermost_flutter/src/domain/repositories/post_action_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
@@ -120,6 +122,15 @@ final Provider<ChannelRepository> channelRepositoryProvider =
 final Provider<PostRepository> postRepositoryProvider =
     Provider<PostRepository>(
       (Ref ref) => MattermostPostRepository(
+        api: ref.watch(activeMattermostApiProvider),
+        messageMapper: ref.watch(mattermostMessageMapperProvider),
+        users: ref.watch(userRepositoryProvider),
+      ),
+    );
+
+final Provider<PostActionRepository> postActionRepositoryProvider =
+    Provider<PostActionRepository>(
+      (Ref ref) => MattermostPostActionRepository(
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         users: ref.watch(userRepositoryProvider),

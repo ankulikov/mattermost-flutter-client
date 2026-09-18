@@ -294,6 +294,62 @@ void main() {
     expect(created.rootId, 'root-1');
   });
 
+  test(
+    'dispatches an attachment action with encoded IDs and selection',
+    () async {
+      final _RecordingAdapter adapter = _RecordingAdapter(
+        body:
+            '{"status":"OK","trigger_id":"trigger-1","goto_location":"/team/pl/post-2"}',
+      );
+      final DioMattermostApi api = DioMattermostApi(
+        dio: Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+          ..httpClientAdapter = adapter,
+      );
+
+      final MattermostPostActionResponseDto result = await api
+          .executePostAction(
+            postId: 'post / one',
+            actionId: 'select/action',
+            request: const MattermostPostActionRequestDto(
+              cookie: 'opaque',
+              selectedOption: 'ada',
+            ),
+          );
+
+      expect(adapter.request?.method, 'POST');
+      expect(
+        adapter.request?.path,
+        '/posts/post%20%2F%20one/actions/select%2Faction',
+      );
+      expect(adapter.request?.data, <String, Object?>{
+        'cookie': 'opaque',
+        'selected_option': 'ada',
+      });
+      expect(result.triggerId, 'trigger-1');
+      expect(result.gotoLocation, '/team/pl/post-2');
+    },
+  );
+
+  test('surfaces a failed attachment action response', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"message":"Action denied"}',
+      statusCode: 403,
+    );
+    final DioMattermostApi api = DioMattermostApi(
+      dio: Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+        ..httpClientAdapter = adapter,
+    );
+
+    await expectLater(
+      api.executePostAction(
+        postId: 'post-1',
+        actionId: 'approve',
+        request: const MattermostPostActionRequestDto(cookie: 'opaque'),
+      ),
+      throwsA(isA<DioException>()),
+    );
+  });
+
   test('creates and removes an encoded emoji reaction', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(body: '{}');
     final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
@@ -705,11 +761,13 @@ final class _RecordingAdapter implements HttpClientAdapter {
         '"prev_post_id":"","has_next":false}',
     this.bytes,
     this.contentType = 'application/json',
+    this.statusCode = 200,
   });
 
   final String body;
   final Uint8List? bytes;
   final String contentType;
+  final int statusCode;
   RequestOptions? request;
 
   @override
@@ -723,7 +781,7 @@ final class _RecordingAdapter implements HttpClientAdapter {
       bytes == null
           ? Stream<Uint8List>.value(Uint8List.fromList(body.codeUnits))
           : Stream<Uint8List>.value(bytes!),
-      200,
+      statusCode,
       headers: <String, List<String>>{
         Headers.contentTypeHeader: <String>[contentType],
       },

@@ -348,7 +348,7 @@ final class ChannelPostsController
       (PostReaction reaction) =>
           reaction.emojiName == emojiName && reaction.reactedByCurrentUser,
     );
-    _replacePost(toggleCurrentUserReaction(original, emojiName));
+    replacePost(toggleCurrentUserReaction(original, emojiName));
     try {
       if (remove) {
         await _cancellation.run(
@@ -374,7 +374,7 @@ final class ChannelPostsController
             .where((ChannelPost post) => post.id == postId)
             .firstOrNull;
         if (latest != null) {
-          _replacePost(latest.withReactions(original.reactions));
+          replacePost(latest.withReactions(original.reactions));
         }
       }
       return false;
@@ -383,17 +383,13 @@ final class ChannelPostsController
     }
   }
 
-  void _replacePost(ChannelPost replacement) {
+  /// Replaces a post using the same canonical collection policy as updates.
+  void replacePost(ChannelPost replacement) {
     final ChannelPostsViewState? current = state.value;
     if (current == null) return;
     state = AsyncData(
       current.copyWith(
-        posts: List<ChannelPost>.unmodifiable(
-          current.posts.map(
-            (ChannelPost post) =>
-                post.id == replacement.id ? replacement : post,
-          ),
-        ),
+        posts: mergePosts(current.posts, <ChannelPost>[replacement]),
       ),
     );
   }

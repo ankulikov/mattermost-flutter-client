@@ -446,6 +446,19 @@ final class DioMattermostApi
   }
 
   @override
+  Future<MattermostPostActionResponseDto> executePostAction({
+    required String postId,
+    required String actionId,
+    required MattermostPostActionRequestDto request,
+  }) async {
+    final Response<Object?> response = await _post(
+      '/posts/${Uri.encodeComponent(postId)}/actions/${Uri.encodeComponent(actionId)}',
+      data: request.toJson(),
+    );
+    return MattermostPostActionResponseDto.fromJson(_object(response.data));
+  }
+
+  @override
   Future<void> saveReaction({
     required String userId,
     required String postId,

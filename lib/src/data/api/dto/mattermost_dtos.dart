@@ -701,6 +701,43 @@ final class MattermostCreatePostRequestDto {
   };
 }
 
+/// Body for Mattermost's server-mediated legacy attachment action endpoint.
+///
+/// The cookie is opaque and optional for legacy actions. In particular,
+/// integration configuration never crosses this DTO boundary.
+final class MattermostPostActionRequestDto {
+  const MattermostPostActionRequestDto({this.cookie, this.selectedOption});
+
+  final String? cookie;
+  final String? selectedOption;
+
+  JsonMap toJson() => <String, Object?>{
+    if (cookie case final String value when value.isNotEmpty) 'cookie': value,
+    if (selectedOption case final String value) 'selected_option': value,
+  };
+}
+
+/// Acknowledgement returned to the client after Mattermost dispatched an
+/// interactive action. Post updates are deliberately fetched separately.
+final class MattermostPostActionResponseDto {
+  const MattermostPostActionResponseDto({
+    required this.status,
+    this.triggerId = '',
+    this.gotoLocation = '',
+  });
+
+  factory MattermostPostActionResponseDto.fromJson(JsonMap json) =>
+      MattermostPostActionResponseDto(
+        status: _string(json, 'status'),
+        triggerId: _string(json, 'trigger_id'),
+        gotoLocation: _string(json, 'goto_location'),
+      );
+
+  final String status;
+  final String triggerId;
+  final String gotoLocation;
+}
+
 final class MattermostPostDto {
   const MattermostPostDto({
     required this.id,

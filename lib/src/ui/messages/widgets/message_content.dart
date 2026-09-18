@@ -13,6 +13,9 @@ class MessageContent extends StatelessWidget {
     this.onOpenPostLink,
     this.deletedMessage,
     this.onRichAttachmentAction,
+    this.actionScopeId,
+    this.onRichAttachmentPostUpdated,
+    this.onRichAttachmentGotoLocation,
     super.key,
   });
 
@@ -22,6 +25,9 @@ class MessageContent extends StatelessWidget {
   final ValueChanged<String>? onOpenPostLink;
   final String? deletedMessage;
   final RichAttachmentActionCallback? onRichAttachmentAction;
+  final String? actionScopeId;
+  final ValueChanged<ChannelPost>? onRichAttachmentPostUpdated;
+  final ValueChanged<String>? onRichAttachmentGotoLocation;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -43,6 +49,10 @@ class MessageContent extends StatelessWidget {
           onSelectChannel: onSelectChannel,
           onOpenPostLink: onOpenPostLink,
           onAction: onRichAttachmentAction,
+          postId: post.id,
+          actionScopeId: actionScopeId,
+          onPostUpdated: onRichAttachmentPostUpdated,
+          onGotoLocation: onRichAttachmentGotoLocation,
         ),
       ],
       if (!post.isDeleted && post.attachments.isNotEmpty) ...<Widget>[
