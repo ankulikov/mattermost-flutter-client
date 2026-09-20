@@ -1,0 +1,58 @@
+{
+  "id": "post-malformed-children",
+  "user_id": "user-bot",
+  "channel_id": "channel-town-square",
+  "message": "Partial payload",
+  "props": {
+    "attachments": [
+      {
+        "fallback": "Valid attachment with mixed children",
+        "fields": [
+          {
+            "title": "Valid field",
+            "value": "Preserve me",
+            "short": true
+          },
+          "field-is-not-an-object"
+        ],
+        "actions": [
+          {
+            "id": "valid-select",
+            "type": "select",
+            "name": "Valid select",
+            "options": [
+              {
+                "text": "Valid option",
+                "value": "valid"
+              },
+              {
+                "text": 7,
+                "value": false
+              }
+            ],
+            "integration": {
+              "url": "/plugins/example/actions/select",
+              "context": {}
+            }
+          },
+          {
+            "id": 99,
+            "type": [
+              "button"
+            ],
+            "name": {
+              "unexpected": "object"
+            }
+          },
+          null
+        ]
+      },
+      "attachment-is-not-an-object",
+      null,
+      {
+        "fallback": "Valid sibling attachment",
+        "text": "This attachment must survive malformed siblings."
+      }
+    ]
+  }
+}

@@ -94,6 +94,45 @@ final class DioMattermostApi
   }
 
   @override
+  Future<List<MattermostUserDto>> searchUsers({
+    required String term,
+    required int limit,
+  }) async {
+    final Response<Object?> response = await _post(
+      '/users/search',
+      data: <String, Object?>{
+        'term': term,
+        'allow_inactive': false,
+        'limit': limit,
+      },
+    );
+    return _dtoList(response.data, MattermostUserDto.fromJson);
+  }
+
+  @override
+  Future<List<MattermostChannelDto>> searchChannels({
+    required String term,
+    required int limit,
+  }) async {
+    final Response<Object?> response = await _post(
+      '/channels/search',
+      queryParameters: const <String, Object?>{'system_console': true},
+      data: <String, Object?>{
+        'term': term,
+        'page': 0,
+        'per_page': limit,
+        'exclude_default_channels': false,
+      },
+    );
+    final Object? data = response.data;
+    if (data is List<Object?>) {
+      return _dtoList(data, MattermostChannelDto.fromJson);
+    }
+    final Map<String, Object?> body = _object(data);
+    return _dtoList(body['channels'], MattermostChannelDto.fromJson);
+  }
+
+  @override
   Future<MattermostUserAutocompleteDto> autocompleteUsers({
     required String teamId,
     required String channelId,
@@ -446,6 +485,19 @@ final class DioMattermostApi
   }
 
   @override
+  Future<MattermostPostActionResponseDto> executePostAction({
+    required String postId,
+    required String actionId,
+    required MattermostPostActionRequestDto request,
+  }) async {
+    final Response<Object?> response = await _post(
+      '/posts/${Uri.encodeComponent(postId)}/actions/${Uri.encodeComponent(actionId)}',
+      data: request.toJson(),
+    );
+    return MattermostPostActionResponseDto.fromJson(_object(response.data));
+  }
+
+  @override
   Future<void> saveReaction({
     required String userId,
     required String postId,
@@ -634,15 +686,19 @@ final class DioMattermostApi
     ),
   );
 
-  Future<Response<Object?>> _post(String path, {Object? data}) =>
-      _withCancellation(
-        (CancelToken? cancelToken) => _dio.post<Object?>(
-          path,
-          data: data,
-          cancelToken: cancelToken,
-          options: Options(contentType: Headers.jsonContentType),
-        ),
-      );
+  Future<Response<Object?>> _post(
+    String path, {
+    Object? data,
+    Map<String, Object?>? queryParameters,
+  }) => _withCancellation(
+    (CancelToken? cancelToken) => _dio.post<Object?>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      cancelToken: cancelToken,
+      options: Options(contentType: Headers.jsonContentType),
+    ),
+  );
 
   Future<Response<Object?>> _put(String path, {Object? data}) =>
       _withCancellation(

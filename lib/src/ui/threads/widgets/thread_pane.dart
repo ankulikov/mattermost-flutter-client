@@ -7,8 +7,9 @@ import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
-import 'package:mattermost_flutter/src/ui/messages/widgets/message_attachments.dart';
+import 'package:mattermost_flutter/src/ui/messages/post_action_navigation.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
@@ -186,6 +187,20 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                 ? null
                                 : () => ref.read(customEmojiRepositoryProvider),
                             accountId: session?.durableDataScopeId ?? '',
+                            actionScopeId:
+                                widget.stateScopeId ?? widget.rootPostId,
+                            onRichAttachmentPostUpdated: (ChannelPost post) =>
+                                ref
+                                    .read(_threadStateProvider.notifier)
+                                    .replacePost(post),
+                            onRichAttachmentGotoLocation: (String location) =>
+                                unawaited(
+                                  handlePostActionGotoLocation(
+                                    context,
+                                    serverUrl: widget.serverUrl,
+                                    location: location,
+                                  ),
+                                ),
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -240,6 +255,20 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                         customEmojiRepositoryProvider,
                                       ),
                                 accountId: session?.durableDataScopeId ?? '',
+                                actionScopeId:
+                                    widget.stateScopeId ?? widget.rootPostId,
+                                onRichAttachmentPostUpdated:
+                                    (ChannelPost post) => ref
+                                        .read(_threadStateProvider.notifier)
+                                        .replacePost(post),
+                                onRichAttachmentGotoLocation:
+                                    (String location) => unawaited(
+                                      handlePostActionGotoLocation(
+                                        context,
+                                        serverUrl: widget.serverUrl,
+                                        location: location,
+                                      ),
+                                    ),
                               ),
                             ),
                           ],
@@ -537,6 +566,9 @@ class _ThreadPost extends StatelessWidget {
     required this.onAddReaction,
     required this.emojiRepositoryFactory,
     required this.accountId,
+    required this.actionScopeId,
+    required this.onRichAttachmentPostUpdated,
+    required this.onRichAttachmentGotoLocation,
     super.key,
   });
 
@@ -548,6 +580,9 @@ class _ThreadPost extends StatelessWidget {
   final Future<bool> Function(String emojiName) onAddReaction;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
+  final String actionScopeId;
+  final ValueChanged<ChannelPost> onRichAttachmentPostUpdated;
+  final ValueChanged<String> onRichAttachmentGotoLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -578,18 +613,19 @@ class _ThreadPost extends StatelessWidget {
                   children: <Widget>[
                     MessageAuthorLine(author: post.author, sentAt: post.sentAt),
                     const SizedBox(height: 4),
-                    MessageBody(
+                    MessageContent(
                       post: post,
                       serverUrl: serverUrl,
                       onSelectChannel: onSelectChannel,
                       onOpenPostLink: (String postId) =>
                           unawaited(PostPermalinkRoute.push(context, postId)),
                       deletedMessage: ThreadStrings.deletedMessage,
+                      onRichAttachmentAction: (_, _) {},
+                      actionScopeId: actionScopeId,
+                      onRichAttachmentPostUpdated: onRichAttachmentPostUpdated,
+                      onRichAttachmentGotoLocation:
+                          onRichAttachmentGotoLocation,
                     ),
-                    if (post.attachments.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 8),
-                      MessageAttachments(attachments: post.attachments),
-                    ],
                     if (post.reactions.isNotEmpty) ...<Widget>[
                       const SizedBox(height: 8),
                       MessageReactions(

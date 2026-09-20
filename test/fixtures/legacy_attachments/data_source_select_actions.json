@@ -1,0 +1,39 @@
+{
+  "id": "post-data-source-selects",
+  "user_id": "user-bot",
+  "channel_id": "channel-town-square",
+  "message": "Route the incident",
+  "props": {
+    "attachments": [
+      {
+        "fallback": "Choose an incident owner and channel",
+        "actions": [
+          {
+            "id": "incident-owner",
+            "type": "select",
+            "name": "Choose an owner",
+            "data_source": "users",
+            "integration": {
+              "url": "/plugins/incidents/actions/owner",
+              "context": {
+                "incident_id": "incident-42"
+              }
+            }
+          },
+          {
+            "id": "incident-channel",
+            "type": "select",
+            "name": "Choose a channel",
+            "data_source": "channels",
+            "integration": {
+              "url": "/plugins/incidents/actions/channel",
+              "context": {
+                "incident_id": "incident-42"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

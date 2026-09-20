@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
+import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
@@ -377,12 +378,15 @@ void main() {
         unread: const <MattermostPostDto>[],
       );
       final _Gateway gateway = _Gateway();
+      final SessionRealtimeService realtime = SessionRealtimeService(
+        gateway: gateway,
+        credentialStore: _Credentials(session.serverUrl),
+      );
       final MattermostInboxRepository repository = MattermostInboxRepository(
         api: api,
         messageMapper: const MattermostMessageMapper(),
         postponed: const _Postponed(),
-        webSocketGateway: gateway,
-        credentialStore: _Credentials(session.serverUrl),
+        realtime: realtime,
       );
       await repository.load(session: session);
       final List<InboxRealtimeEvent> events = <InboxRealtimeEvent>[];
@@ -390,15 +394,18 @@ void main() {
           .watch(session: session)
           .listen(events.add);
       addTearDown(() async {
-        await gateway.close();
         await subscription.cancel();
+        await realtime.dispose();
+        await gateway.close();
       });
       await _waitUntil(() => gateway.started);
 
       expect(gateway.acceptsEvent?.call('posted'), isTrue);
-      expect(gateway.acceptsEvent?.call('typing'), isFalse);
+      // The session fan-out observes every event/sequence and filters for each
+      // repository subscriber above the transport.
+      expect(gateway.acceptsEvent?.call('typing'), isTrue);
       expect(gateway.acceptsChannel?.call('channel'), isTrue);
-      expect(gateway.acceptsChannel?.call('unrelated'), isFalse);
+      expect(gateway.acceptsChannel?.call('unrelated'), isTrue);
 
       gateway.add(
         WebSocketEventSignal(
@@ -453,6 +460,10 @@ void main() {
     'requests HTTP recovery only after reconnect or a sequence gap',
     () async {
       final _Gateway gateway = _Gateway();
+      final SessionRealtimeService realtime = SessionRealtimeService(
+        gateway: gateway,
+        credentialStore: _Credentials(session.serverUrl),
+      );
       final _InboxApi api = _InboxApi(
         teams: const <MattermostTeamDto>[
           MattermostTeamDto(id: 'team', name: 'team', displayName: 'Team'),
@@ -476,8 +487,7 @@ void main() {
         api: api,
         messageMapper: const MattermostMessageMapper(),
         postponed: const _Postponed(),
-        webSocketGateway: gateway,
-        credentialStore: _Credentials(session.serverUrl),
+        realtime: realtime,
       );
       await repository.load(session: session);
       final List<InboxRealtimeEvent> events = <InboxRealtimeEvent>[];
@@ -485,8 +495,9 @@ void main() {
           .watch(session: session)
           .listen(events.add);
       addTearDown(() async {
-        await gateway.close();
         await subscription.cancel();
+        await realtime.dispose();
+        await gateway.close();
       });
       await _waitUntil(() => gateway.started);
 

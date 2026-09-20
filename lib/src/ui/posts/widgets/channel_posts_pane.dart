@@ -10,8 +10,9 @@ import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
-import 'package:mattermost_flutter/src/ui/messages/widgets/message_attachments.dart';
+import 'package:mattermost_flutter/src/ui/messages/post_action_navigation.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
@@ -162,6 +163,17 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                     },
                     onToggleReaction: (ChannelPost post, String emojiName) =>
                         _toggleReaction(context, post, emojiName),
+                    onRichAttachmentPostUpdated: (ChannelPost post) =>
+                        ref.read(_postsProvider.notifier).replacePost(post),
+                    onRichAttachmentGotoLocation: (String location) =>
+                        unawaited(
+                          handlePostActionGotoLocation(
+                            context,
+                            serverUrl: serverUrl,
+                            location: location,
+                          ),
+                        ),
+                    actionScopeId: widget.stateScopeId ?? channel.id,
                     emojiRepositoryFactory: session == null
                         ? null
                         : () => ref.read(customEmojiRepositoryProvider),
@@ -433,6 +445,9 @@ class _PostList extends StatefulWidget {
     required this.onLoadNewer,
     required this.onOpenThread,
     required this.onToggleReaction,
+    required this.onRichAttachmentPostUpdated,
+    required this.onRichAttachmentGotoLocation,
+    required this.actionScopeId,
     required this.emojiRepositoryFactory,
     required this.accountId,
     required this.onSelectChannel,
@@ -451,6 +466,9 @@ class _PostList extends StatefulWidget {
   final Future<void> Function() onLoadNewer;
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
+  final ValueChanged<ChannelPost> onRichAttachmentPostUpdated;
+  final ValueChanged<String> onRichAttachmentGotoLocation;
+  final String actionScopeId;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
   final ValueChanged<String>? onSelectChannel;
@@ -679,6 +697,9 @@ class _PostListState extends State<_PostList> {
       highlighted: post.id == widget.focusedPostId,
       onOpenThread: widget.onOpenThread,
       onToggleReaction: widget.onToggleReaction,
+      onRichAttachmentPostUpdated: widget.onRichAttachmentPostUpdated,
+      onRichAttachmentGotoLocation: widget.onRichAttachmentGotoLocation,
+      actionScopeId: widget.actionScopeId,
       emojiRepositoryFactory: widget.emojiRepositoryFactory,
       accountId: widget.accountId,
       onSelectChannel: widget.onSelectChannel,
@@ -694,6 +715,9 @@ class _PostRow extends StatelessWidget {
     required this.highlighted,
     required this.onOpenThread,
     required this.onToggleReaction,
+    required this.onRichAttachmentPostUpdated,
+    required this.onRichAttachmentGotoLocation,
+    required this.actionScopeId,
     required this.emojiRepositoryFactory,
     required this.accountId,
     required this.onSelectChannel,
@@ -706,6 +730,9 @@ class _PostRow extends StatelessWidget {
   final bool highlighted;
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
+  final ValueChanged<ChannelPost> onRichAttachmentPostUpdated;
+  final ValueChanged<String> onRichAttachmentGotoLocation;
+  final String actionScopeId;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
   final ValueChanged<String>? onSelectChannel;
@@ -752,17 +779,19 @@ class _PostRow extends StatelessWidget {
                         ),
                         const SizedBox(height: 5),
                       ],
-                      MessageBody(
+                      MessageContent(
                         post: post,
                         serverUrl: serverUrl,
                         onSelectChannel: onSelectChannel,
                         onOpenPostLink: (String postId) =>
                             unawaited(PostPermalinkRoute.push(context, postId)),
+                        onRichAttachmentAction: (_, _) {},
+                        actionScopeId: actionScopeId,
+                        onRichAttachmentPostUpdated:
+                            onRichAttachmentPostUpdated,
+                        onRichAttachmentGotoLocation:
+                            onRichAttachmentGotoLocation,
                       ),
-                      if (post.attachments.isNotEmpty) ...<Widget>[
-                        const SizedBox(height: 8),
-                        MessageAttachments(attachments: post.attachments),
-                      ],
                       if (post.reactions.isNotEmpty) ...<Widget>[
                         const SizedBox(height: 8),
                         MessageReactions(

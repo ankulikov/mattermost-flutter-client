@@ -10,7 +10,9 @@ import 'package:mattermost_flutter/src/data/repositories/api_custom_emoji_reposi
 import 'package:mattermost_flutter/src/data/repositories/api_server_sso_discovery.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_auth_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_channel_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_post_action_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_post_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/mattermost_rich_attachment_option_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_thread_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_user_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
@@ -19,7 +21,9 @@ import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart'
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
+import 'package:mattermost_flutter/src/domain/repositories/post_action_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/rich_attachment_option_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_inbox_repository.dart';
@@ -126,6 +130,24 @@ final Provider<PostRepository> postRepositoryProvider =
       ),
     );
 
+final Provider<PostActionRepository> postActionRepositoryProvider =
+    Provider<PostActionRepository>(
+      (Ref ref) => MattermostPostActionRepository(
+        api: ref.watch(activeMattermostApiProvider),
+        messageMapper: ref.watch(mattermostMessageMapperProvider),
+        users: ref.watch(userRepositoryProvider),
+        realtime: ref.watch(sessionRealtimeServiceProvider),
+      ),
+    );
+
+final Provider<RichAttachmentOptionRepository>
+richAttachmentOptionRepositoryProvider =
+    Provider<RichAttachmentOptionRepository>(
+      (Ref ref) => MattermostRichAttachmentOptionRepository(
+        api: ref.watch(activeMattermostApiProvider),
+      ),
+    );
+
 final Provider<ThreadRepository> threadRepositoryProvider =
     Provider<ThreadRepository>(
       (Ref ref) => MattermostThreadRepository(
@@ -148,7 +170,6 @@ final Provider<InboxRepository> inboxRepositoryProvider =
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         postponed: ref.watch(postponedRepositoryProvider),
-        webSocketGateway: ref.watch(webSocketGatewayProvider),
-        credentialStore: ref.watch(credentialStoreProvider),
+        realtime: ref.watch(sessionRealtimeServiceProvider),
       ),
     );

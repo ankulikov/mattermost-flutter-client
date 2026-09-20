@@ -1,0 +1,27 @@
+{
+  "id": "post-unknown-action",
+  "user_id": "user-bot",
+  "channel_id": "channel-town-square",
+  "message": "Unsupported interactive control",
+  "props": {
+    "attachments": [
+      {
+        "fallback": "An unsupported interactive control is present",
+        "actions": [
+          {
+            "id": "schedule-deployment",
+            "type": "date_picker",
+            "name": "Schedule",
+            "timezone": "Europe/Moscow",
+            "integration": {
+              "url": "/plugins/deploy/actions/schedule",
+              "context": {
+                "deployment_id": "deploy-184"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

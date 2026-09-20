@@ -40,6 +40,53 @@ void main() {
     expect(users.single.id, 'ada-id');
   });
 
+  test('searches active users with a server-side result bound', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '[{"id":"ada-id","username":"ada"}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostUserDto> users = await DioMattermostApi(
+      dio: dio,
+    ).searchUsers(term: 'ada', limit: 30);
+
+    expect(adapter.request?.path, '/users/search');
+    expect(adapter.request?.data, <String, Object?>{
+      'term': 'ada',
+      'allow_inactive': false,
+      'limit': 30,
+    });
+    expect(users.single.id, 'ada-id');
+  });
+
+  test('searches visible channels with paged server filtering', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"channels":[{"id":"town","team_id":"team","type":"O",'
+          '"display_name":"Town Square","name":"town-square"}],'
+          '"total_count":1}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostChannelDto> channels = await DioMattermostApi(
+      dio: dio,
+    ).searchChannels(term: 'town', limit: 30);
+
+    expect(adapter.request?.path, '/channels/search');
+    expect(adapter.request?.queryParameters, <String, Object?>{
+      'system_console': true,
+    });
+    expect(adapter.request?.data, <String, Object?>{
+      'term': 'town',
+      'page': 0,
+      'per_page': 30,
+      'exclude_default_channels': false,
+    });
+    expect(channels.single.id, 'town');
+  });
+
   test('autocompletes users with the team and channel query', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body: '{"users":[{"id":"ada-id","username":"ada"}]}',
@@ -292,6 +339,62 @@ void main() {
     });
     expect(created.id, 'post-1');
     expect(created.rootId, 'root-1');
+  });
+
+  test(
+    'dispatches an attachment action with encoded IDs and selection',
+    () async {
+      final _RecordingAdapter adapter = _RecordingAdapter(
+        body:
+            '{"status":"OK","trigger_id":"trigger-1","goto_location":"/team/pl/post-2"}',
+      );
+      final DioMattermostApi api = DioMattermostApi(
+        dio: Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+          ..httpClientAdapter = adapter,
+      );
+
+      final MattermostPostActionResponseDto result = await api
+          .executePostAction(
+            postId: 'post / one',
+            actionId: 'select/action',
+            request: const MattermostPostActionRequestDto(
+              cookie: 'opaque',
+              selectedOption: 'ada',
+            ),
+          );
+
+      expect(adapter.request?.method, 'POST');
+      expect(
+        adapter.request?.path,
+        '/posts/post%20%2F%20one/actions/select%2Faction',
+      );
+      expect(adapter.request?.data, <String, Object?>{
+        'cookie': 'opaque',
+        'selected_option': 'ada',
+      });
+      expect(result.triggerId, 'trigger-1');
+      expect(result.gotoLocation, '/team/pl/post-2');
+    },
+  );
+
+  test('surfaces a failed attachment action response', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"message":"Action denied"}',
+      statusCode: 403,
+    );
+    final DioMattermostApi api = DioMattermostApi(
+      dio: Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+        ..httpClientAdapter = adapter,
+    );
+
+    await expectLater(
+      api.executePostAction(
+        postId: 'post-1',
+        actionId: 'approve',
+        request: const MattermostPostActionRequestDto(cookie: 'opaque'),
+      ),
+      throwsA(isA<DioException>()),
+    );
   });
 
   test('creates and removes an encoded emoji reaction', () async {
@@ -705,11 +808,13 @@ final class _RecordingAdapter implements HttpClientAdapter {
         '"prev_post_id":"","has_next":false}',
     this.bytes,
     this.contentType = 'application/json',
+    this.statusCode = 200,
   });
 
   final String body;
   final Uint8List? bytes;
   final String contentType;
+  final int statusCode;
   RequestOptions? request;
 
   @override
@@ -723,7 +828,7 @@ final class _RecordingAdapter implements HttpClientAdapter {
       bytes == null
           ? Stream<Uint8List>.value(Uint8List.fromList(body.codeUnits))
           : Stream<Uint8List>.value(bytes!),
-      200,
+      statusCode,
       headers: <String, List<String>>{
         Headers.contentTypeHeader: <String>[contentType],
       },

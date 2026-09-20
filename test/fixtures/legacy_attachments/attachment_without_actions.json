@@ -1,0 +1,38 @@
+{
+  "id": "post-attachment-only",
+  "user_id": "user-bot",
+  "channel_id": "channel-town-square",
+  "message": "Deployment summary",
+  "props": {
+    "attachments": [
+      {
+        "fallback": "Deployment 184 completed successfully",
+        "color": "#2e7d32",
+        "pretext": "Production deployment",
+        "author_name": "Release Bot",
+        "author_link": "https://example.test/releases/184",
+        "author_icon": "https://example.test/assets/release-bot.png",
+        "title": "Release 184",
+        "title_link": "https://example.test/releases/184",
+        "text": "All services are **healthy**.",
+        "fields": [
+          {
+            "title": "Environment",
+            "value": "Production",
+            "short": true
+          },
+          {
+            "title": "Duration",
+            "value": "4m 12s",
+            "short": true
+          }
+        ],
+        "image_url": "https://example.test/assets/deployment-chart.png",
+        "thumb_url": "https://example.test/assets/release-thumb.png",
+        "footer": "Deploy service",
+        "footer_icon": "https://example.test/assets/deploy-service.png",
+        "ts": 1767225600
+      }
+    ]
+  }
+}

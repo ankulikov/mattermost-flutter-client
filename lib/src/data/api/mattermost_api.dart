@@ -36,6 +36,18 @@ abstract interface class MattermostApi {
   /// Returns users matching the supplied exact usernames.
   Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames);
 
+  /// Searches active users server-side and returns at most [limit] values.
+  Future<List<MattermostUserDto>> searchUsers({
+    required String term,
+    required int limit,
+  }) => throw UnimplementedError();
+
+  /// Searches public channels visible to the authenticated user.
+  Future<List<MattermostChannelDto>> searchChannels({
+    required String term,
+    required int limit,
+  }) => throw UnimplementedError();
+
   /// Returns people eligible for a channel mention, grouped by channel
   /// membership by the server.
   Future<MattermostUserAutocompleteDto> autocompleteUsers({
@@ -147,6 +159,14 @@ abstract interface class MattermostApi {
 
   /// Creates a channel post or a threaded reply through the REST API.
   Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post);
+
+  /// Dispatches an attachment action through Mattermost, never directly to
+  /// the integration URL. The post must be reloaded after a success.
+  Future<MattermostPostActionResponseDto> executePostAction({
+    required String postId,
+    required String actionId,
+    required MattermostPostActionRequestDto request,
+  }) => throw UnimplementedError();
 
   /// Adds the authenticated user's emoji reaction to a post.
   Future<void> saveReaction({

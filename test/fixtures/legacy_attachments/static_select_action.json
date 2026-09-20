@@ -1,0 +1,37 @@
+{
+  "id": "post-static-select",
+  "user_id": "user-bot",
+  "channel_id": "channel-town-square",
+  "message": "Choose a deployment window",
+  "props": {
+    "attachments": [
+      {
+        "fallback": "Choose a deployment window",
+        "actions": [
+          {
+            "id": "deployment-window",
+            "type": "select",
+            "name": "Deployment window",
+            "default_option": "tomorrow",
+            "options": [
+              {
+                "text": "Today",
+                "value": "today"
+              },
+              {
+                "text": "Tomorrow",
+                "value": "tomorrow"
+              }
+            ],
+            "integration": {
+              "url": "/plugins/deploy/actions/window",
+              "context": {
+                "deployment_id": "deploy-184"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
