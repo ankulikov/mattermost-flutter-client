@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
@@ -69,6 +70,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No matching options'), findsOneWidget);
   });
+
+  testWidgets('fits large text on a compact screen and selects by keyboard', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _Options repository = _Options();
+    String? selected;
+    await _pump(
+      tester,
+      session: session,
+      repository: repository,
+      textScaler: const TextScaler.linear(2),
+      onAction: (_, String? value) => selected = value,
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Owner'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'ada');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSize(find.byType(AlertDialog)).width,
+      lessThanOrEqualTo(320),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(selected, 'user-ada');
+  });
 }
 
 Future<void> _pump(
@@ -76,6 +109,7 @@ Future<void> _pump(
   required AuthSession session,
   required RichAttachmentOptionRepository repository,
   required RichAttachmentActionCallback onAction,
+  TextScaler textScaler = TextScaler.noScaling,
 }) => tester.pumpWidget(
   ProviderScope(
     overrides: [
@@ -83,28 +117,31 @@ Future<void> _pump(
       richAttachmentOptionRepositoryProvider.overrideWithValue(repository),
     ],
     child: MaterialApp(
-      home: Scaffold(
-        body: MessageContent(
-          post: Post(
-            id: 'post',
-            channelId: 'channel',
-            author: const PostAuthor(id: 'bot', displayName: 'Bot'),
-            sentAt: DateTime(2026),
-            message: '',
-            richAttachments: const <RichAttachment>[
-              RichAttachment(
-                title: 'Assign',
-                actions: <RichAttachmentAction>[
-                  RichAttachmentSelectAction(
-                    id: 'owner',
-                    name: 'Owner',
-                    dataSource: RichAttachmentSelectDataSource.users,
-                  ),
-                ],
-              ),
-            ],
+      home: MediaQuery(
+        data: MediaQueryData(textScaler: textScaler),
+        child: Scaffold(
+          body: MessageContent(
+            post: Post(
+              id: 'post',
+              channelId: 'channel',
+              author: const PostAuthor(id: 'bot', displayName: 'Bot'),
+              sentAt: DateTime(2026),
+              message: '',
+              richAttachments: const <RichAttachment>[
+                RichAttachment(
+                  title: 'Assign',
+                  actions: <RichAttachmentAction>[
+                    RichAttachmentSelectAction(
+                      id: 'owner',
+                      name: 'Owner',
+                      dataSource: RichAttachmentSelectDataSource.users,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            onRichAttachmentAction: onAction,
           ),
-          onRichAttachmentAction: onAction,
         ),
       ),
     ),

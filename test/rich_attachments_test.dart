@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/rich_attachment.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/rich_attachments.dart';
 
@@ -112,6 +114,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('adapts on both sides of every shared width breakpoint', (
+    WidgetTester tester,
+  ) async {
+    for (final double width in <double>[
+      AppBreakpoints.compact - 1,
+      AppBreakpoints.compact,
+      AppBreakpoints.sideThread - 1,
+      AppBreakpoints.sideThread,
+      AppBreakpoints.expanded - 1,
+      AppBreakpoints.expanded,
+    ]) {
+      await _pump(
+        tester,
+        post,
+        width: width,
+        textScaler: const TextScaler.linear(2),
+      );
+      expect(find.text('Deploy production'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'width=$width');
+    }
+  });
+
   testWidgets(
     'renders controls read-only until an action callback is injected',
     (WidgetTester tester) async {
@@ -158,6 +182,72 @@ void main() {
       expect(calls, <(String, String?)>[('approve', null), ('owner', 'grace')]);
     },
   );
+
+  testWidgets('keeps action focus order and supports Enter and Space', (
+    WidgetTester tester,
+  ) async {
+    final List<(String, String?)> calls = <(String, String?)>[];
+    final Post focusPost = Post(
+      id: 'focus-post',
+      channelId: 'channel-1',
+      author: const PostAuthor(id: 'ada', displayName: 'Ada'),
+      sentAt: DateTime(2026),
+      message: '',
+      richAttachments: const <RichAttachment>[
+        RichAttachment(
+          title: 'Keyboard actions',
+          actions: <RichAttachmentAction>[
+            RichAttachmentButtonAction(id: 'approve', name: 'Approve'),
+            RichAttachmentSelectAction(
+              id: 'owner',
+              name: 'Owner',
+              options: <RichAttachmentOption>[
+                RichAttachmentOption(text: 'Ada', value: 'ada'),
+                RichAttachmentOption(text: 'Grace', value: 'grace'),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await _pump(
+      tester,
+      focusPost,
+      width: 320,
+      textScaler: const TextScaler.linear(2),
+      onAction: (RichAttachmentAction action, String? value) =>
+          calls.add((action.id, value)),
+    );
+
+    expect(find.byType(FocusTraversalOrder), findsNWidgets(2));
+    Focus.of(tester.element(find.text('Approve'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(calls, <(String, String?)>[('approve', null)]);
+
+    Focus.of(tester.element(find.text('Owner').first)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.text('Grace'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('exposes tooltips and minimum 44px action targets', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, post, onAction: (_, _) {});
+
+    final Finder approve = find.widgetWithText(ElevatedButton, 'Approve');
+    final Finder select = find.byType(DropdownButtonFormField<String>);
+    final Finder unknown = find.widgetWithText(OutlinedButton, 'Future action');
+    expect(find.byTooltip('Approve deployment'), findsOneWidget);
+    expect(find.byTooltip('Unsupported action'), findsOneWidget);
+    expect(tester.getSize(approve).height, greaterThanOrEqualTo(44));
+    expect(tester.getSize(select).height, greaterThanOrEqualTo(44));
+    expect(tester.getSize(unknown).height, greaterThanOrEqualTo(44));
+  });
 
   testWidgets('uses an accessible placeholder for an invalid remote image', (
     WidgetTester tester,

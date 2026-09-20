@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
+import 'package:mattermost_flutter/src/ui/messages/rich_attachment_strings.dart';
 import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -41,6 +42,6 @@ Future<void> handlePostActionGotoLocation(
 
 void _showError(BuildContext context) {
   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-    const SnackBar(content: Text('Unable to open action destination.')),
+    const SnackBar(content: Text(RichAttachmentStrings.navigationFailed)),
   );
 }

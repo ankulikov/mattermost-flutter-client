@@ -339,39 +339,56 @@ class _Actions extends StatelessWidget {
   final ValueChanged<String>? onGotoLocation;
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    children: actions
-        .map(
-          (RichAttachmentAction action) => switch (action) {
-            RichAttachmentButtonAction() => _ButtonAction(
-              action: action,
-              onAction: onAction,
-              postId: postId,
-              channelId: channelId,
-              sourceRootPostId: sourceRootPostId,
-              actionScopeId: actionScopeId,
-              onPostUpdated: onPostUpdated,
-              onGotoLocation: onGotoLocation,
-            ),
-            RichAttachmentSelectAction() => _SelectAction(
-              action: action,
-              onAction: onAction,
-              postId: postId,
-              channelId: channelId,
-              sourceRootPostId: sourceRootPostId,
-              actionScopeId: actionScopeId,
-              onPostUpdated: onPostUpdated,
-              onGotoLocation: onGotoLocation,
-            ),
-            RichAttachmentUnknownAction() => Tooltip(
-              message: RichAttachmentStrings.unsupportedAction,
-              child: OutlinedButton(onPressed: null, child: Text(action.name)),
-            ),
-          },
-        )
-        .toList(growable: false),
+  Widget build(BuildContext context) => FocusTraversalGroup(
+    policy: OrderedTraversalPolicy(),
+    child: LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) => Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: actions.indexed
+            .map(
+              ((int, RichAttachmentAction) indexed) => FocusTraversalOrder(
+                order: NumericFocusOrder(indexed.$1.toDouble()),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                  child: switch (indexed.$2) {
+                    final RichAttachmentButtonAction action => _ButtonAction(
+                      action: action,
+                      onAction: onAction,
+                      postId: postId,
+                      channelId: channelId,
+                      sourceRootPostId: sourceRootPostId,
+                      actionScopeId: actionScopeId,
+                      onPostUpdated: onPostUpdated,
+                      onGotoLocation: onGotoLocation,
+                    ),
+                    final RichAttachmentSelectAction action => _SelectAction(
+                      action: action,
+                      onAction: onAction,
+                      postId: postId,
+                      channelId: channelId,
+                      sourceRootPostId: sourceRootPostId,
+                      actionScopeId: actionScopeId,
+                      onPostUpdated: onPostUpdated,
+                      onGotoLocation: onGotoLocation,
+                    ),
+                    final RichAttachmentUnknownAction action => Tooltip(
+                      message: RichAttachmentStrings.unsupportedAction,
+                      child: OutlinedButton(
+                        onPressed: null,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(44, 44),
+                        ),
+                        child: Text(action.name),
+                      ),
+                    ),
+                  },
+                ),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    ),
   );
 }
 
@@ -398,7 +415,7 @@ class _ButtonAction extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final ButtonStyle? style = _buttonStyle(context, action);
+    final ButtonStyle style = _buttonStyle(context, action);
     final PostActionControlKey? key = _controlKey(
       postId,
       actionScopeId,
@@ -508,63 +525,29 @@ class _SelectAction extends ConsumerWidget {
     final bool isSystemSelect =
         action.dataSource == RichAttachmentSelectDataSource.users ||
         action.dataSource == RichAttachmentSelectDataSource.channels;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        if (isSystemSelect)
-          SizedBox(
-            width: 220,
-            child: OutlinedButton.icon(
-              onPressed: onAction == null || (actionState?.isLoading ?? false)
-                  ? null
-                  : () async {
-                      final String? value = await showSystemSelectPicker(
-                        context: context,
-                        title: action.name,
-                        dataSource: action.dataSource!,
-                      );
-                      if (value == null || !context.mounted) return;
-                      await _execute(
-                        context,
-                        ref,
-                        key,
-                        action,
-                        value,
-                        onAction,
-                        onPostUpdated,
-                        onGotoLocation,
-                      );
-                    },
-              icon: const Icon(Icons.search),
-              label: Text(action.name, overflow: TextOverflow.ellipsis),
-            ),
-          )
-        else
-          SizedBox(
-            width: 180,
-            child: DropdownButtonFormField<String>(
-              initialValue: selected,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: action.name),
-              hint: const Text(RichAttachmentStrings.select),
-              items: action.options
-                  .map(
-                    (RichAttachmentOption option) => DropdownMenuItem<String>(
-                      value: option.value,
-                      child: Text(option.text, overflow: TextOverflow.ellipsis),
-                    ),
-                  )
-                  .toList(growable: false),
-              onChanged:
-                  onAction == null ||
-                      action.options.isEmpty ||
-                      (actionState?.isLoading ?? false)
-                  ? null
-                  : (String? value) {
-                      if (value != null) {
-                        unawaited(
-                          _execute(
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double availableWidth = constraints.maxWidth;
+        final double controlWidth = isSystemSelect ? 220 : 180;
+        return SizedBox(
+          width: availableWidth < controlWidth ? availableWidth : controlWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              if (isSystemSelect)
+                OutlinedButton.icon(
+                  onPressed:
+                      onAction == null || (actionState?.isLoading ?? false)
+                      ? null
+                      : () async {
+                          final String? value = await showSystemSelectPicker(
+                            context: context,
+                            title: action.name,
+                            dataSource: action.dataSource!,
+                          );
+                          if (value == null || !context.mounted) return;
+                          await _execute(
                             context,
                             ref,
                             key,
@@ -573,16 +556,61 @@ class _SelectAction extends ConsumerWidget {
                             onAction,
                             onPostUpdated,
                             onGotoLocation,
-                          ),
-                        );
-                      }
-                    },
-            ),
+                          );
+                        },
+                  icon: const Icon(Icons.search),
+                  label: Text(action.name, overflow: TextOverflow.ellipsis),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(44),
+                  ),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  initialValue: selected,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: action.name),
+                  hint: const Text(RichAttachmentStrings.select),
+                  items: action.options
+                      .map(
+                        (RichAttachmentOption option) =>
+                            DropdownMenuItem<String>(
+                              value: option.value,
+                              child: Text(
+                                option.text,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                      )
+                      .toList(growable: false),
+                  onChanged:
+                      onAction == null ||
+                          action.options.isEmpty ||
+                          (actionState?.isLoading ?? false)
+                      ? null
+                      : (String? value) {
+                          if (value != null) {
+                            unawaited(
+                              _execute(
+                                context,
+                                ref,
+                                key,
+                                action,
+                                value,
+                                onAction,
+                                onPostUpdated,
+                                onGotoLocation,
+                              ),
+                            );
+                          }
+                        },
+                ),
+              if (actionState?.error != null) const _ActionError(),
+              if (actionState?.feedback.isNotEmpty == true)
+                _ActionFeedback(actionState!.feedback),
+            ],
           ),
-        if (actionState?.error != null) const _ActionError(),
-        if (actionState?.feedback.isNotEmpty == true)
-          _ActionFeedback(actionState!.feedback),
-      ],
+        );
+      },
     );
   }
 }
@@ -591,12 +619,15 @@ class _ActionError extends StatelessWidget {
   const _ActionError();
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 4),
-    child: Text(
-      RichAttachmentStrings.actionFailed,
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: Theme.of(context).colorScheme.error,
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        RichAttachmentStrings.actionFailed,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.error,
+        ),
       ),
     ),
   );
@@ -720,7 +751,7 @@ class _RemoteAttachmentImage extends StatelessWidget {
   }
 }
 
-ButtonStyle? _buttonStyle(
+ButtonStyle _buttonStyle(
   BuildContext context,
   RichAttachmentButtonAction action,
 ) {
@@ -734,16 +765,15 @@ ButtonStyle? _buttonStyle(
     RichAttachmentButtonStyle.customColor => _hexColor(action.customColor),
     _ => null,
   };
-  return background == null
-      ? null
-      : ElevatedButton.styleFrom(
-          backgroundColor: background,
-          foregroundColor:
-              ThemeData.estimateBrightnessForColor(background) ==
-                  Brightness.dark
-              ? Colors.white
-              : Colors.black,
-        );
+  return ElevatedButton.styleFrom(
+    minimumSize: const Size(44, 44),
+    backgroundColor: background,
+    foregroundColor: background == null
+        ? null
+        : ThemeData.estimateBrightnessForColor(background) == Brightness.dark
+        ? Colors.white
+        : Colors.black,
+  );
 }
 
 Color _accentColor(String value, ColorScheme colors) =>

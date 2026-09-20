@@ -172,18 +172,50 @@ interactive actions идут через тот же socket. События зд�
 
 ## Legacy interactive messages
 
+Legacy rich content принадлежит общей модели поста, а не отдельной feature-
+копии. Transport DTO безопасно читает `props.attachments`, сохраняя исходные
+неизвестные данные только на data-стороне; mapper переводит валидные attachment,
+field и action в immutable domain-типы `RichAttachment`. Секретный
+`integration.context` не экспортируется из transport. Общий `MessageContent`
+рисует одну и ту же карточку в channel, thread, permalink и Inbox, а файловые
+`PostAttachment` остаются отдельной моделью.
+
+Выполнение legacy action проходит по одной цепочке:
+
+1. Auto-disposed presentation state регистрирует инициировавший control по
+   scope/post/action и блокирует только его.
+2. Domain `PostActionRepository` принимает opaque cookie и выбранное значение;
+   data-реализация вызывает `POST /posts/{post_id}/actions/{action_id}` только
+   через `MattermostApi`.
+3. После успешного dispatch repository всегда перечитывает post через
+   `GET /posts/{post_id}` и возвращает authoritative domain `Post` вместе с
+   безопасным `goto_location`.
+4. Владелец открытого channel/thread/permalink snapshot заменяет запись по id
+   через `mergePosts`. Поэтому REST refresh и поздний `post_edited` используют
+   одну canonical replacement policy: дубликат не появляется, актуальное
+   содержимое заменяется, а более сильные `reply_count` и `last_reply_at`
+   сохраняются.
+
 System-backed attachment selects (`data_source: users/channels`) используют
 отдельный domain query и server-side `POST /users/search` либо
 `POST /channels/search`. Результат ограничен 50 элементами, superseded запрос
 отменяется вместе с auto-disposed provider, а UI отправляет Mattermost ID как
 `selected_option`.
 
+`SessionRealtimeService` владеет ровно одним `WebSocketGateway` активной сессии
+и делает fan-out transport-сигналов в Inbox и post-action repositories. Каждый
+consumer фильтрует и типизирует только нужные ему события; открытие карточки,
+канала или треда не создаёт дополнительное WebSocket-соединение. Reconnect,
+backoff и sequence-gap detection остаются общей transport-ответственностью.
+
 Перед выполнением action presentation регистрирует только инициировавший
 control по scope/post/action и ожидаемому channel/root. Серверный
 `ephemeral_message` содержит ephemeral post с `root_id` исходного action root;
 первый подходящий pending control атомарно забирает событие и показывает текст
 рядом с карточкой. Feedback хранится только в auto-disposed состоянии экрана,
-не попадает в Drift и не восстанавливается через REST после reconnect/gap.
+не попадает в Drift, логи или durable cache и не восстанавливается через REST
+после reconnect/gap. Непривязанное или просроченное ephemeral-событие
+отбрасывается: оно не должно мигрировать к соседнему control или другому экрану.
 Поздний `post_edited` маппится общим message mapper и передаётся владельцу
 открытого snapshot через тот же action presentation pipeline.
 

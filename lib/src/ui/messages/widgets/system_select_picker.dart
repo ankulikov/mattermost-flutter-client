@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,6 +48,12 @@ class _SystemSelectDialogState extends ConsumerState<_SystemSelectDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final Size viewport = MediaQuery.sizeOf(context);
+    final double contentWidth = math.min(420, math.max(0, viewport.width - 80));
+    final double contentHeight = math.min(
+      360,
+      math.max(120, viewport.height - 200),
+    );
     final RichAttachmentOptionSearchRequest request = (
       dataSource: widget.dataSource,
       query: _query,
@@ -54,76 +61,99 @@ class _SystemSelectDialogState extends ConsumerState<_SystemSelectDialog> {
     final AsyncValue<List<RichAttachmentSystemOption>> options = ref.watch(
       richAttachmentOptionsProvider(request),
     );
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 420,
-        height: 360,
-        child: Column(
-          children: <Widget>[
-            TextField(
-              autofocus: true,
-              onChanged: _onQueryChanged,
-              textInputAction: TextInputAction.search,
-              decoration: const InputDecoration(
-                labelText: RichAttachmentStrings.search,
-                prefixIcon: Icon(Icons.search),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: options.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (Object error, StackTrace stackTrace) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      const Text(RichAttachmentStrings.optionsFailed),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () => ref.invalidate(
-                          richAttachmentOptionsProvider(request),
-                        ),
-                        child: const Text(RichAttachmentStrings.retry),
-                      ),
-                    ],
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: AlertDialog(
+        title: Text(widget.title),
+        content: SizedBox(
+          width: contentWidth,
+          height: contentHeight,
+          child: Column(
+            children: <Widget>[
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(0),
+                child: TextField(
+                  autofocus: true,
+                  onChanged: _onQueryChanged,
+                  textInputAction: TextInputAction.search,
+                  decoration: const InputDecoration(
+                    labelText: RichAttachmentStrings.search,
+                    prefixIcon: Icon(Icons.search),
                   ),
                 ),
-                data: (List<RichAttachmentSystemOption> values) =>
-                    values.isEmpty
-                    ? const Center(child: Text(RichAttachmentStrings.noOptions))
-                    : ListView.builder(
-                        itemCount: values.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          final RichAttachmentSystemOption option =
-                              values[index];
-                          return Semantics(
-                            button: true,
-                            label: option.description.isEmpty
-                                ? option.label
-                                : '${option.label}, ${option.description}',
-                            child: ListTile(
-                              title: Text(option.label),
-                              subtitle: option.description.isEmpty
-                                  ? null
-                                  : Text(option.description),
-                              onTap: () =>
-                                  Navigator.of(context).pop(option.value),
-                            ),
-                          );
-                        },
-                      ),
               ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: options.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (Object error, StackTrace stackTrace) => Semantics(
+                    liveRegion: true,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Text(RichAttachmentStrings.optionsFailed),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () => ref.invalidate(
+                              richAttachmentOptionsProvider(request),
+                            ),
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(44, 44),
+                            ),
+                            child: const Text(RichAttachmentStrings.retry),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  data: (List<RichAttachmentSystemOption> values) =>
+                      values.isEmpty
+                      ? const Center(
+                          child: Text(RichAttachmentStrings.noOptions),
+                        )
+                      : ListView.builder(
+                          itemCount: values.length,
+                          itemBuilder: (BuildContext context, int index) {
+                            final RichAttachmentSystemOption option =
+                                values[index];
+                            return FocusTraversalOrder(
+                              order: NumericFocusOrder(index + 1),
+                              child: Semantics(
+                                button: true,
+                                label: option.description.isEmpty
+                                    ? option.label
+                                    : '${option.label}, ${option.description}',
+                                child: ListTile(
+                                  minTileHeight: 44,
+                                  title: Text(option.label),
+                                  subtitle: option.description.isEmpty
+                                      ? null
+                                      : Text(option.description),
+                                  onTap: () =>
+                                      Navigator.of(context).pop(option.value),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(1000),
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+              child: const Text(RichAttachmentStrings.close),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text(RichAttachmentStrings.close),
-        ),
-      ],
     );
   }
 }
