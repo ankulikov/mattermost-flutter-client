@@ -152,6 +152,30 @@ final class DioMattermostApi
   }
 
   @override
+  Future<MattermostPostSearchDto> searchPosts({
+    required String teamId,
+    required MattermostPostSearchRequestDto request,
+  }) async {
+    final Response<Object?> response = await _post(
+      '/teams/${Uri.encodeComponent(teamId)}/posts/search',
+      data: request.toJson(),
+    );
+    return MattermostPostSearchDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<MattermostChannelDto>> autocompleteChannelsForSearch({
+    required String teamId,
+    required String name,
+  }) async {
+    final Response<Object?> response = await _get(
+      '/teams/${Uri.encodeComponent(teamId)}/channels/autocomplete',
+      queryParameters: <String, Object?>{'name': name},
+    );
+    return _dtoList(response.data, MattermostChannelDto.fromJson);
+  }
+
+  @override
   Future<List<MattermostGroupDto>> searchMentionGroups({
     required String name,
     required int limit,
