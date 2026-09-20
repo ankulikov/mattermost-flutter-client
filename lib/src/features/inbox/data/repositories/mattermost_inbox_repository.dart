@@ -6,6 +6,7 @@ import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/dialog_display_name_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
+import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
@@ -37,12 +38,19 @@ final class MattermostInboxRepository extends InboxRepository {
     required PostponedRepository postponed,
     WebSocketGateway? webSocketGateway,
     CredentialStore? credentialStore,
+    SessionRealtimeService? realtime,
     DateTime Function()? now,
   }) : _api = api,
        _messageMapper = messageMapper,
        _postponed = postponed,
-       _webSocketGateway = webSocketGateway,
-       _credentialStore = credentialStore,
+       _realtime =
+           realtime ??
+           (webSocketGateway != null && credentialStore != null
+               ? SessionRealtimeService(
+                   gateway: webSocketGateway,
+                   credentialStore: credentialStore,
+                 )
+               : null),
        _now = now ?? DateTime.now;
 
   static const int _authorBatchSize = 100;
@@ -51,8 +59,7 @@ final class MattermostInboxRepository extends InboxRepository {
   final MattermostApi _api;
   final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
   final PostponedRepository _postponed;
-  final WebSocketGateway? _webSocketGateway;
-  final CredentialStore? _credentialStore;
+  final SessionRealtimeService? _realtime;
   final DateTime Function() _now;
   _InboxRealtimeScope? _realtimeScope;
 
@@ -253,52 +260,46 @@ final class MattermostInboxRepository extends InboxRepository {
   }
 
   @override
-  Stream<InboxRealtimeEvent> watch({required AuthSession session}) async* {
-    final WebSocketGateway? gateway = _webSocketGateway;
-    final CredentialStore? credentialStore = _credentialStore;
-    if (gateway == null || credentialStore == null) return;
-    final ({Uri serverUrl, String token})? credentials = await credentialStore
-        .read();
-    if (credentials == null || credentials.serverUrl != session.serverUrl) {
-      yield const InboxConnectionChanged(InboxConnectionStatus.disconnected);
-      return;
-    }
-
-    await for (final WebSocketGatewaySignal signal in gateway.watch(
-      serverUrl: session.serverUrl,
-      token: credentials.token,
-      acceptsEvent: _realtimeEventNames.contains,
-      acceptsChannel: (String channelId) =>
-          _realtimeScope?.channels.containsKey(channelId) == true,
-    )) {
-      switch (signal) {
-        case WebSocketConnectionSignal(:final status, :final isReconnect):
-          yield InboxConnectionChanged(_mapConnectionStatus(status));
-          if (status == WebSocketConnectionStatus.connected && isReconnect) {
-            yield const InboxRefreshRequired();
+  Stream<InboxRealtimeEvent> watch({required AuthSession session}) {
+    final SessionRealtimeService? realtime = _realtime;
+    if (realtime == null) return const Stream<InboxRealtimeEvent>.empty();
+    return realtime
+        .watch(
+          session: session,
+          eventNames: _realtimeEventNames,
+          acceptsChannel: (String channelId) =>
+              _realtimeScope?.channels.containsKey(channelId) == true,
+        )
+        .asyncMap((SessionRealtimeSignal signal) async {
+          switch (signal) {
+            case SessionRealtimeConnectionChanged(:final status):
+              return <InboxRealtimeEvent>[
+                InboxConnectionChanged(_mapConnectionStatus(status)),
+              ];
+            case SessionRealtimeRecoveryRequired():
+              return const <InboxRealtimeEvent>[InboxRefreshRequired()];
+            case SessionRealtimeEventReceived(:final event):
+              try {
+                final InboxRealtimeEvent? mapped = await _mapRealtimeEvent(
+                  session,
+                  event,
+                );
+                return mapped == null
+                    ? const <InboxRealtimeEvent>[]
+                    : <InboxRealtimeEvent>[mapped];
+              } on Object {
+                // Isolate malformed/unsupported events. Only reconnects and
+                // sequence gaps require an authoritative reload.
+                return const <InboxRealtimeEvent>[];
+              }
           }
-        case WebSocketSequenceGapSignal():
-          yield const InboxRefreshRequired();
-        case WebSocketEventSignal(:final event):
-          try {
-            final InboxRealtimeEvent? mapped = await _mapRealtimeEvent(
-              session,
-              event,
-            );
-            if (mapped != null) yield mapped;
-          } on Object {
-            // A malformed or currently unsupported event does not make the
-            // stream itself unreliable. Keep the healthy socket active; only
-            // reconnects and sequence gaps require an authoritative reload.
-          }
-      }
-    }
+        })
+        .expand((List<InboxRealtimeEvent> events) => events);
   }
 
   @override
   void reconnectRealtime() {
-    final WebSocketGateway? gateway = _webSocketGateway;
-    if (gateway is ReconnectableWebSocketGateway) gateway.reconnect();
+    _realtime?.reconnect();
   }
 
   InboxConnectionStatus _mapConnectionStatus(

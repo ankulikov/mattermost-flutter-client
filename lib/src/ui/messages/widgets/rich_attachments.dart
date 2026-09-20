@@ -10,6 +10,7 @@ import 'package:mattermost_flutter/src/domain/models/rich_attachment.dart';
 import 'package:mattermost_flutter/src/ui/messages/post_action_controller.dart';
 import 'package:mattermost_flutter/src/ui/messages/rich_attachment_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/system_select_picker.dart';
 
 typedef RichAttachmentActionCallback =
     FutureOr<void> Function(
@@ -27,6 +28,8 @@ class RichAttachments extends StatelessWidget {
     this.onOpenPostLink,
     this.onAction,
     this.postId,
+    this.channelId,
+    this.sourceRootPostId,
     this.actionScopeId,
     this.onPostUpdated,
     this.onGotoLocation,
@@ -40,6 +43,8 @@ class RichAttachments extends StatelessWidget {
   final ValueChanged<String>? onOpenPostLink;
   final RichAttachmentActionCallback? onAction;
   final String? postId;
+  final String? channelId;
+  final String? sourceRootPostId;
   final String? actionScopeId;
   final ValueChanged<ChannelPost>? onPostUpdated;
   final ValueChanged<String>? onGotoLocation;
@@ -63,6 +68,8 @@ class RichAttachments extends StatelessWidget {
                 onOpenPostLink: onOpenPostLink,
                 onAction: onAction,
                 postId: postId,
+                channelId: channelId,
+                sourceRootPostId: sourceRootPostId,
                 actionScopeId: actionScopeId,
                 onPostUpdated: onPostUpdated,
                 onGotoLocation: onGotoLocation,
@@ -83,6 +90,8 @@ class _RichAttachmentCard extends StatelessWidget {
     required this.onOpenPostLink,
     required this.onAction,
     required this.postId,
+    required this.channelId,
+    required this.sourceRootPostId,
     required this.actionScopeId,
     required this.onPostUpdated,
     required this.onGotoLocation,
@@ -95,6 +104,8 @@ class _RichAttachmentCard extends StatelessWidget {
   final ValueChanged<String>? onOpenPostLink;
   final RichAttachmentActionCallback? onAction;
   final String? postId;
+  final String? channelId;
+  final String? sourceRootPostId;
   final String? actionScopeId;
   final ValueChanged<ChannelPost>? onPostUpdated;
   final ValueChanged<String>? onGotoLocation;
@@ -150,6 +161,8 @@ class _RichAttachmentCard extends StatelessWidget {
                   actions: attachment.actions,
                   onAction: onAction,
                   postId: postId,
+                  channelId: channelId,
+                  sourceRootPostId: sourceRootPostId,
                   actionScopeId: actionScopeId,
                   onPostUpdated: onPostUpdated,
                   onGotoLocation: onGotoLocation,
@@ -309,6 +322,8 @@ class _Actions extends StatelessWidget {
     required this.actions,
     required this.onAction,
     required this.postId,
+    required this.channelId,
+    required this.sourceRootPostId,
     required this.actionScopeId,
     required this.onPostUpdated,
     required this.onGotoLocation,
@@ -317,6 +332,8 @@ class _Actions extends StatelessWidget {
   final List<RichAttachmentAction> actions;
   final RichAttachmentActionCallback? onAction;
   final String? postId;
+  final String? channelId;
+  final String? sourceRootPostId;
   final String? actionScopeId;
   final ValueChanged<ChannelPost>? onPostUpdated;
   final ValueChanged<String>? onGotoLocation;
@@ -332,6 +349,8 @@ class _Actions extends StatelessWidget {
               action: action,
               onAction: onAction,
               postId: postId,
+              channelId: channelId,
+              sourceRootPostId: sourceRootPostId,
               actionScopeId: actionScopeId,
               onPostUpdated: onPostUpdated,
               onGotoLocation: onGotoLocation,
@@ -340,6 +359,8 @@ class _Actions extends StatelessWidget {
               action: action,
               onAction: onAction,
               postId: postId,
+              channelId: channelId,
+              sourceRootPostId: sourceRootPostId,
               actionScopeId: actionScopeId,
               onPostUpdated: onPostUpdated,
               onGotoLocation: onGotoLocation,
@@ -359,6 +380,8 @@ class _ButtonAction extends ConsumerWidget {
     required this.action,
     required this.onAction,
     required this.postId,
+    required this.channelId,
+    required this.sourceRootPostId,
     required this.actionScopeId,
     required this.onPostUpdated,
     required this.onGotoLocation,
@@ -367,6 +390,8 @@ class _ButtonAction extends ConsumerWidget {
   final RichAttachmentButtonAction action;
   final RichAttachmentActionCallback? onAction;
   final String? postId;
+  final String? channelId;
+  final String? sourceRootPostId;
   final String? actionScopeId;
   final ValueChanged<ChannelPost>? onPostUpdated;
   final ValueChanged<String>? onGotoLocation;
@@ -377,11 +402,25 @@ class _ButtonAction extends ConsumerWidget {
     final PostActionControlKey? key = _controlKey(
       postId,
       actionScopeId,
+      channelId,
+      sourceRootPostId,
       action,
     );
     final PostActionControlState? actionState = key == null
         ? null
         : ref.watch(postActionControlProvider(key));
+    if (key != null) {
+      ref.listen<ChannelPost?>(
+        postActionControlProvider(
+          key,
+        ).select((PostActionControlState state) => state.realtimeUpdatedPost),
+        (ChannelPost? previous, ChannelPost? next) {
+          if (next != null && !identical(previous, next)) {
+            onPostUpdated?.call(next);
+          }
+        },
+      );
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,6 +447,8 @@ class _ButtonAction extends ConsumerWidget {
           ),
         ),
         if (actionState?.error != null) const _ActionError(),
+        if (actionState?.feedback.isNotEmpty == true)
+          _ActionFeedback(actionState!.feedback),
       ],
     );
   }
@@ -418,6 +459,8 @@ class _SelectAction extends ConsumerWidget {
     required this.action,
     required this.onAction,
     required this.postId,
+    required this.channelId,
+    required this.sourceRootPostId,
     required this.actionScopeId,
     required this.onPostUpdated,
     required this.onGotoLocation,
@@ -426,6 +469,8 @@ class _SelectAction extends ConsumerWidget {
   final RichAttachmentSelectAction action;
   final RichAttachmentActionCallback? onAction;
   final String? postId;
+  final String? channelId;
+  final String? sourceRootPostId;
   final String? actionScopeId;
   final ValueChanged<ChannelPost>? onPostUpdated;
   final ValueChanged<String>? onGotoLocation;
@@ -435,60 +480,108 @@ class _SelectAction extends ConsumerWidget {
     final PostActionControlKey? key = _controlKey(
       postId,
       actionScopeId,
+      channelId,
+      sourceRootPostId,
       action,
     );
     final PostActionControlState? actionState = key == null
         ? null
         : ref.watch(postActionControlProvider(key));
+    if (key != null) {
+      ref.listen<ChannelPost?>(
+        postActionControlProvider(
+          key,
+        ).select((PostActionControlState state) => state.realtimeUpdatedPost),
+        (ChannelPost? previous, ChannelPost? next) {
+          if (next != null && !identical(previous, next)) {
+            onPostUpdated?.call(next);
+          }
+        },
+      );
+    }
     final String? selected = action.options
         .where(
           (RichAttachmentOption option) => option.value == action.defaultOption,
         )
         .map((RichAttachmentOption option) => option.value)
         .firstOrNull;
+    final bool isSystemSelect =
+        action.dataSource == RichAttachmentSelectDataSource.users ||
+        action.dataSource == RichAttachmentSelectDataSource.channels;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SizedBox(
-          width: 180,
-          child: DropdownButtonFormField<String>(
-            initialValue: selected,
-            isExpanded: true,
-            decoration: InputDecoration(labelText: action.name),
-            hint: const Text(RichAttachmentStrings.select),
-            items: action.options
-                .map(
-                  (RichAttachmentOption option) => DropdownMenuItem<String>(
-                    value: option.value,
-                    child: Text(option.text, overflow: TextOverflow.ellipsis),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged:
-                onAction == null ||
-                    action.options.isEmpty ||
-                    (actionState?.isLoading ?? false)
-                ? null
-                : (String? value) {
-                    if (value != null) {
-                      unawaited(
-                        _execute(
-                          context,
-                          ref,
-                          key,
-                          action,
-                          value,
-                          onAction,
-                          onPostUpdated,
-                          onGotoLocation,
-                        ),
+        if (isSystemSelect)
+          SizedBox(
+            width: 220,
+            child: OutlinedButton.icon(
+              onPressed: onAction == null || (actionState?.isLoading ?? false)
+                  ? null
+                  : () async {
+                      final String? value = await showSystemSelectPicker(
+                        context: context,
+                        title: action.name,
+                        dataSource: action.dataSource!,
                       );
-                    }
-                  },
+                      if (value == null || !context.mounted) return;
+                      await _execute(
+                        context,
+                        ref,
+                        key,
+                        action,
+                        value,
+                        onAction,
+                        onPostUpdated,
+                        onGotoLocation,
+                      );
+                    },
+              icon: const Icon(Icons.search),
+              label: Text(action.name, overflow: TextOverflow.ellipsis),
+            ),
+          )
+        else
+          SizedBox(
+            width: 180,
+            child: DropdownButtonFormField<String>(
+              initialValue: selected,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: action.name),
+              hint: const Text(RichAttachmentStrings.select),
+              items: action.options
+                  .map(
+                    (RichAttachmentOption option) => DropdownMenuItem<String>(
+                      value: option.value,
+                      child: Text(option.text, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged:
+                  onAction == null ||
+                      action.options.isEmpty ||
+                      (actionState?.isLoading ?? false)
+                  ? null
+                  : (String? value) {
+                      if (value != null) {
+                        unawaited(
+                          _execute(
+                            context,
+                            ref,
+                            key,
+                            action,
+                            value,
+                            onAction,
+                            onPostUpdated,
+                            onGotoLocation,
+                          ),
+                        );
+                      }
+                    },
+            ),
           ),
-        ),
         if (actionState?.error != null) const _ActionError(),
+        if (actionState?.feedback.isNotEmpty == true)
+          _ActionFeedback(actionState!.feedback),
       ],
     );
   }
@@ -509,13 +602,45 @@ class _ActionError extends StatelessWidget {
   );
 }
 
+class _ActionFeedback extends StatelessWidget {
+  const _ActionFeedback(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        message,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    ),
+  );
+}
+
 PostActionControlKey? _controlKey(
   String? postId,
   String? scopeId,
+  String? channelId,
+  String? sourceRootPostId,
   RichAttachmentAction action,
-) => postId == null || scopeId == null
+) =>
+    postId == null ||
+        scopeId == null ||
+        channelId == null ||
+        sourceRootPostId == null
     ? null
-    : (scopeId: scopeId, postId: postId, actionId: action.id);
+    : (
+        scopeId: scopeId,
+        postId: postId,
+        actionId: action.id,
+        channelId: channelId,
+        sourceRootPostId: sourceRootPostId,
+      );
 
 Future<void> _execute(
   BuildContext context,

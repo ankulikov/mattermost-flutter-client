@@ -36,6 +36,18 @@ abstract interface class MattermostApi {
   /// Returns users matching the supplied exact usernames.
   Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames);
 
+  /// Searches active users server-side and returns at most [limit] values.
+  Future<List<MattermostUserDto>> searchUsers({
+    required String term,
+    required int limit,
+  }) => throw UnimplementedError();
+
+  /// Searches public channels visible to the authenticated user.
+  Future<List<MattermostChannelDto>> searchChannels({
+    required String term,
+    required int limit,
+  }) => throw UnimplementedError();
+
   /// Returns people eligible for a channel mention, grouped by channel
   /// membership by the server.
   Future<MattermostUserAutocompleteDto> autocompleteUsers({

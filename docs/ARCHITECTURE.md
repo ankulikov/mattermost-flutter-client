@@ -159,13 +159,33 @@ REST-ответа и сохраняется вместе с неблокирую
 
 Собственный post из REST-ответа сразу добавляется в volatile state открытого
 канала или треда. Inbox дополнительно использует аутентифицированный
-`WebSocketGateway`: transport отвечает за reconnect и sequence gaps, data-слой
-фильтрует только Inbox-события и известные пользователю каналы, а domain policy
-сливает типизированные post-дельты с тем же canonicalization/grouping pipeline,
-который строит исторический REST snapshot. События здорового соединения никогда
-не запускают HTTP snapshot reload: неподдержанные thread/read/preference дельты
-изолируются, а полный network-first recovery выполняется только после reconnect
-или пропуска WebSocket sequence без потери уже показанного состояния.
+`SessionRealtimeService`: он владеет единственным `WebSocketGateway` активной
+сессии и раздаёт декодированные transport-сигналы repository-подписчикам.
+Transport отвечает за reconnect и sequence gaps; Inbox-фильтр пропускает только
+его события и известные пользователю каналы, а domain policy сливает
+типизированные post-дельты с тем же canonicalization/grouping pipeline, который
+строит исторический REST snapshot. `post_edited` и `ephemeral_message` для
+interactive actions идут через тот же socket. События здорового соединения
+никогда не запускают HTTP snapshot reload: полный network-first recovery
+выполняется только после reconnect или пропуска WebSocket sequence без потери
+уже показанного состояния. Ephemeral-события при recovery не восстанавливаются.
+
+## Legacy interactive messages
+
+System-backed attachment selects (`data_source: users/channels`) используют
+отдельный domain query и server-side `POST /users/search` либо
+`POST /channels/search`. Результат ограничен 50 элементами, superseded запрос
+отменяется вместе с auto-disposed provider, а UI отправляет Mattermost ID как
+`selected_option`.
+
+Перед выполнением action presentation регистрирует только инициировавший
+control по scope/post/action и ожидаемому channel/root. Серверный
+`ephemeral_message` содержит ephemeral post с `root_id` исходного action root;
+первый подходящий pending control атомарно забирает событие и показывает текст
+рядом с карточкой. Feedback хранится только в auto-disposed состоянии экрана,
+не попадает в Drift и не восстанавливается через REST после reconnect/gap.
+Поздний `post_edited` маппится общим message mapper и передаётся владельцу
+открытого snapshot через тот же action presentation pipeline.
 
 ## Треды
 

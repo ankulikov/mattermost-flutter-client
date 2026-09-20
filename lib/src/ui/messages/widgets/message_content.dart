@@ -50,6 +50,8 @@ class MessageContent extends StatelessWidget {
           onOpenPostLink: onOpenPostLink,
           onAction: onRichAttachmentAction,
           postId: post.id,
+          channelId: post.channelId,
+          sourceRootPostId: post.rootId.isEmpty ? post.id : post.rootId,
           actionScopeId: actionScopeId,
           onPostUpdated: onRichAttachmentPostUpdated,
           onGotoLocation: onRichAttachmentGotoLocation,

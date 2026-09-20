@@ -1,9 +1,16 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
+import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
+import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_post_action_repository.dart';
+import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/post_action.dart';
 import 'package:mattermost_flutter/src/domain/models/rich_attachment.dart';
 
 import 'support/fake_user_repository.dart';
@@ -68,6 +75,92 @@ void main() {
       expect(api.request?.toJson(), isEmpty);
     },
   );
+
+  test(
+    'maps ephemeral and edited posts from the shared realtime stream',
+    () async {
+      final _Gateway gateway = _Gateway();
+      final SessionRealtimeService realtime = SessionRealtimeService(
+        gateway: gateway,
+        credentialStore: const _Credentials(),
+      );
+      addTearDown(realtime.dispose);
+      final MattermostPostActionRepository repository =
+          MattermostPostActionRepository(
+            api: _ActionApi(),
+            messageMapper: const MattermostMessageMapper(),
+            users: FakeUserRepository(),
+            realtime: realtime,
+          );
+      final StreamIterator<PostActionRealtimeEvent> events = StreamIterator(
+        repository.watchRealtime(
+          session: AuthSession(
+            serverUrl: Uri.parse('https://chat.example.com'),
+            userId: 'me',
+            username: 'me',
+          ),
+        ),
+      );
+      addTearDown(events.cancel);
+      final Future<bool> first = events.moveNext();
+      await _waitUntil(() => gateway.started);
+
+      gateway.add(
+        WebSocketEventSignal(
+          MattermostWebSocketEvent(
+            name: 'ephemeral_message',
+            sequence: 1,
+            data: <String, Object?>{
+              'post': jsonEncode(<String, Object?>{
+                'id': 'ephemeral',
+                'channel_id': 'channel-1',
+                'root_id': 'post-1',
+                'user_id': 'me',
+                'message': 'Approved',
+              }),
+            },
+            broadcast: const <String, Object?>{'channel_id': 'channel-1'},
+          ),
+        ),
+      );
+      expect(await first, isTrue);
+      expect(
+        events.current,
+        isA<PostActionEphemeralFeedback>()
+            .having((value) => value.sourceRootPostId, 'root', 'post-1')
+            .having((value) => value.message, 'message', 'Approved'),
+      );
+
+      final Future<bool> second = events.moveNext();
+      gateway.add(
+        WebSocketEventSignal(
+          MattermostWebSocketEvent(
+            name: 'post_edited',
+            sequence: 2,
+            data: <String, Object?>{
+              'post': jsonEncode(<String, Object?>{
+                'id': 'post-1',
+                'channel_id': 'channel-1',
+                'user_id': 'ada',
+                'message': 'Realtime edit',
+                'create_at': 1,
+              }),
+            },
+            broadcast: const <String, Object?>{'channel_id': 'channel-1'},
+          ),
+        ),
+      );
+      expect(await second, isTrue);
+      expect(
+        events.current,
+        isA<PostActionPostUpdated>().having(
+          (value) => value.post.message,
+          'message',
+          'Realtime edit',
+        ),
+      );
+    },
+  );
 }
 
 final class _ActionApi extends Fake implements MattermostApi {
@@ -102,4 +195,45 @@ final class _ActionApi extends Fake implements MattermostApi {
       createAt: 1,
     );
   }
+}
+
+Future<void> _waitUntil(bool Function() condition) async {
+  for (var attempt = 0; attempt < 100; attempt++) {
+    if (condition()) return;
+    await Future<void>.delayed(Duration.zero);
+  }
+  fail('Condition was not reached');
+}
+
+final class _Gateway implements WebSocketGateway {
+  final StreamController<WebSocketGatewaySignal> _controller =
+      StreamController<WebSocketGatewaySignal>();
+  bool started = false;
+
+  @override
+  Stream<WebSocketGatewaySignal> watch({
+    required Uri serverUrl,
+    required String token,
+    required bool Function(String eventName) acceptsEvent,
+    required bool Function(String channelId) acceptsChannel,
+  }) {
+    started = true;
+    return _controller.stream;
+  }
+
+  void add(WebSocketGatewaySignal signal) => _controller.add(signal);
+}
+
+final class _Credentials implements CredentialStore {
+  const _Credentials();
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<({Uri serverUrl, String token})?> read() async =>
+      (serverUrl: Uri.parse('https://chat.example.com'), token: 'secret');
+
+  @override
+  Future<void> save({required Uri serverUrl, required String token}) async {}
 }

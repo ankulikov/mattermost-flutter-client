@@ -40,6 +40,53 @@ void main() {
     expect(users.single.id, 'ada-id');
   });
 
+  test('searches active users with a server-side result bound', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '[{"id":"ada-id","username":"ada"}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostUserDto> users = await DioMattermostApi(
+      dio: dio,
+    ).searchUsers(term: 'ada', limit: 30);
+
+    expect(adapter.request?.path, '/users/search');
+    expect(adapter.request?.data, <String, Object?>{
+      'term': 'ada',
+      'allow_inactive': false,
+      'limit': 30,
+    });
+    expect(users.single.id, 'ada-id');
+  });
+
+  test('searches visible channels with paged server filtering', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"channels":[{"id":"town","team_id":"team","type":"O",'
+          '"display_name":"Town Square","name":"town-square"}],'
+          '"total_count":1}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostChannelDto> channels = await DioMattermostApi(
+      dio: dio,
+    ).searchChannels(term: 'town', limit: 30);
+
+    expect(adapter.request?.path, '/channels/search');
+    expect(adapter.request?.queryParameters, <String, Object?>{
+      'system_console': true,
+    });
+    expect(adapter.request?.data, <String, Object?>{
+      'term': 'town',
+      'page': 0,
+      'per_page': 30,
+      'exclude_default_channels': false,
+    });
+    expect(channels.single.id, 'town');
+  });
+
   test('autocompletes users with the team and channel query', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body: '{"users":[{"id":"ada-id","username":"ada"}]}',

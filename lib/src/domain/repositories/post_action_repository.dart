@@ -11,4 +11,9 @@ abstract interface class PostActionRepository {
     RichAttachmentActionToken? token,
     String? selectedOption,
   });
+
+  /// Realtime post edits and volatile action feedback for the active session.
+  Stream<PostActionRealtimeEvent> watchRealtime({
+    required AuthSession session,
+  }) => const Stream<PostActionRealtimeEvent>.empty();
 }
