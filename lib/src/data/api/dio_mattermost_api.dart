@@ -169,7 +169,7 @@ final class DioMattermostApi
     required String name,
   }) async {
     final Response<Object?> response = await _get(
-      '/teams/${Uri.encodeComponent(teamId)}/channels/autocomplete',
+      '/teams/${Uri.encodeComponent(teamId)}/channels/search_autocomplete',
       queryParameters: <String, Object?>{'name': name},
     );
     return _dtoList(response.data, MattermostChannelDto.fromJson);

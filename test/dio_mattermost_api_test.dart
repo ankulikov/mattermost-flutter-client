@@ -183,7 +183,10 @@ void main() {
     ).autocompleteChannelsForSearch(teamId: 'team id', name: 'town square');
 
     expect(adapter.request?.method, 'GET');
-    expect(adapter.request?.path, '/teams/team%20id/channels/autocomplete');
+    expect(
+      adapter.request?.path,
+      '/teams/team%20id/channels/search_autocomplete',
+    );
     expect(adapter.request?.queryParameters, <String, Object?>{
       'name': 'town square',
     });
