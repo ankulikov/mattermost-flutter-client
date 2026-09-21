@@ -191,7 +191,7 @@ void main() {
     final NavigationBar navigation = tester.widget<NavigationBar>(
       find.byKey(const ValueKey<String>('shell-bottom-navigation')),
     );
-    expect(navigation.destinations, hasLength(3));
+    expect(navigation.destinations, hasLength(4));
     expect(
       (navigation.destinations.last as NavigationDestination).label,
       'Profile',

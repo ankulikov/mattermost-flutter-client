@@ -12,6 +12,8 @@ import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_thread_
 import 'package:mattermost_flutter/src/features/profile/domain/models/current_user_profile.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/profile_page.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/widgets/profile_navigation_avatar.dart';
+import 'package:mattermost_flutter/src/features/search/presentation/message_search_controller.dart';
+import 'package:mattermost_flutter/src/features/search/presentation/message_search_page.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
@@ -33,7 +35,6 @@ class BootstrapPage extends ConsumerStatefulWidget {
 class _BootstrapPageState extends ConsumerState<BootstrapPage>
     with WidgetsBindingObserver {
   bool _showCompactChannel = false;
-  bool _profileSelected = false;
   late final ProviderSubscription<InboxInAppNotification?>
   _notificationSubscription;
   late final ProviderSubscription<bool> _channelPresentationSubscription;
@@ -86,7 +87,10 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   Widget build(BuildContext context) {
     final AuthState auth = ref.watch(authControllerProvider);
     final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
-    final bool threadsSelected = ref.watch(threadsDestinationProvider);
+    final ShellDestination destination = ref.watch(shellDestinationProvider);
+    final bool threadsSelected = destination == ShellDestination.inbox;
+    final bool profileSelected = destination == ShellDestination.profile;
+    final bool searchSelected = destination == ShellDestination.search;
     final ChannelSidebarSnapshot? sidebar = ref
         .watch(channelSidebarProvider)
         .value
@@ -119,6 +123,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
             sidebar: sidebar,
             inboxHasNewItems: inboxHasNewItems,
             currentUserProfile: currentUserProfile,
+            profileSelected: profileSelected,
+            searchSelected: searchSelected,
           );
         }
         return _buildDesktop(
@@ -128,6 +134,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           sidebar: sidebar,
           inboxHasNewItems: inboxHasNewItems,
           currentUserProfile: currentUserProfile,
+          profileSelected: profileSelected,
+          searchSelected: searchSelected,
           expanded: constraints.maxWidth >= AppBreakpoints.expanded,
         );
       },
@@ -149,6 +157,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           threadsSelected: threadsSelected,
           sidebar: sidebar,
           onSelectChannel: _selectChannelNamed,
+          onSearchInChannel: _openSearchInChannel,
         );
         if (expanded) {
           return Scaffold(
@@ -177,6 +186,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     required ChannelSidebarSnapshot? sidebar,
     required bool inboxHasNewItems,
     required CurrentUserProfile? currentUserProfile,
+    required bool profileSelected,
+    required bool searchSelected,
     required bool expanded,
   }) {
     final Widget mainContent = _MainContent(
@@ -185,6 +196,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       threadsSelected: false,
       sidebar: sidebar,
       onSelectChannel: _selectChannelNamed,
+      onSearchInChannel: _openSearchInChannel,
     );
     return Scaffold(
       body: SafeArea(
@@ -192,23 +204,31 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           key: ValueKey<String>(expanded ? 'expanded-layout' : 'medium-layout'),
           children: <Widget>[
             _DestinationRail(
-              selectedIndex: _profileSelected
+              selectedIndex: profileSelected
                   ? null
+                  : searchSelected
+                  ? 2
                   : threadsSelected
                   ? 1
                   : 0,
               inboxHasNewItems: inboxHasNewItems,
               profile: currentUserProfile,
-              profileSelected: _profileSelected,
+              profileSelected: profileSelected,
               onDestinationSelected: _selectDestination,
               onProfileSelected: _showProfileDestination,
             ),
             const VerticalDivider(width: 1),
             Expanded(
-              child: _profileSelected
+              child: profileSelected
                   ? ProfilePage(
                       onLogout: () =>
                           ref.read(authControllerProvider.notifier).signOut(),
+                    )
+                  : searchSelected
+                  ? MessageSearchPage(
+                      launchIntent:
+                          ref.watch(searchLaunchIntentProvider)
+                              as SearchLaunchIntent?,
                     )
                   : threadsSelected
                   ? InboxThreadHost(
@@ -248,11 +268,17 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     required ChannelSidebarSnapshot? sidebar,
     required bool inboxHasNewItems,
     required CurrentUserProfile? currentUserProfile,
+    required bool profileSelected,
+    required bool searchSelected,
   }) {
     final bool showChannel =
-        _showCompactChannel && !threadsSelected && selectedChannel != null;
+        _showCompactChannel &&
+        !threadsSelected &&
+        !searchSelected &&
+        !profileSelected &&
+        selectedChannel != null;
     final Widget pane;
-    if (_profileSelected) {
+    if (profileSelected) {
       pane = ProfilePage(
         onLogout: () => ref.read(authControllerProvider.notifier).signOut(),
       );
@@ -263,7 +289,13 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         threadsSelected: false,
         sidebar: sidebar,
         onSelectChannel: _selectChannelNamed,
+        onSearchInChannel: _openSearchInChannel,
         onBackToChannels: _showChannelsDestination,
+      );
+    } else if (searchSelected) {
+      pane = MessageSearchPage(
+        launchIntent:
+            ref.watch(searchLaunchIntentProvider) as SearchLaunchIntent?,
       );
     } else if (threadsSelected) {
       pane = _MainContent(
@@ -272,6 +304,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         threadsSelected: true,
         sidebar: sidebar,
         onSelectChannel: _selectChannelNamed,
+        onSearchInChannel: _openSearchInChannel,
       );
     } else {
       pane = ChannelSidebar(onChannelSelected: _showSelectedChannel);
@@ -296,7 +329,9 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
             bottomNavigationBar: showChannel
                 ? null
                 : _BottomDestinations(
-                    selectedIndex: _profileSelected
+                    selectedIndex: profileSelected
+                        ? 3
+                        : searchSelected
                         ? 2
                         : threadsSelected
                         ? 1
@@ -312,8 +347,10 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _selectDestination(int index) {
-    if (index == 2) {
+    if (index == 3) {
       _showProfileDestination();
+    } else if (index == 2) {
+      _showSearchDestination();
     } else if (index == 1) {
       _showThreadsDestination();
     } else {
@@ -322,30 +359,32 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showChannelsDestination() {
-    if (_profileSelected) setState(() => _profileSelected = false);
-    ref.read(threadsDestinationProvider.notifier).clear();
+    ref
+        .read(shellDestinationProvider.notifier)
+        .select(ShellDestination.channels);
     if (_showCompactChannel) {
       setState(() => _showCompactChannel = false);
     }
   }
 
   void _showThreadsDestination() {
-    if (_profileSelected) setState(() => _profileSelected = false);
-    ref.read(threadsDestinationProvider.notifier).select();
+    ref.read(shellDestinationProvider.notifier).select(ShellDestination.inbox);
     if (_showCompactChannel) {
       setState(() => _showCompactChannel = false);
     }
   }
 
   void _showProfileDestination() {
-    ref.read(threadsDestinationProvider.notifier).clear();
+    ref
+        .read(shellDestinationProvider.notifier)
+        .select(ShellDestination.profile);
     unawaited(ref.read(currentUserProfileProvider.notifier).refresh());
-    if (!_profileSelected || _showCompactChannel) {
-      setState(() {
-        _profileSelected = true;
-        _showCompactChannel = false;
-      });
-    }
+    if (_showCompactChannel) setState(() => _showCompactChannel = false);
+  }
+
+  void _showSearchDestination() {
+    ref.read(shellDestinationProvider.notifier).select(ShellDestination.search);
+    if (_showCompactChannel) setState(() => _showCompactChannel = false);
   }
 
   void _showInboxNotification(InboxInAppNotification notification) {
@@ -374,19 +413,20 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showSelectedChannel() {
-    if (_profileSelected || !_showCompactChannel) {
+    if (ref.read(shellDestinationProvider) == ShellDestination.profile ||
+        !_showCompactChannel) {
       setState(() {
-        _profileSelected = false;
         _showCompactChannel = true;
       });
     }
   }
 
   void _showSelectedChannelFromChannelsDestination() {
-    ref.read(threadsDestinationProvider.notifier).clear();
-    if (_profileSelected || !_showCompactChannel) {
+    ref
+        .read(shellDestinationProvider.notifier)
+        .select(ShellDestination.channels);
+    if (!_showCompactChannel) {
       setState(() {
-        _profileSelected = false;
         _showCompactChannel = true;
       });
     }
@@ -401,13 +441,41 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     for (final SidebarSection section in snapshot.sections) {
       for (final SidebarChannel channel in section.channels) {
         if (channel.name == name) {
-          ref.read(threadsDestinationProvider.notifier).clear();
+          ref
+              .read(shellDestinationProvider.notifier)
+              .select(ShellDestination.channels);
           ref.read(selectedChannelProvider.notifier).select(channel);
           _showSelectedChannel();
           return;
         }
       }
     }
+  }
+
+  void _openSearchInChannel(SidebarChannel channel) {
+    final String token = switch (channel.kind) {
+      ChannelKind.publicChannel || ChannelKind.privateChannel => channel.name,
+      ChannelKind.directMessage || ChannelKind.groupMessage => '',
+    };
+    final String query = token.isEmpty ? 'in:' : 'in:$token ';
+    final String? teamId = ref
+        .read(channelSidebarProvider)
+        .value
+        ?.snapshot
+        .team
+        ?.id;
+    if (teamId == null) return;
+    ref
+        .read(searchLaunchIntentProvider.notifier)
+        .launch(
+          SearchLaunchIntent(
+            teamId: teamId,
+            initialQuery: query,
+            focus: true,
+            nonce: Object(),
+          ),
+        );
+    _showSearchDestination();
   }
 }
 
@@ -458,6 +526,11 @@ class _DestinationRail extends StatelessWidget {
         selectedIcon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
         label: const Text(ShellStrings.inbox),
       ),
+      const NavigationRailDestination(
+        icon: Icon(Icons.search_outlined),
+        selectedIcon: Icon(Icons.search),
+        label: Text(ShellStrings.search),
+      ),
     ],
   );
 }
@@ -490,6 +563,11 @@ class _BottomDestinations extends StatelessWidget {
         icon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
         selectedIcon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
         label: ShellStrings.inbox,
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.search_outlined),
+        selectedIcon: Icon(Icons.search),
+        label: ShellStrings.search,
       ),
       NavigationDestination(
         icon: ProfileNavigationAvatar(profile: profile),
@@ -589,6 +667,7 @@ class _MainContent extends StatelessWidget {
     required this.threadsSelected,
     required this.sidebar,
     required this.onSelectChannel,
+    required this.onSearchInChannel,
     this.onBackToChannels,
   });
 
@@ -597,6 +676,7 @@ class _MainContent extends StatelessWidget {
   final bool threadsSelected;
   final ChannelSidebarSnapshot? sidebar;
   final ValueChanged<String> onSelectChannel;
+  final ValueChanged<SidebarChannel> onSearchInChannel;
   final VoidCallback? onBackToChannels;
 
   @override
@@ -620,6 +700,7 @@ class _MainContent extends StatelessWidget {
           channel: channel,
           onSelectChannel: onSelectChannel,
           onBack: onBackToChannels,
+          onSearchInChannel: onSearchInChannel,
         );
       }
       return Center(

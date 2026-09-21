@@ -30,6 +30,7 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
     this.navigationTarget,
     this.stateScopeId,
     this.onBack,
+    this.onSearchInChannel,
     super.key,
   });
 
@@ -38,6 +39,7 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
   final PostNavigationTarget? navigationTarget;
   final String? stateScopeId;
   final VoidCallback? onBack;
+  final ValueChanged<SidebarChannel>? onSearchInChannel;
 
   @override
   ConsumerState<ChannelPostsPane> createState() => _ChannelPostsPaneState();
@@ -102,6 +104,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                   viewState?.isLoadingNewer == true ||
                   viewState?.isFocusing == true,
               onBack: widget.onBack,
+              onSearchInChannel: widget.onSearchInChannel,
             ),
             const Divider(height: 1),
             if (viewState?.focusFailed == true)
@@ -342,11 +345,13 @@ class _ChannelHeader extends StatelessWidget {
     required this.channel,
     required this.isLoading,
     required this.onBack,
+    required this.onSearchInChannel,
   });
 
   final SidebarChannel channel;
   final bool isLoading;
   final VoidCallback? onBack;
+  final ValueChanged<SidebarChannel>? onSearchInChannel;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -369,6 +374,13 @@ class _ChannelHeader extends StatelessWidget {
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
+        if (onSearchInChannel != null)
+          IconButton(
+            key: const ValueKey<String>('search-in-channel'),
+            tooltip: ChannelPostsStrings.searchInChannel,
+            onPressed: () => onSearchInChannel!(channel),
+            icon: const Icon(Icons.search),
+          ),
         if (isLoading) ...<Widget>[
           const SizedBox(width: 12),
           Semantics(
