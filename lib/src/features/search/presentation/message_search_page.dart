@@ -498,51 +498,84 @@ class _Pagination extends StatelessWidget {
   }
 }
 
-class _ResultTile extends StatelessWidget {
+class _ResultTile extends StatefulWidget {
   const _ResultTile({required this.result});
   final MessageSearchResult result;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    key: ValueKey<String>('message-search-result-${result.post.id}'),
-    onTap: () => unawaited(PostPermalinkRoute.push(context, result.post.id)),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          MessageAvatar(author: result.post.author),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
+  State<_ResultTile> createState() => _ResultTileState();
+}
+
+class _ResultTileState extends State<_ResultTile> {
+  bool _hovered = false;
+
+  void _setHovered(bool hovered) {
+    if (_hovered != hovered) setState(() => _hovered = hovered);
+  }
+
+  void _openResult() {
+    unawaited(PostPermalinkRoute.push(context, widget.result.post.id));
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    onTap: _openResult,
+    child: MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _openResult,
+        child: AnimatedContainer(
+          key: ValueKey<String>(
+            'message-search-result-${widget.result.post.id}',
+          ),
+          duration: const Duration(milliseconds: 180),
+          color: _hovered
+              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.10)
+              : Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  result.isThreadReply
-                      ? '${MessageSearchStrings.threadIn} ${result.channel.displayName}'
-                      : result.channel.displayName,
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-                MessageAuthorLine(
-                  author: result.post.author,
-                  sentAt: result.post.sentAt,
-                ),
-                const SizedBox(height: 5),
-                MessageContent(post: result.post),
-                if (result.matches.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Wrap(
-                      spacing: 4,
-                      children: result.matches
-                          .map((String match) => Chip(label: Text(match)))
-                          .toList(growable: false),
-                    ),
+                MessageAvatar(author: widget.result.post.author),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        widget.result.isThreadReply
+                            ? '${MessageSearchStrings.threadIn} ${widget.result.channel.displayName}'
+                            : widget.result.channel.displayName,
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      MessageAuthorLine(
+                        author: widget.result.post.author,
+                        sentAt: widget.result.post.sentAt,
+                      ),
+                      const SizedBox(height: 5),
+                      MessageContent(post: widget.result.post),
+                      if (widget.result.matches.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Wrap(
+                            spacing: 4,
+                            children: widget.result.matches
+                                .map((String match) => Chip(label: Text(match)))
+                                .toList(growable: false),
+                          ),
+                        ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     ),
   );
