@@ -53,6 +53,7 @@ class MessageInteractionSurface extends StatefulWidget {
     this.onToggleReaction,
     this.emojiRepositoryFactory,
     this.accountId = '',
+    this.postPermalink,
     super.key,
   });
 
@@ -61,6 +62,7 @@ class MessageInteractionSurface extends StatefulWidget {
   final Future<bool> Function(String emojiName)? onToggleReaction;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
+  final Uri? postPermalink;
 
   @override
   State<MessageInteractionSurface> createState() =>
@@ -73,10 +75,12 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
   Timer? _hoverExitTimer;
   bool _messageHovered = false;
   bool _quickActionsHovered = false;
+  bool _moreActionsMenuOpen = false;
   bool _touchHighlighted = false;
   bool _actionsSheetOpen = false;
 
-  bool get _hovered => _messageHovered || _quickActionsHovered;
+  bool get _hovered =>
+      _messageHovered || _quickActionsHovered || _moreActionsMenuOpen;
 
   void _handleMessageHover(bool hovered) {
     _hoverExitTimer?.cancel();
@@ -92,6 +96,16 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     _hoverExitTimer?.cancel();
     setState(() => _quickActionsHovered = hovered);
     if (!hovered) _hideQuickActionsSoon();
+  }
+
+  void _handleMoreActionsMenuOpen() {
+    _hoverExitTimer?.cancel();
+    if (!_moreActionsMenuOpen) setState(() => _moreActionsMenuOpen = true);
+  }
+
+  void _handleMoreActionsMenuClosed() {
+    if (_moreActionsMenuOpen) setState(() => _moreActionsMenuOpen = false);
+    _hideQuickActionsSoon();
   }
 
   void _hideQuickActionsSoon() {
@@ -135,14 +149,17 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
             context: context,
             showDragHandle: true,
             isScrollControlled: true,
-            builder: (BuildContext context) =>
-                const _MessageActionsBottomSheet(),
+            builder: (BuildContext context) => _MessageActionsBottomSheet(
+              canCopyLink: widget.postPermalink != null,
+            ),
           );
       if (!mounted || result == null) return;
       if (result.openPicker) {
         await _openTouchPicker();
       } else if (result.emojiName case final String name) {
         await _submitReaction(name);
+      } else if (result.action case final _MessageAction action) {
+        await _handleAction(action);
       }
     } finally {
       _actionsSheetOpen = false;
@@ -196,6 +213,25 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     }
   }
 
+  Future<void> _handleAction(_MessageAction action) async {
+    if (action != _MessageAction.copyLink) return;
+    final Uri? permalink = widget.postPermalink;
+    if (permalink == null) return;
+    try {
+      await Clipboard.setData(ClipboardData(text: permalink.toString()));
+    } on Object {
+      // Clipboard access is platform-owned; a failed write must not disrupt
+      // the message interaction surface.
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text(MessageActionsStrings.linkCopied)),
+      );
+  }
+
   @override
   void dispose() {
     _hoverExitTimer?.cancel();
@@ -235,6 +271,10 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
                         compact: constraints.maxWidth < 420,
                         onEmojiSelected: _submitReaction,
                         onOpenPicker: _openPointerPicker,
+                        canCopyLink: widget.postPermalink != null,
+                        onActionSelected: _handleAction,
+                        onMoreMenuOpened: _handleMoreActionsMenuOpen,
+                        onMoreMenuClosed: _handleMoreActionsMenuClosed,
                       ),
                     ),
                   );
@@ -312,11 +352,19 @@ class _QuickMessageActions extends StatelessWidget {
     required this.compact,
     required this.onEmojiSelected,
     required this.onOpenPicker,
+    required this.canCopyLink,
+    required this.onActionSelected,
+    required this.onMoreMenuOpened,
+    required this.onMoreMenuClosed,
   });
 
   final bool compact;
   final Future<void> Function(String) onEmojiSelected;
   final Future<void> Function(BuildContext) onOpenPicker;
+  final bool canCopyLink;
+  final Future<void> Function(_MessageAction) onActionSelected;
+  final VoidCallback onMoreMenuOpened;
+  final VoidCallback onMoreMenuClosed;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -359,8 +407,14 @@ class _QuickMessageActions extends StatelessWidget {
             key: const ValueKey<String>('more-message-actions'),
             tooltip: MessageActionsStrings.more,
             icon: const Icon(Icons.more_horiz),
-            onSelected: (_) {},
-            itemBuilder: (BuildContext context) => _menuItems(),
+            onOpened: onMoreMenuOpened,
+            onCanceled: onMoreMenuClosed,
+            onSelected: (action) {
+              onMoreMenuClosed();
+              unawaited(onActionSelected(action));
+            },
+            itemBuilder: (BuildContext context) =>
+                _menuItems(canCopyLink: canCopyLink),
           ),
         ],
       ),
@@ -383,7 +437,9 @@ class _EmojiAction extends StatelessWidget {
 }
 
 class _MessageActionsBottomSheet extends StatelessWidget {
-  const _MessageActionsBottomSheet();
+  const _MessageActionsBottomSheet({required this.canCopyLink});
+
+  final bool canCopyLink;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -429,7 +485,14 @@ class _MessageActionsBottomSheet extends StatelessWidget {
             ListTile(
               leading: Icon(action.icon),
               title: Text(action.label),
-              onTap: _mockAction,
+              enabled: action != _MessageAction.copyLink || canCopyLink,
+              onTap: switch (action) {
+                _MessageAction.copyLink when canCopyLink => () => Navigator.of(
+                  context,
+                ).pop(_MessageSheetResult.action(action)),
+                _MessageAction.copyLink => null,
+                _ => _mockAction,
+              },
               minTileHeight: 48,
             ),
         ],
@@ -439,12 +502,22 @@ class _MessageActionsBottomSheet extends StatelessWidget {
 }
 
 final class _MessageSheetResult {
-  const _MessageSheetResult.emoji(this.emojiName) : openPicker = false;
+  const _MessageSheetResult.emoji(this.emojiName)
+    : openPicker = false,
+      action = null;
 
-  const _MessageSheetResult.picker() : emojiName = null, openPicker = true;
+  const _MessageSheetResult.picker()
+    : emojiName = null,
+      openPicker = true,
+      action = null;
+
+  const _MessageSheetResult.action(this.action)
+    : emojiName = null,
+      openPicker = false;
 
   final String? emojiName;
   final bool openPicker;
+  final _MessageAction? action;
 }
 
 enum _MessageAction {
@@ -477,7 +550,7 @@ const List<_MessageAction> _bottomSheetActions = <_MessageAction>[
   _MessageAction.pin,
 ];
 
-List<PopupMenuEntry<_MessageAction>> _menuItems() =>
+List<PopupMenuEntry<_MessageAction>> _menuItems({required bool canCopyLink}) =>
     <_MessageAction>[
           _MessageAction.reply,
           _MessageAction.forward,
@@ -495,6 +568,7 @@ List<PopupMenuEntry<_MessageAction>> _menuItems() =>
           final bool destructive = action == _MessageAction.delete;
           return PopupMenuItem<_MessageAction>(
             value: action,
+            enabled: action != _MessageAction.copyLink || canCopyLink,
             child: Row(
               children: <Widget>[
                 Icon(action.icon, color: destructive ? Colors.red : null),

@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/policies/post_permalink.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
+import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/post_action_navigation.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
@@ -84,9 +86,28 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
     super.dispose();
   }
 
+  Uri? _permalinkFor(String postId, {required String teamName}) {
+    final Uri? serverUrl = widget.serverUrl;
+    if (serverUrl == null) return null;
+    return mattermostPostPermalink(
+      serverUrl: serverUrl,
+      teamName: teamName,
+      postId: postId,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final AuthSession? session = ref.watch(authSessionProvider);
+    final String sidebarTeamName = ref.watch(
+      channelSidebarProvider.select(
+        (AsyncValue<ChannelSidebarViewState> value) =>
+            value.value?.snapshot.team?.name ?? '',
+      ),
+    );
+    final String teamName = widget.channel.teamName.isNotEmpty
+        ? widget.channel.teamName
+        : sidebarTeamName;
     final AsyncValue<ThreadViewState> value = ref.watch(_threadStateProvider);
     final ThreadViewState? displayedState = value.asData?.value;
     return Material(
@@ -178,6 +199,10 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                             post: root,
                             highlighted: widget.highlightedPostId == root.id,
                             serverUrl: widget.serverUrl,
+                            postPermalink: _permalinkFor(
+                              root.id,
+                              teamName: teamName,
+                            ),
                             onSelectChannel: widget.onSelectChannel,
                             onToggleReaction: (PostReaction reaction) =>
                                 _toggleReaction(root, reaction.emojiName),
@@ -238,6 +263,10 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                     widget.highlightedPostId ==
                                     state.thread.replies[index].id,
                                 serverUrl: widget.serverUrl,
+                                postPermalink: _permalinkFor(
+                                  state.thread.replies[index].id,
+                                  teamName: teamName,
+                                ),
                                 onSelectChannel: widget.onSelectChannel,
                                 onToggleReaction: (PostReaction reaction) =>
                                     _toggleReaction(
@@ -561,6 +590,7 @@ class _ThreadPost extends StatelessWidget {
     required this.post,
     required this.highlighted,
     required this.serverUrl,
+    required this.postPermalink,
     required this.onSelectChannel,
     required this.onToggleReaction,
     required this.onAddReaction,
@@ -575,6 +605,7 @@ class _ThreadPost extends StatelessWidget {
   final ChannelPost post;
   final bool highlighted;
   final Uri? serverUrl;
+  final Uri? postPermalink;
   final ValueChanged<String>? onSelectChannel;
   final Future<void> Function(PostReaction reaction) onToggleReaction;
   final Future<bool> Function(String emojiName) onAddReaction;
@@ -591,6 +622,7 @@ class _ThreadPost extends StatelessWidget {
       onToggleReaction: onAddReaction,
       emojiRepositoryFactory: emojiRepositoryFactory,
       accountId: accountId,
+      postPermalink: postPermalink,
       child: AnimatedContainer(
         key: highlighted
             ? ValueKey<String>('highlighted-thread-post-${post.id}')

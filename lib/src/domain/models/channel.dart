@@ -3,10 +3,17 @@ enum ChannelKind { publicChannel, privateChannel, directMessage, groupMessage }
 enum ChannelSorting { manual, recent }
 
 final class SidebarTeam {
-  const SidebarTeam({required this.id, required this.displayName});
+  const SidebarTeam({
+    required this.id,
+    required this.displayName,
+    this.name = '',
+  });
 
   final String id;
   final String displayName;
+
+  /// URL-safe Mattermost team handle used in browser permalinks.
+  final String name;
 }
 
 final class SidebarChannel {
@@ -16,6 +23,7 @@ final class SidebarChannel {
     required this.name,
     required this.displayName,
     required this.kind,
+    this.teamName = '',
     this.lastActivityAt = 0,
     this.profileImage,
   });
@@ -25,6 +33,9 @@ final class SidebarChannel {
   final String name;
   final String displayName;
   final ChannelKind kind;
+
+  /// URL-safe Mattermost team handle used in browser permalinks.
+  final String teamName;
   final int lastActivityAt;
   final SidebarProfileImage? profileImage;
 
@@ -37,6 +48,7 @@ final class SidebarChannel {
     name: name,
     displayName: value,
     kind: kind,
+    teamName: teamName,
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
   );
@@ -51,6 +63,7 @@ final class SidebarChannel {
     name: name,
     displayName: displayName,
     kind: kind,
+    teamName: teamName,
     lastActivityAt: lastActivityAt,
     profileImage: SidebarProfileImage(
       userId: userId,

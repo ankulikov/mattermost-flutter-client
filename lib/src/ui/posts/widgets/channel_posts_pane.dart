@@ -7,7 +7,9 @@ import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
+import 'package:mattermost_flutter/src/domain/policies/post_permalink.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
+import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/post_action_navigation.dart';
@@ -81,6 +83,15 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
     final SidebarChannel channel = widget.channel;
     final AuthSession? session = ref.watch(authSessionProvider);
     final Uri? serverUrl = session?.serverUrl;
+    final String sidebarTeamName = ref.watch(
+      channelSidebarProvider.select(
+        (AsyncValue<ChannelSidebarViewState> value) =>
+            value.value?.snapshot.team?.name ?? '',
+      ),
+    );
+    final String teamName = channel.teamName.isNotEmpty
+        ? channel.teamName
+        : sidebarTeamName;
     final AsyncValue<ChannelPostsViewState> posts = ref.watch(_postsProvider);
     final ChannelPostsViewState? viewState = posts.value;
     _scheduleFocus(widget.navigationTarget);
@@ -139,6 +150,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                   return _PostList(
                     channelId: channel.id,
                     serverUrl: serverUrl,
+                    teamName: teamName,
                     posts: items,
                     isLoadingOlder: state.isLoadingOlder,
                     isLoadingNewer: state.isLoadingNewer,
@@ -446,6 +458,7 @@ class _PostList extends StatefulWidget {
   const _PostList({
     required this.channelId,
     required this.serverUrl,
+    required this.teamName,
     required this.posts,
     required this.isLoadingOlder,
     required this.isLoadingNewer,
@@ -467,6 +480,7 @@ class _PostList extends StatefulWidget {
 
   final String channelId;
   final Uri? serverUrl;
+  final String teamName;
   final List<ChannelPost> posts;
   final bool isLoadingOlder;
   final bool isLoadingNewer;
@@ -705,6 +719,13 @@ class _PostListState extends State<_PostList> {
       key: ValueKey<String>(post.id),
       post: post,
       serverUrl: widget.serverUrl,
+      postPermalink: widget.serverUrl == null
+          ? null
+          : mattermostPostPermalink(
+              serverUrl: widget.serverUrl!,
+              teamName: widget.teamName,
+              postId: post.id,
+            ),
       continuesAuthor: continuesAuthor,
       highlighted: post.id == widget.focusedPostId,
       onOpenThread: widget.onOpenThread,
@@ -723,6 +744,7 @@ class _PostRow extends StatelessWidget {
   const _PostRow({
     required this.post,
     required this.serverUrl,
+    required this.postPermalink,
     required this.continuesAuthor,
     required this.highlighted,
     required this.onOpenThread,
@@ -738,6 +760,7 @@ class _PostRow extends StatelessWidget {
 
   final ChannelPost post;
   final Uri? serverUrl;
+  final Uri? postPermalink;
   final bool continuesAuthor;
   final bool highlighted;
   final ValueChanged<ChannelPost> onOpenThread;
@@ -756,6 +779,7 @@ class _PostRow extends StatelessWidget {
       onToggleReaction: (String emojiName) => onToggleReaction(post, emojiName),
       emojiRepositoryFactory: emojiRepositoryFactory,
       accountId: accountId,
+      postPermalink: postPermalink,
       child: AnimatedContainer(
         key: highlighted
             ? ValueKey<String>('highlighted-post-${post.id}')

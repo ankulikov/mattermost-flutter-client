@@ -32,7 +32,10 @@ final class MattermostChannelRepository implements ChannelRepository {
     final MattermostChannelCategoriesDto categoryResponse =
         await categoriesFuture;
     List<SidebarChannel> channels = rawChannels
-        .map(mapChannel)
+        .map(
+          (MattermostChannelDto channel) =>
+              mapChannel(channel, teamName: team.name),
+        )
         .toList(growable: false);
     try {
       channels = await _resolveDialogNames(
