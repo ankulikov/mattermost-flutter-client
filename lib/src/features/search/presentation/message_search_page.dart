@@ -246,6 +246,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                 key: const ValueKey<String>('message-search-field'),
                 controller: _textController,
                 focusNode: _focusNode,
+                selectAllOnFocus: false,
                 textInputAction: TextInputAction.search,
                 onSubmitted: (_) => unawaited(controller.submit()),
                 onTap: () => suggestions.update(

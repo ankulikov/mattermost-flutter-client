@@ -61,16 +61,27 @@ void main() {
       );
     });
 
-    test('inserts filter prefixes between neighboring tokens', () {
-      expect(
-        insertMessageSearchFilterPrefix(
-          query: 'urgenttomorrow',
-          caretOffset: 6,
-          kind: SearchFilterKind.after,
-        ),
-        'urgent after: tomorrow',
-      );
-    });
+    test(
+      'inserts a filter prefix without a trailing space for suggestions',
+      () {
+        expect(
+          insertMessageSearchFilterPrefix(
+            query: 'urgenttomorrow',
+            caretOffset: 6,
+            kind: SearchFilterKind.after,
+          ),
+          'urgent after:tomorrow',
+        );
+        expect(
+          insertMessageSearchFilterPrefix(
+            query: '',
+            caretOffset: 0,
+            kind: SearchFilterKind.inChannel,
+          ),
+          'in:',
+        );
+      },
+    );
 
     test('formats the chosen local calendar day without UTC conversion', () {
       expect(

@@ -38,7 +38,16 @@ String insertMessageSearchFilterPrefix({
   required String query,
   required int caretOffset,
   required SearchFilterKind kind,
-}) => _insertAtCaret(query, caretOffset, '${kind.name}:');
+}) {
+  final int caret = caretOffset.clamp(0, query.length);
+  final String before = query.substring(0, caret);
+  final bool needsLeading =
+      before.isNotEmpty &&
+      !_isWhitespace(before[before.length - 1]) &&
+      before[before.length - 1] != ':';
+  return '${needsLeading ? '$before ' : before}${kind.name}:'
+      '${query.substring(caret)}';
+}
 
 String insertMessageSearchSuggestion({
   required String query,
