@@ -16,6 +16,7 @@ import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_editor_controller.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/emoji_picker.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_formatting_toolbar.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
 typedef SubmitMessage =
@@ -297,16 +298,97 @@ class _MessageComposerState extends State<MessageComposer> {
     final TextSelection selection = value.selection.isValid
         ? value.selection
         : TextSelection.collapsed(offset: value.text.length);
+    if (!selection.isCollapsed) {
+      _replaceSelectionWithNewLine(value, selection, '\n');
+      return;
+    }
+    final int lineStart = value.text.lastIndexOf('\n', selection.start - 1) + 1;
+    final int lineEnd = value.text.indexOf('\n', selection.start);
+    final int boundedLineEnd = lineEnd < 0 ? value.text.length : lineEnd;
+    final String beforeCaret = value.text.substring(lineStart, selection.start);
+    final String afterCaret = value.text.substring(
+      selection.start,
+      boundedLineEnd,
+    );
+
+    // A code fence intentionally keeps native multiline input behaviour.
+    if (_isInsideFencedCodeBlock(value.text, lineStart)) {
+      _replaceSelectionWithNewLine(value, selection, '\n');
+      return;
+    }
+    final RegExpMatch? unordered = RegExp(
+      r'^( {0,3}[-+*] )(.*)$',
+    ).firstMatch(beforeCaret);
+    final RegExpMatch? ordered = RegExp(
+      r'^( {0,3})([0-9]+)\. (.*)$',
+    ).firstMatch(beforeCaret);
+    final RegExpMatch? quote = RegExp(
+      r'^( {0,3}> )(.*)$',
+    ).firstMatch(beforeCaret);
+    if (afterCaret.isEmpty &&
+        ((unordered != null && unordered.group(2)!.isEmpty) ||
+            (ordered != null && ordered.group(3)!.isEmpty) ||
+            (quote != null && quote.group(2)!.isEmpty))) {
+      // A second explicit newline on an empty list item/quote exits the block.
+      _controller.value = value.copyWith(
+        text: value.text.replaceRange(lineStart, selection.start, ''),
+        selection: TextSelection.collapsed(offset: lineStart),
+        composing: TextRange.empty,
+      );
+      return;
+    }
+    if (unordered != null) {
+      _replaceSelectionWithNewLine(
+        value,
+        selection,
+        '\n${unordered.group(1)!}',
+      );
+      return;
+    }
+    if (ordered != null) {
+      final int nextNumber = int.parse(ordered.group(2)!) + 1;
+      _replaceSelectionWithNewLine(
+        value,
+        selection,
+        '\n${ordered.group(1)!}$nextNumber. ',
+      );
+      return;
+    }
+    if (quote != null) {
+      _replaceSelectionWithNewLine(value, selection, '\n${quote.group(1)!}');
+      return;
+    }
+    _replaceSelectionWithNewLine(value, selection, '\n');
+  }
+
+  void _replaceSelectionWithNewLine(
+    TextEditingValue value,
+    TextSelection selection,
+    String replacement,
+  ) {
     final String text = value.text.replaceRange(
       selection.start,
       selection.end,
-      '\n',
+      replacement,
     );
     _controller.value = value.copyWith(
       text: text,
-      selection: TextSelection.collapsed(offset: selection.start + 1),
+      selection: TextSelection.collapsed(
+        offset: selection.start + replacement.length,
+      ),
       composing: TextRange.empty,
     );
+  }
+
+  bool _isInsideFencedCodeBlock(String text, int lineStart) {
+    final Iterable<String> precedingLines = text
+        .substring(0, lineStart)
+        .split('\n');
+    var fences = 0;
+    for (final String line in precedingLines) {
+      if (RegExp(r'^ {0,3}```').hasMatch(line)) fences += 1;
+    }
+    return fences.isOdd;
   }
 
   void _submitOrSelectEmoji() {
@@ -455,6 +537,11 @@ class _MessageComposerState extends State<MessageComposer> {
     final CustomEmojiRepository? emojiRepository = emojiQuery == null
         ? null
         : _availableEmojiRepository;
+    final bool autocompleteOwnsShortcuts =
+        mentionQuery != null || emojiQuery != null;
+    final bool imeOwnsShortcuts =
+        _controller.value.composing.isValid &&
+        !_controller.value.composing.isCollapsed;
     return Semantics(
       container: true,
       label: widget.placeholder,
@@ -540,122 +627,170 @@ class _MessageComposerState extends State<MessageComposer> {
                 ),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 4, 6, 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      Expanded(
-                        child: CallbackShortcuts(
-                          bindings: <ShortcutActivator, VoidCallback>{
-                            const SingleActivator(
-                              LogicalKeyboardKey.enter,
-                            ): () {
-                              _submitOrSelectEmoji();
-                            },
-                            const SingleActivator(
-                              LogicalKeyboardKey.enter,
-                              shift: true,
-                            ): _insertNewLine,
-                            const SingleActivator(
-                              LogicalKeyboardKey.numpadEnter,
-                            ): _submitOrSelectEmoji,
-                            const SingleActivator(
-                              LogicalKeyboardKey.numpadEnter,
-                              shift: true,
-                            ): _insertNewLine,
-                            if (mentionQuery !=
-                                null) ...<ShortcutActivator, VoidCallback>{
-                              const SingleActivator(
-                                LogicalKeyboardKey.arrowDown,
-                              ): () =>
-                                  _mentionNavigation.move(1),
-                              const SingleActivator(
-                                LogicalKeyboardKey.arrowUp,
-                              ): () =>
-                                  _mentionNavigation.move(-1),
-                              const SingleActivator(LogicalKeyboardKey.escape):
-                                  _dismissMentionAutocomplete,
-                              const SingleActivator(LogicalKeyboardKey.tab):
-                                  _submitOrSelectEmoji,
-                            } else if (emojiQuery !=
-                                null) ...<ShortcutActivator, VoidCallback>{
-                              const SingleActivator(
-                                LogicalKeyboardKey.arrowDown,
-                              ): () =>
-                                  _emojiNavigation.move(1),
-                              const SingleActivator(
-                                LogicalKeyboardKey.arrowUp,
-                              ): () =>
-                                  _emojiNavigation.move(-1),
-                              const SingleActivator(LogicalKeyboardKey.escape):
-                                  _dismissEmojiAutocomplete,
-                            },
-                            const SingleActivator(
-                              LogicalKeyboardKey.keyC,
-                              control: true,
-                            ): () =>
-                                _copySelection(cut: false),
-                            const SingleActivator(
-                              LogicalKeyboardKey.keyC,
-                              meta: true,
-                            ): () =>
-                                _copySelection(cut: false),
-                            const SingleActivator(
-                              LogicalKeyboardKey.keyX,
-                              control: true,
-                            ): () =>
-                                _copySelection(cut: true),
-                            const SingleActivator(
-                              LogicalKeyboardKey.keyX,
-                              meta: true,
-                            ): () =>
-                                _copySelection(cut: true),
-                          },
-                          child: TextField(
-                            key: ValueKey<String>(
-                              'message-input-${widget.destinationId}',
-                            ),
-                            controller: _controller,
-                            focusNode: _focusNode,
-                            groupId: _textFieldTapGroup,
-                            readOnly: _sending,
-                            minLines: 1,
-                            maxLines: 6,
-                            keyboardType: TextInputType.multiline,
-                            textInputAction: TextInputAction.newline,
-                            spellCheckConfiguration:
-                                const SpellCheckConfiguration.disabled(),
-                            contextMenuBuilder: _buildContextMenu,
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              hintText: widget.placeholder,
-                            ),
-                          ),
+                      TextFieldTapRegion(
+                        groupId: _textFieldTapGroup,
+                        child: MessageFormattingToolbar(
+                          activeCommands: _controller.activeFormattingCommands,
+                          editorFocusNode: _focusNode,
+                          enabled: !_sending,
+                          onCommandSelected: _controller.applyFormattingCommand,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Semantics(
-                        button: true,
-                        label: _sending
-                            ? MessageComposerStrings.sending
-                            : MessageComposerStrings.send,
-                        child: IconButton.filled(
-                          key: ValueKey<String>(
-                            'send-message-${widget.destinationId}',
-                          ),
-                          tooltip: MessageComposerStrings.send,
-                          onPressed: _canSend
-                              ? () =>
-                                    unawaited(_submit(finalizeComposing: true))
-                              : null,
-                          icon: _sending
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: <Widget>[
+                          Expanded(
+                            child: CallbackShortcuts(
+                              bindings: <ShortcutActivator, VoidCallback>{
+                                const SingleActivator(
+                                  LogicalKeyboardKey.enter,
+                                ): () {
+                                  _submitOrSelectEmoji();
+                                },
+                                const SingleActivator(
+                                  LogicalKeyboardKey.enter,
+                                  shift: true,
+                                ): _insertNewLine,
+                                const SingleActivator(
+                                  LogicalKeyboardKey.numpadEnter,
+                                ): _submitOrSelectEmoji,
+                                const SingleActivator(
+                                  LogicalKeyboardKey.numpadEnter,
+                                  shift: true,
+                                ): _insertNewLine,
+                                if (mentionQuery !=
+                                    null) ...<ShortcutActivator, VoidCallback>{
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.arrowDown,
+                                  ): () =>
+                                      _mentionNavigation.move(1),
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.arrowUp,
+                                  ): () =>
+                                      _mentionNavigation.move(-1),
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.escape,
+                                  ): _dismissMentionAutocomplete,
+                                  const SingleActivator(LogicalKeyboardKey.tab):
+                                      _submitOrSelectEmoji,
+                                } else if (emojiQuery !=
+                                    null) ...<ShortcutActivator, VoidCallback>{
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.arrowDown,
+                                  ): () =>
+                                      _emojiNavigation.move(1),
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.arrowUp,
+                                  ): () =>
+                                      _emojiNavigation.move(-1),
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.escape,
+                                  ): _dismissEmojiAutocomplete,
+                                },
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyC,
+                                  control: true,
+                                ): () =>
+                                    _copySelection(cut: false),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyC,
+                                  meta: true,
+                                ): () =>
+                                    _copySelection(cut: false),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyX,
+                                  control: true,
+                                ): () =>
+                                    _copySelection(cut: true),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyX,
+                                  meta: true,
+                                ): () =>
+                                    _copySelection(cut: true),
+                                if (!autocompleteOwnsShortcuts &&
+                                    !imeOwnsShortcuts) ...<
+                                  ShortcutActivator,
+                                  VoidCallback
+                                >{
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.keyB,
+                                    control: true,
+                                  ): () => _controller.applyFormattingCommand(
+                                    MessageFormattingCommand.bold,
                                   ),
-                                )
-                              : const Icon(Icons.send_rounded),
-                        ),
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.keyB,
+                                    meta: true,
+                                  ): () => _controller.applyFormattingCommand(
+                                    MessageFormattingCommand.bold,
+                                  ),
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.keyI,
+                                    control: true,
+                                  ): () => _controller.applyFormattingCommand(
+                                    MessageFormattingCommand.italic,
+                                  ),
+                                  const SingleActivator(
+                                    LogicalKeyboardKey.keyI,
+                                    meta: true,
+                                  ): () => _controller.applyFormattingCommand(
+                                    MessageFormattingCommand.italic,
+                                  ),
+                                },
+                              },
+                              child: TextField(
+                                key: ValueKey<String>(
+                                  'message-input-${widget.destinationId}',
+                                ),
+                                controller: _controller,
+                                focusNode: _focusNode,
+                                groupId: _textFieldTapGroup,
+                                readOnly: _sending,
+                                minLines: 1,
+                                maxLines: 6,
+                                keyboardType: TextInputType.multiline,
+                                textInputAction: TextInputAction.newline,
+                                spellCheckConfiguration:
+                                    const SpellCheckConfiguration.disabled(),
+                                contextMenuBuilder: _buildContextMenu,
+                                decoration: InputDecoration(
+                                  border: InputBorder.none,
+                                  hintText: widget.placeholder,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Semantics(
+                            button: true,
+                            label: _sending
+                                ? MessageComposerStrings.sending
+                                : MessageComposerStrings.send,
+                            child: IconButton.filled(
+                              key: ValueKey<String>(
+                                'send-message-${widget.destinationId}',
+                              ),
+                              tooltip: MessageComposerStrings.send,
+                              onPressed: _canSend
+                                  ? () => unawaited(
+                                      _submit(finalizeComposing: true),
+                                    )
+                                  : null,
+                              icon: _sending
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.send_rounded),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

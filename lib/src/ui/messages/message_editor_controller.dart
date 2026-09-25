@@ -3,6 +3,12 @@ import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/mention_query.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
+import 'package:mattermost_flutter/src/ui/messages/editor/markdown_edit_command.dart';
+import 'package:mattermost_flutter/src/ui/messages/editor/markdown_editing_document.dart';
+import 'package:mattermost_flutter/src/ui/messages/editor/markdown_editing_parser.dart';
+import 'package:mattermost_flutter/src/ui/messages/editor/markdown_visual_projection.dart';
+import 'package:mattermost_flutter/src/ui/messages/editor/message_editor_mode.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_formatting_toolbar.dart';
 
 const String _objectReplacementCharacter = '\uFFFC';
 
@@ -70,15 +76,28 @@ final class MessageEditorController extends TextEditingController {
     required this.customEmojiBuilder,
     UserMentionSpanBuilder? userMentionBuilder,
     GroupMentionSpanBuilder? groupMentionBuilder,
+    MessageEditorMode mode = MessageEditorMode.livePreview,
   }) : userMentionBuilder = userMentionBuilder ?? _defaultUserMentionBuilder,
-       groupMentionBuilder = groupMentionBuilder ?? _defaultGroupMentionBuilder;
+       groupMentionBuilder = groupMentionBuilder ?? _defaultGroupMentionBuilder,
+       _mode = mode;
 
   final CustomEmojiSpanBuilder customEmojiBuilder;
   final UserMentionSpanBuilder userMentionBuilder;
   final GroupMentionSpanBuilder groupMentionBuilder;
+  final MarkdownEditingParser _parser = const MarkdownEditingParser();
+  final MarkdownVisualProjection _projection = const MarkdownVisualProjection();
   Map<int, MessageInlineObject> _inlineObjectAt = <int, MessageInlineObject>{};
   final Set<int> _autoMentionSeparatorAt = <int>{};
   bool _applyingRichEdit = false;
+  MessageEditorMode _mode;
+
+  MessageEditorMode get mode => _mode;
+
+  set mode(MessageEditorMode value) {
+    if (_mode == value) return;
+    _mode = value;
+    notifyListeners();
+  }
 
   EmojiAutocompleteQuery? get emojiAutocompleteQuery =>
       findEmojiAutocompleteQuery(value);
@@ -115,6 +134,123 @@ final class MessageEditorController extends TextEditingController {
       TextRange(start: selection.start, end: selection.end),
       replacement,
     );
+  }
+
+  /// Applies a toolbar command to the raw Markdown source and preserves its
+  /// recalculated UTF-16 selection. Inline objects are remapped by [value]'s
+  /// existing edit boundary rather than serialized into the editing buffer.
+  void applyFormattingCommand(MessageFormattingCommand command) {
+    final EditorSelection selection = _editorSelection;
+    final MarkdownEditCommandResult result = switch (command) {
+      MessageFormattingCommand.bold => MarkdownEditCommands.bold(
+        text,
+        selection,
+      ),
+      MessageFormattingCommand.italic => MarkdownEditCommands.italic(
+        text,
+        selection,
+      ),
+      MessageFormattingCommand.strike => MarkdownEditCommands.strike(
+        text,
+        selection,
+      ),
+      MessageFormattingCommand.heading => MarkdownEditCommands.heading(
+        text,
+        selection,
+      ),
+      MessageFormattingCommand.code => MarkdownEditCommands.code(
+        text,
+        selection,
+      ),
+      MessageFormattingCommand.quote => MarkdownEditCommands.quote(
+        text,
+        selection,
+      ),
+      MessageFormattingCommand.bulletedList =>
+        MarkdownEditCommands.bulletedList(text, selection),
+      MessageFormattingCommand.orderedList => MarkdownEditCommands.orderedList(
+        text,
+        selection,
+      ),
+    };
+    value = value.copyWith(
+      text: result.text,
+      selection: TextSelection(
+        baseOffset: result.selection.baseOffset,
+        extentOffset: result.selection.extentOffset,
+      ),
+      composing: TextRange.empty,
+    );
+  }
+
+  /// Formatting controls highlighted for the current selection/document.
+  Set<MessageFormattingCommand> get activeFormattingCommands {
+    final MarkdownEditingDocument document = _parser.parse(text);
+    return MessageFormattingCommand.values
+        .where(
+          (MessageFormattingCommand command) =>
+              _isFormattingCommandActive(command, document),
+        )
+        .toSet();
+  }
+
+  EditorSelection get _editorSelection {
+    final TextSelection selection = value.selection;
+    if (!selection.isValid ||
+        selection.start < 0 ||
+        selection.end > text.length) {
+      return EditorSelection.collapsed(text.length);
+    }
+    return EditorSelection(
+      baseOffset: selection.baseOffset,
+      extentOffset: selection.extentOffset,
+    );
+  }
+
+  bool _isFormattingCommandActive(
+    MessageFormattingCommand command,
+    MarkdownEditingDocument document,
+  ) {
+    final TextSelection selection = value.selection;
+    if (!selection.isValid) return false;
+    final EditorRange selected = EditorRange(
+      start: selection.start,
+      end: selection.end,
+    );
+    final Set<MarkdownTokenKind> kinds = switch (command) {
+      MessageFormattingCommand.bold => <MarkdownTokenKind>{
+        MarkdownTokenKind.bold,
+      },
+      MessageFormattingCommand.italic => <MarkdownTokenKind>{
+        MarkdownTokenKind.italic,
+      },
+      MessageFormattingCommand.strike => <MarkdownTokenKind>{
+        MarkdownTokenKind.strike,
+      },
+      MessageFormattingCommand.heading => <MarkdownTokenKind>{
+        MarkdownTokenKind.heading,
+      },
+      MessageFormattingCommand.code => <MarkdownTokenKind>{
+        MarkdownTokenKind.inlineCode,
+        MarkdownTokenKind.fencedCode,
+      },
+      MessageFormattingCommand.quote => <MarkdownTokenKind>{
+        MarkdownTokenKind.quote,
+      },
+      MessageFormattingCommand.bulletedList => <MarkdownTokenKind>{
+        MarkdownTokenKind.bulletedList,
+      },
+      MessageFormattingCommand.orderedList => <MarkdownTokenKind>{
+        MarkdownTokenKind.orderedList,
+      },
+    };
+    return document.tokens.any((MarkdownToken token) {
+      if (!kinds.contains(token.kind)) return false;
+      if (selection.isCollapsed) {
+        return token.rawRange.containsOrTouches(selection.extentOffset);
+      }
+      return token.rawRange.intersects(selected);
+    });
   }
 
   void replaceQueryWithUnicode(EmojiAutocompleteQuery query, String unicode) {
@@ -205,6 +341,9 @@ final class MessageEditorController extends TextEditingController {
   @override
   set value(TextEditingValue newValue) {
     if (!_applyingRichEdit && newValue.text != value.text) {
+      newValue = _removeEmptyBlockPrefixAfterBackspace(value, newValue);
+    }
+    if (!_applyingRichEdit && newValue.text != value.text) {
       final TextEditingValue previous = value;
       final _ExternalEdit edit = _ExternalEdit.from(
         previous.text,
@@ -269,6 +408,48 @@ final class MessageEditorController extends TextEditingController {
     super.value = newValue;
   }
 
+  TextEditingValue _removeEmptyBlockPrefixAfterBackspace(
+    TextEditingValue previous,
+    TextEditingValue next,
+  ) {
+    final TextSelection oldSelection = previous.selection;
+    final TextSelection newSelection = next.selection;
+    if (!oldSelection.isValid ||
+        !oldSelection.isCollapsed ||
+        !newSelection.isValid ||
+        !newSelection.isCollapsed ||
+        oldSelection.start == 0 ||
+        next.text.length != previous.text.length - 1) {
+      return next;
+    }
+    final int oldCaret = oldSelection.start;
+    final int lineStart = previous.text.lastIndexOf('\n', oldCaret - 1) + 1;
+    final int lineEnd = previous.text.indexOf('\n', oldCaret);
+    final int boundedLineEnd = lineEnd < 0 ? previous.text.length : lineEnd;
+    if (boundedLineEnd != oldCaret) return next;
+    final String prefix = previous.text.substring(lineStart, oldCaret);
+    if (!RegExp(
+      r'^(?: {0,3}(?:[-+*]|>|#{1,6}) | {0,3}[0-9]+\. )$',
+    ).hasMatch(prefix)) {
+      return next;
+    }
+    final int remainingPrefixLength = prefix.length - 1;
+    if (remainingPrefixLength <= 0 ||
+        next.text.substring(lineStart, lineStart + remainingPrefixLength) !=
+            prefix.substring(0, remainingPrefixLength)) {
+      return next;
+    }
+    return next.copyWith(
+      text: next.text.replaceRange(
+        lineStart,
+        lineStart + remainingPrefixLength,
+        '',
+      ),
+      selection: TextSelection.collapsed(offset: lineStart),
+      composing: TextRange.empty,
+    );
+  }
+
   Map<int, MessageInlineObject> _remapInlineObjects(
     String previous,
     String next,
@@ -328,118 +509,85 @@ final class MessageEditorController extends TextEditingController {
     TextStyle? style,
     required bool withComposing,
   }) {
-    if (_inlineObjectAt.isEmpty) {
-      return super.buildTextSpan(
-        context: context,
-        style: style,
-        withComposing: withComposing,
-      );
-    }
-
     final List<InlineSpan> children = <InlineSpan>[];
-    var offset = 0;
-    final List<int> positions = _inlineObjectAt.keys.toList()..sort();
-    for (final int position in positions) {
-      if (position < offset ||
-          position >= text.length ||
-          text[position] != _objectReplacementCharacter) {
-        continue;
-      }
-      _addTextSpans(
-        children,
-        text.substring(offset, position),
-        absoluteStart: offset,
-        withComposing: withComposing,
-      );
-      final MessageInlineObject object = _inlineObjectAt[position]!;
-      switch (object) {
-        case CustomEmojiInlineObject(:final CustomEmojiReference emoji):
-          children.add(
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: Semantics(
-                label: ':${emoji.name}:',
-                child: SizedBox.square(
-                  dimension: 22,
-                  child: customEmojiBuilder(context, emoji),
-                ),
-              ),
-            ),
-          );
-        case UserMentionInlineObject(:final UserMention mention):
-          children.add(
-            WidgetSpan(
-              alignment: PlaceholderAlignment.baseline,
-              baseline: TextBaseline.alphabetic,
-              child: Semantics(
-                link: true,
-                label: '@${mention.username}',
-                child: userMentionBuilder(context, mention),
-              ),
-            ),
-          );
-        case GroupMentionInlineObject(:final GroupMention mention):
-          children.add(
-            WidgetSpan(
-              alignment: PlaceholderAlignment.baseline,
-              baseline: TextBaseline.alphabetic,
-              child: Semantics(
-                link: true,
-                label: '@${mention.name}',
-                child: groupMentionBuilder(context, mention),
-              ),
-            ),
-          );
-      }
-      offset = position + 1;
-    }
-    _addTextSpans(
-      children,
-      text.substring(offset),
-      absoluteStart: offset,
-      withComposing: withComposing,
+    final TextStyle baseStyle = style ?? DefaultTextStyle.of(context).style;
+    final List<MarkdownVisualRun> runs = _projection.project(
+      document: _parser.parse(text),
+      selection: value.selection,
+      composing: withComposing ? value.composing : TextRange.empty,
+      mode: _mode,
+      baseStyle: baseStyle,
+      colors: Theme.of(context).colorScheme,
     );
+    final List<int> positions = _inlineObjectAt.keys.toList()..sort();
+    for (final MarkdownVisualRun run in runs) {
+      _addProjectedRun(children, run, positions, context);
+    }
     return TextSpan(style: style, children: children);
   }
 
-  void _addTextSpans(
+  void _addProjectedRun(
     List<InlineSpan> children,
-    String segment, {
-    required int absoluteStart,
-    required bool withComposing,
-  }) {
-    if (segment.isEmpty) return;
-    final TextRange composing = value.composing;
-    if (!withComposing ||
-        !composing.isValid ||
-        composing.isCollapsed ||
-        composing.end <= absoluteStart ||
-        composing.start >= absoluteStart + segment.length) {
-      children.add(TextSpan(text: segment));
-      return;
+    MarkdownVisualRun run,
+    List<int> objectPositions,
+    BuildContext context,
+  ) {
+    var offset = run.range.start;
+    for (final int position in objectPositions) {
+      if (position < offset || position >= run.range.end) continue;
+      if (position > offset) {
+        children.add(
+          TextSpan(text: text.substring(offset, position), style: run.style),
+        );
+      }
+      final MessageInlineObject? object = _inlineObjectAt[position];
+      if (object == null || text[position] != _objectReplacementCharacter) {
+        children.add(TextSpan(text: text[position], style: run.style));
+      } else {
+        children.add(_inlineObjectSpan(context, object));
+      }
+      offset = position + 1;
     }
-
-    final int localStart = (composing.start - absoluteStart).clamp(
-      0,
-      segment.length,
-    );
-    final int localEnd = (composing.end - absoluteStart).clamp(
-      0,
-      segment.length,
-    );
-    if (localStart > 0) {
-      children.add(TextSpan(text: segment.substring(0, localStart)));
-    }
-    children.add(
-      TextSpan(
-        text: segment.substring(localStart, localEnd),
-        style: const TextStyle(decoration: TextDecoration.underline),
-      ),
-    );
-    if (localEnd < segment.length) {
-      children.add(TextSpan(text: segment.substring(localEnd)));
+    if (offset < run.range.end) {
+      children.add(
+        TextSpan(text: text.substring(offset, run.range.end), style: run.style),
+      );
     }
   }
+
+  WidgetSpan _inlineObjectSpan(
+    BuildContext context,
+    MessageInlineObject object,
+  ) => switch (object) {
+    CustomEmojiInlineObject(:final CustomEmojiReference emoji) => WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Semantics(
+        label: ':${emoji.name}:',
+        child: SizedBox.square(
+          dimension: 22,
+          child: customEmojiBuilder(context, emoji),
+        ),
+      ),
+    ),
+    UserMentionInlineObject(:final UserMention mention) => WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: Semantics(
+        link: true,
+        label: '@${mention.username}',
+        child: userMentionBuilder(context, mention),
+      ),
+    ),
+    GroupMentionInlineObject(:final GroupMention mention) => WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: Semantics(
+        link: true,
+        label: '@${mention.name}',
+        child: groupMentionBuilder(context, mention),
+      ),
+    ),
+  };
 }
 
 Widget _defaultUserMentionBuilder(BuildContext context, UserMention mention) =>

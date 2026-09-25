@@ -4,7 +4,9 @@ import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/mention_query.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
+import 'package:mattermost_flutter/src/ui/messages/editor/message_editor_mode.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_editor_controller.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_formatting_toolbar.dart';
 
 void main() {
   group('findEmojiAutocompleteQuery', () {
@@ -207,7 +209,180 @@ void main() {
     );
     expect(controller.text, 'Hi ');
   });
+
+  testWidgets(
+    'live preview collapses only inactive markers without changing raw text',
+    (WidgetTester tester) async {
+      final MessageEditorController controller = MessageEditorController(
+        customEmojiBuilder: (_, _) => const SizedBox.shrink(),
+      );
+      addTearDown(controller.dispose);
+      controller.value = const TextEditingValue(
+        text: '**test** ',
+        selection: TextSelection.collapsed(offset: 9),
+      );
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext value) {
+              context = value;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+
+      TextSpan span = controller.buildTextSpan(
+        context: context,
+        withComposing: true,
+      );
+      expect(span.toPlainText(), controller.text);
+      expect(controller.messageText, '**test** ');
+      expect(_spans(span).where(_isCollapsedMarker), hasLength(2));
+
+      controller.selection = const TextSelection.collapsed(offset: 3);
+      span = controller.buildTextSpan(context: context, withComposing: true);
+      expect(span.toPlainText(), controller.text);
+      expect(_spans(span).where(_isCollapsedMarker), isEmpty);
+      expect(
+        _spans(
+          span,
+        ).any((TextSpan child) => child.style?.fontWeight == FontWeight.bold),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'source mode and composing range keep Markdown markers and IME offsets',
+    (WidgetTester tester) async {
+      final MessageEditorController controller = MessageEditorController(
+        customEmojiBuilder: (_, _) => const SizedBox.shrink(),
+        mode: MessageEditorMode.source,
+      );
+      addTearDown(controller.dispose);
+      controller.value = const TextEditingValue(
+        text: '`code`',
+        selection: TextSelection.collapsed(offset: 6),
+        composing: TextRange(start: 1, end: 5),
+      );
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext value) {
+              context = value;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+
+      final TextEditingValue before = controller.value;
+      final TextSpan span = controller.buildTextSpan(
+        context: context,
+        withComposing: true,
+      );
+      expect(span.toPlainText(), '`code`');
+      expect(controller.value, before);
+      expect(_spans(span).where(_isCollapsedMarker), isEmpty);
+      expect(
+        _spans(span).any(
+          (TextSpan child) =>
+              child.style?.decoration == TextDecoration.underline,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'inactive bullet and ordered list markers remain visible in live preview',
+    (WidgetTester tester) async {
+      final MessageEditorController controller = MessageEditorController(
+        customEmojiBuilder: (_, _) => const SizedBox.shrink(),
+      );
+      addTearDown(controller.dispose);
+      controller.value = const TextEditingValue(
+        text: '- one\n12. two\nplain',
+        selection: TextSelection.collapsed(offset: 19),
+      );
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext value) {
+              context = value;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+
+      final TextSpan span = controller.buildTextSpan(
+        context: context,
+        withComposing: true,
+      );
+      final List<TextSpan> markers = _spans(span)
+          .where(
+            (TextSpan child) => (child.text == '- ' || child.text == '12. '),
+          )
+          .toList();
+
+      expect(span.toPlainText(), controller.text);
+      expect(markers, hasLength(2));
+      expect(markers, isNot(contains(predicate(_isCollapsedMarker))));
+    },
+  );
+
+  test(
+    'toolbar commands update source selection and empty block backspace removes prefix',
+    () {
+      final MessageEditorController controller = MessageEditorController(
+        customEmojiBuilder: (_, _) => const SizedBox.shrink(),
+      );
+      addTearDown(controller.dispose);
+      controller.value = const TextEditingValue(
+        text: 'bold',
+        selection: TextSelection(baseOffset: 0, extentOffset: 4),
+      );
+
+      controller.applyFormattingCommand(MessageFormattingCommand.bold);
+      expect(controller.text, '**bold**');
+      expect(
+        controller.selection,
+        const TextSelection(baseOffset: 2, extentOffset: 6),
+      );
+      expect(
+        controller.activeFormattingCommands,
+        contains(MessageFormattingCommand.bold),
+      );
+
+      controller.value = const TextEditingValue(
+        text: '- ',
+        selection: TextSelection.collapsed(offset: 2),
+      );
+      controller.value = const TextEditingValue(
+        text: '-',
+        selection: TextSelection.collapsed(offset: 1),
+      );
+      expect(controller.text, isEmpty);
+      expect(controller.selection, const TextSelection.collapsed(offset: 0));
+    },
+  );
 }
+
+Iterable<TextSpan> _spans(InlineSpan span) sync* {
+  if (span case TextSpan(:final children)) {
+    yield span;
+    for (final InlineSpan? child in children ?? const <InlineSpan>[]) {
+      if (child != null) yield* _spans(child);
+    }
+  }
+}
+
+bool _isCollapsedMarker(TextSpan span) => span.style?.fontSize == 0;
 
 EmojiAutocompleteQuery? _query(String text) => findEmojiAutocompleteQuery(
   TextEditingValue(

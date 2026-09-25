@@ -35,6 +35,26 @@ serializes it to ordinary `@username` before a post reaches this renderer. The
 read path therefore stays transport-compatible and resolves the same canonical
 mention syntax.
 
+## Composer editor boundary
+
+`MattermostMarkdown` remains a read-only post renderer; its widget/AST output
+is not an editable document model and must not be overlaid on a `TextField`.
+The integrated composer editor keeps raw Mattermost Markdown as its sole
+editable and wire representation. Its default Live Preview visually collapses
+inactive markers for the supported editing subset while retaining the same
+`TextEditingValue` text and offsets. Mentions and custom emoji keep their
+existing atom-to-wire serialization only at copy, cut, and send boundaries.
+
+Editor parsing is a deliberately tolerant subset with source ranges, rather
+than a second use of the renderer parser. It currently covers bold, italic,
+strikethrough, inline/fenced code, headings, quotes, and bullet/ordered lists;
+unrecognised, escaped, and code-contained syntax remains visible source and is
+sent unchanged. The controller also exposes Source mode, but the composer does
+not yet expose or persist a mode preference. Shared parity fixtures with this
+renderer and manual platform validation of selection, clipboard, undo/redo,
+and IME remain outstanding. The exact editing and IME offset contract is
+specified in [`MESSAGE_EDITOR_PLAN.md`](MESSAGE_EDITOR_PLAN.md).
+
 The Mattermost documentation explicitly says that HTML line breaks in table
 cells are unsupported. `flutter_markdown_plus` does not render inline HTML,
 which is therefore compatible with the documented message dialect and also

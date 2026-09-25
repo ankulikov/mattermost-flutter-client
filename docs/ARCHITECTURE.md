@@ -187,6 +187,33 @@ root/reply на compact и wide layouts, остаются едиными; Back �
 Shift+Enter добавляет новую строку. Черновик очищается только после успешного
 REST-ответа и сохраняется вместе с неблокирующей ошибкой при неудаче.
 
+### Markdown-редактор composer-а
+
+Визуальный Markdown-редактор является presentation-scoped частью
+`MessageComposer`; он не получает API, WebSocket, DAO или secure storage и не
+создаёт durable draft/cache. Его единственный editable source — raw Markdown
+в `TextEditingValue`; server wire text должен совпадать с ним побайтно, кроме
+уже существующей сериализации атомарных mentions и custom emoji при
+copy/cut/send. Редактор не выполняет Markdown round-trip и не нормализует
+пользовательские пробелы, номера списков или delimiters.
+
+`MessageEditorController` владеет native value, selection и composing range.
+Его parser и команды — pure Dart, а visual projection строит spans из того же
+editing buffer. В Live Preview (режим по умолчанию) завершённый неактивный
+inline/block marker остаётся в span plain text с нулевым visual advance, кроме
+list prefix: `- `, `* ` и `1. ` остаются видимыми и создают естественный
+отступ пункта; поэтому
+`span.toPlainText()` совпадает с `TextEditingValue.text`, а visibility не
+переписывает value, selection или IME composing range. Панель форматирования
+применяет pure commands к raw source и не получает доступ к transport/data
+слоям.
+
+Режим `source` уже существует на уровне controller, но пользовательского
+переключателя и persistent preference пока нет. Общие parity fixtures editor-а
+и `MattermostMarkdown`, а также ручная platform-матрица native selection/IME
+ещё не завершены. Подробные правила active marker и offset model находятся в
+`docs/MESSAGE_EDITOR_PLAN.md`.
+
 Собственный post из REST-ответа сразу добавляется в volatile state открытого
 канала или треда. Inbox дополнительно использует аутентифицированный
 `SessionRealtimeService`: он владеет единственным `WebSocketGateway` активной

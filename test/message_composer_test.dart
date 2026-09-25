@@ -468,6 +468,131 @@ void main() {
     expect(submitted, '@backend ');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'toolbar commands retain focus and apply raw Markdown selection',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessageComposer(
+              destinationId: 'formatting',
+              placeholder: 'Write a message',
+              onSubmit: (String message, String pendingPostId) async {},
+            ),
+          ),
+        ),
+      );
+      final Finder input = find.byKey(
+        const ValueKey<String>('message-input-formatting'),
+      );
+      await tester.enterText(input, 'format me');
+      final TextEditingController controller = tester
+          .widget<TextField>(input)
+          .controller!;
+      controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 9,
+      );
+      await tester.pump();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('message-formatting-bold')),
+      );
+      await tester.pump();
+
+      expect(controller.text, '**format me**');
+      expect(
+        controller.selection,
+        const TextSelection(baseOffset: 2, extentOffset: 11),
+      );
+      expect(tester.widget<TextField>(input).focusNode?.hasFocus, isTrue);
+    },
+  );
+
+  testWidgets(
+    'Ctrl+B and Ctrl+I apply formatting when autocomplete and IME are idle',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessageComposer(
+              destinationId: 'shortcuts',
+              placeholder: 'Write a message',
+              onSubmit: (String message, String pendingPostId) async {},
+            ),
+          ),
+        ),
+      );
+      final Finder input = find.byKey(
+        const ValueKey<String>('message-input-shortcuts'),
+      );
+      await tester.enterText(input, 'text');
+      final TextEditingController controller = tester
+          .widget<TextField>(input)
+          .controller!;
+      controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 4,
+      );
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(controller.text, '**text**');
+
+      controller.selection = const TextSelection(
+        baseOffset: 2,
+        extentOffset: 6,
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(controller.text, '***text***');
+    },
+  );
+
+  testWidgets(
+    'Shift+Enter continues and exits Markdown list and quote blocks',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessageComposer(
+              destinationId: 'blocks',
+              placeholder: 'Write a message',
+              onSubmit: (String message, String pendingPostId) async {},
+            ),
+          ),
+        ),
+      );
+      final Finder input = find.byKey(
+        const ValueKey<String>('message-input-blocks'),
+      );
+      await tester.enterText(input, '- item');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(tester.widget<TextField>(input).controller?.text, '- item\n- ');
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(tester.widget<TextField>(input).controller?.text, '- item\n');
+
+      await tester.enterText(input, '> quoted');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(tester.widget<TextField>(input).controller?.text, '> quoted\n> ');
+    },
+  );
 }
 
 Widget _emojiComposerApp({
