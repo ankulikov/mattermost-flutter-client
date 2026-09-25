@@ -57,6 +57,16 @@ abstract interface class MattermostApi {
     required int limit,
   }) => throw UnimplementedError();
 
+  Future<MattermostPostSearchDto> searchPosts({
+    required String teamId,
+    required MattermostPostSearchRequestDto request,
+  }) => throw UnimplementedError();
+
+  Future<List<MattermostChannelDto>> autocompleteChannelsForSearch({
+    required String teamId,
+    required String name,
+  }) => throw UnimplementedError();
+
   /// Searches groups which the server permits using as at-mentions.
   Future<List<MattermostGroupDto>> searchMentionGroups({
     required String name,

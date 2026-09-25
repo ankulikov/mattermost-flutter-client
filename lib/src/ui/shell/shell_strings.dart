@@ -4,6 +4,7 @@ abstract final class ShellStrings {
   static const String appTitle = 'Mattermost';
   static const String channels = 'Channels';
   static const String inbox = 'Inbox';
+  static const String search = 'Search';
   static const String profile = 'Profile';
   static const String inboxHasNewMessages = 'Inbox has new messages';
   static const String openInbox = 'Open Inbox';

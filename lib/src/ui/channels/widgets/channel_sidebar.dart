@@ -355,7 +355,9 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
   }
 
   void _selectChannel(SidebarChannel channel) {
-    ref.read(threadsDestinationProvider.notifier).clear();
+    ref
+        .read(shellDestinationProvider.notifier)
+        .select(ShellDestination.channels);
     ref.read(selectedChannelProvider.notifier).select(channel);
     final ScaffoldState? scaffold = Scaffold.maybeOf(context);
     if (scaffold?.isDrawerOpen ?? false) Navigator.of(context).pop();

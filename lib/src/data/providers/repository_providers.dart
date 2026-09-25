@@ -34,6 +34,10 @@ import 'package:mattermost_flutter/src/features/mentions/data/repositories/matte
 import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
 import 'package:mattermost_flutter/src/features/profile/data/repositories/mattermost_current_user_profile_repository.dart';
 import 'package:mattermost_flutter/src/features/profile/domain/repositories/current_user_profile_repository.dart';
+import 'package:mattermost_flutter/src/features/search/data/repositories/mattermost_message_search_repository.dart';
+import 'package:mattermost_flutter/src/features/search/data/repositories/mattermost_message_search_timezone_repository.dart';
+import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_repository.dart';
+import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_timezone_repository.dart';
 
 final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
     Provider<MattermostAuthRepository>((Ref ref) {
@@ -154,6 +158,23 @@ final Provider<ThreadRepository> threadRepositoryProvider =
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         users: ref.watch(userRepositoryProvider),
+      ),
+    );
+
+final Provider<MessageSearchRepository> messageSearchRepositoryProvider =
+    Provider<MessageSearchRepository>(
+      (Ref ref) => MattermostMessageSearchRepository(
+        api: ref.watch(activeMattermostApiProvider),
+        messageMapper: ref.watch(mattermostMessageMapperProvider),
+        users: ref.watch(userRepositoryProvider),
+      ),
+    );
+
+final Provider<MessageSearchTimezoneRepository>
+messageSearchTimezoneRepositoryProvider =
+    Provider<MessageSearchTimezoneRepository>(
+      (Ref ref) => MattermostMessageSearchTimezoneRepository(
+        api: ref.watch(activeMattermostApiProvider),
       ),
     );
 

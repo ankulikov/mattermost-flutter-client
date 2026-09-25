@@ -104,7 +104,9 @@ final class ChannelSidebarController
         otherUserDisplayName: profile.fullName,
       ),
     );
-    ref.read(threadsDestinationProvider.notifier).clear();
+    ref
+        .read(shellDestinationProvider.notifier)
+        .select(ShellDestination.channels);
     ref.read(selectedChannelProvider.notifier).select(channel);
     await refresh();
     ref.read(channelPresentationProvider.notifier).showSelectedChannel();

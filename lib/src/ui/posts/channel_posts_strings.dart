@@ -13,4 +13,5 @@ abstract final class ChannelPostsStrings {
   static const String showRecentMessages = 'Show recent messages';
   static const String loadingOlder = 'Loading older messages';
   static const String loadOlder = 'Load older messages';
+  static const String searchInChannel = 'Search in channel';
 }

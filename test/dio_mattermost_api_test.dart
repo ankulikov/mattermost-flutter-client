@@ -113,6 +113,86 @@ void main() {
     expect(result.users.single.id, 'ada-id');
   });
 
+  test(
+    'searches team posts with the exact privacy-safe request body',
+    () async {
+      final _RecordingAdapter adapter = _RecordingAdapter(
+        body:
+            '{"order":["post-1","missing"],"posts":{"post-1":'
+            '{"id":"post-1","user_id":"ada","channel_id":"town",'
+            '"message":"confidential"}},"matches":{"post-1":'
+            '["confidential"]}}',
+      );
+      final Dio dio = Dio(
+        BaseOptions(baseUrl: 'https://chat.example.com/api/v4'),
+      )..httpClientAdapter = adapter;
+
+      final MattermostPostSearchDto result = await DioMattermostApi(dio: dio)
+          .searchPosts(
+            teamId: 'team id',
+            request: const MattermostPostSearchRequestDto(
+              terms: 'confidential from:ada',
+              timezoneOffset: 10800,
+              page: 2,
+              perPage: 60,
+            ),
+          );
+
+      expect(adapter.request?.method, 'POST');
+      expect(adapter.request?.path, '/teams/team%20id/posts/search');
+      expect(adapter.request?.data, <String, Object?>{
+        'terms': 'confidential from:ada',
+        'is_or_search': false,
+        'time_zone_offset': 10800,
+        'include_deleted_channels': false,
+        'page': 2,
+        'per_page': 60,
+      });
+      expect(result.order, <String>['post-1', 'missing']);
+      expect(result.posts['post-1']?.id, 'post-1');
+      expect(result.matches['post-1'], <String>['confidential']);
+    },
+  );
+
+  test('tolerates absent search matches and unknown fields', () {
+    final MattermostPostSearchDto result = MattermostPostSearchDto.fromJson(
+      <String, Object?>{
+        'order': <Object?>['orphan'],
+        'posts': <String, Object?>{},
+        'matches': null,
+        'unknown': true,
+      },
+    );
+
+    expect(result.order, <String>['orphan']);
+    expect(result.posts, isEmpty);
+    expect(result.matches, isEmpty);
+  });
+
+  test('autocompletes team channels for message search', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"id":"town","team_id":"team","type":"O",'
+          '"display_name":"Town Square","name":"town-square"}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostChannelDto> channels = await DioMattermostApi(
+      dio: dio,
+    ).autocompleteChannelsForSearch(teamId: 'team id', name: 'town square');
+
+    expect(adapter.request?.method, 'GET');
+    expect(
+      adapter.request?.path,
+      '/teams/team%20id/channels/search_autocomplete',
+    );
+    expect(adapter.request?.queryParameters, <String, Object?>{
+      'name': 'town square',
+    });
+    expect(channels.single.name, 'town-square');
+  });
+
   test('searches referenceable groups with member counts', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:

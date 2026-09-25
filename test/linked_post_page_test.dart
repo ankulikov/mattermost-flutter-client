@@ -33,6 +33,28 @@ void main() {
   });
 
   testWidgets(
+    'compact root permalink shows the target channel and Back pops it',
+    (WidgetTester tester) async {
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.binding.setSurfaceSize(const Size(799, 900));
+      final GoRouter router = _router(_rootTarget);
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(_app(router));
+      router.push('/linked');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChannelPostsPane), findsOneWidget);
+      expect(find.byType(ThreadPane), findsNothing);
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Source page'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'compact threaded permalink opens only a thread and Close pops it',
     (WidgetTester tester) async {
       addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -679,6 +679,54 @@ final class MattermostPostListDto {
   final bool hasNext;
 }
 
+/// Body accepted by `POST /api/v4/teams/{team_id}/posts/search`.
+final class MattermostPostSearchRequestDto {
+  const MattermostPostSearchRequestDto({
+    required this.terms,
+    required this.timezoneOffset,
+    this.isOrSearch = false,
+    this.includeDeletedChannels = false,
+    this.page = 0,
+    this.perPage = 60,
+  });
+
+  final String terms;
+  final bool isOrSearch;
+  final int timezoneOffset;
+  final bool includeDeletedChannels;
+  final int page;
+  final int perPage;
+
+  JsonMap toJson() => <String, Object?>{
+    'terms': terms,
+    'is_or_search': isOrSearch,
+    'time_zone_offset': timezoneOffset,
+    'include_deleted_channels': includeDeletedChannels,
+    'page': page,
+    'per_page': perPage,
+  };
+}
+
+/// Tolerant response from the posts-search endpoint.
+final class MattermostPostSearchDto {
+  const MattermostPostSearchDto({
+    required this.order,
+    required this.posts,
+    required this.matches,
+  });
+
+  factory MattermostPostSearchDto.fromJson(JsonMap json) =>
+      MattermostPostSearchDto(
+        order: _stringList(json, 'order'),
+        posts: _dtoMap(json, 'posts', MattermostPostDto.fromJson),
+        matches: _stringLists(json['matches']),
+      );
+
+  final List<String> order;
+  final Map<String, MattermostPostDto> posts;
+  final Map<String, List<String>> matches;
+}
+
 /// JSON body accepted by `POST /api/v4/posts`.
 final class MattermostCreatePostRequestDto {
   const MattermostCreatePostRequestDto({
@@ -1396,6 +1444,17 @@ Map<String, T> _dtoMap<T>(
       return MapEntry<String, T>(id, decode(item));
     }),
   );
+}
+
+Map<String, List<String>> _stringLists(Object? value) {
+  if (value is! JsonMap) return const <String, List<String>>{};
+  final Map<String, List<String>> result = <String, List<String>>{};
+  for (final MapEntry<String, Object?> entry in value.entries) {
+    if (entry.value is! List<Object?>) continue;
+    final List<Object?> values = entry.value! as List<Object?>;
+    result[entry.key] = List<String>.unmodifiable(values.whereType<String>());
+  }
+  return Map<String, List<String>>.unmodifiable(result);
 }
 
 Map<String, JsonValueDto> _jsonValues(JsonMap json) =>
