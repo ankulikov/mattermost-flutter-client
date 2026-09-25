@@ -219,6 +219,21 @@ void main() {
     }
   });
 
+  test('keeps the team handle on a mapped channel for post permalinks', () {
+    final SidebarChannel channel = mapChannel(
+      const MattermostChannelDto(
+        id: 'channel-1',
+        teamId: 'team-1',
+        name: 'general',
+        displayName: 'General',
+        type: 'O',
+      ),
+      teamName: 'engineering',
+    );
+
+    expect(channel.teamName, 'engineering');
+  });
+
   test('uses the latest of last_post_at and update_at for activity', () {
     final SidebarChannel channelWithPosts = mapChannel(
       const MattermostChannelDto(

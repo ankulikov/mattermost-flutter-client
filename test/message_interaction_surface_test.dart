@@ -78,6 +78,42 @@ void main() {
     await _dismissActionsSheet(tester);
   });
 
+  testWidgets('copies the post permalink from the touch actions sheet', (
+    WidgetTester tester,
+  ) async {
+    MethodCall? clipboardCall;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        if (call.method == 'Clipboard.setData') clipboardCall = call;
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.pumpWidget(
+      _app(
+        onOpenThread: () {},
+        postPermalink: Uri.parse('https://chat.example.com/team-a/pl/post-1'),
+      ),
+    );
+
+    await tester.longPress(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(MessageActionsStrings.copyLink));
+    await tester.pumpAndSettle();
+
+    expect(clipboardCall?.method, 'Clipboard.setData');
+    expect(clipboardCall?.arguments, <String, Object>{
+      'text': 'https://chat.example.com/team-a/pl/post-1',
+    });
+    expect(find.text(MessageActionsStrings.linkCopied), findsOneWidget);
+  });
+
   testWidgets('touch tap on message padding opens its thread exactly once', (
     WidgetTester tester,
   ) async {
@@ -295,6 +331,61 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('mouse popup keeps actions open and copies the post permalink', (
+    WidgetTester tester,
+  ) async {
+    MethodCall? clipboardCall;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        if (call.method == 'Clipboard.setData') clipboardCall = call;
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.pumpWidget(
+      _app(
+        onOpenThread: () {},
+        postPermalink: Uri.parse('https://chat.example.com/team-a/pl/post-1'),
+      ),
+    );
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: tester.getCenter(find.text('Message')));
+    await tester.pumpAndSettle();
+
+    await mouse.down(
+      tester.getCenter(
+        find.byKey(const ValueKey<String>('more-message-actions')),
+      ),
+    );
+    await mouse.up();
+    await tester.pumpAndSettle();
+
+    final Finder copyLink = find.text(MessageActionsStrings.copyLink);
+    await mouse.moveTo(tester.getCenter(copyLink));
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey<String>('quick-message-actions')),
+      findsOneWidget,
+    );
+    await mouse.down(tester.getCenter(copyLink));
+    await mouse.up();
+    await tester.pumpAndSettle();
+
+    expect(clipboardCall?.arguments, <String, Object>{
+      'text': 'https://chat.example.com/team-a/pl/post-1',
+    });
+    expect(find.text(MessageActionsStrings.linkCopied), findsOneWidget);
+  });
+
   testWidgets('mouse long press on Markdown text does not open touch sheet', (
     WidgetTester tester,
   ) async {
@@ -421,6 +512,7 @@ Widget _app({
   TextScaler textScaler = TextScaler.noScaling,
   CustomEmojiRepository? repository,
   Future<bool> Function(String emojiName)? onToggleReaction,
+  Uri? postPermalink,
 }) => MaterialApp(
   builder: (BuildContext context, Widget? child) => MediaQuery(
     data: MediaQuery.of(context).copyWith(textScaler: textScaler),
@@ -441,6 +533,7 @@ Widget _app({
                   : () => repository,
               accountId: repository == null ? '' : 'account-a',
               onToggleReaction: onToggleReaction,
+              postPermalink: postPermalink,
               child: SizedBox(
                 height: messageHeight,
                 child: const MattermostMarkdown(data: 'Message'),

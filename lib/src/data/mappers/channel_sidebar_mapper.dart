@@ -4,12 +4,13 @@ import 'package:mattermost_flutter/src/domain/policies/user_display_name.dart';
 
 SidebarTeam mapTeam(MattermostTeamDto dto) => SidebarTeam(
   id: _required(dto.id, 'team.id'),
+  name: _required(dto.name, 'team.name'),
   displayName: dto.displayName.trim().isNotEmpty
       ? dto.displayName.trim()
       : _required(dto.name, 'team.name'),
 );
 
-SidebarChannel mapChannel(MattermostChannelDto dto) {
+SidebarChannel mapChannel(MattermostChannelDto dto, {String teamName = ''}) {
   final String type = _required(dto.type, 'channel.type');
   final ChannelKind kind = switch (type) {
     'O' => ChannelKind.publicChannel,
@@ -27,6 +28,7 @@ SidebarChannel mapChannel(MattermostChannelDto dto) {
         ? dto.displayName.trim()
         : name,
     kind: kind,
+    teamName: teamName,
     lastActivityAt: dto.lastPostAt > dto.updateAt
         ? dto.lastPostAt
         : dto.updateAt,
