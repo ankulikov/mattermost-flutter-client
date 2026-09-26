@@ -178,6 +178,8 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                     },
                     onToggleReaction: (ChannelPost post, String emojiName) =>
                         _toggleReaction(context, post, emojiName),
+                    onDeletePost: (ChannelPost post) =>
+                        _deletePost(context, post),
                     onRichAttachmentPostUpdated: (ChannelPost post) =>
                         ref.read(_postsProvider.notifier).replacePost(post),
                     onRichAttachmentGotoLocation: (String location) =>
@@ -193,6 +195,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                         ? null
                         : () => ref.read(customEmojiRepositoryProvider),
                     accountId: session?.durableDataScopeId ?? '',
+                    currentUserId: session?.userId ?? '',
                     onSelectChannel: widget.onSelectChannel,
                   );
                 },
@@ -235,6 +238,8 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
           stateScopeId: widget.stateScopeId,
           onReplySent: (ChannelPost reply) =>
               ref.read(_postsProvider.notifier).recordSentReply(reply),
+          onPostDeleted: (ChannelPost post) =>
+              ref.read(_postsProvider.notifier).removePostLocally(post),
           onClose: () => setState(() => _selectedRootPostId = null),
         );
         if (showSideThread) {
@@ -350,6 +355,9 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
     }
     return succeeded;
   }
+
+  Future<bool> _deletePost(BuildContext context, ChannelPost post) =>
+      ref.read(_postsProvider.notifier).deletePost(post.id);
 }
 
 class _ChannelHeader extends StatelessWidget {
@@ -470,11 +478,13 @@ class _PostList extends StatefulWidget {
     required this.onLoadNewer,
     required this.onOpenThread,
     required this.onToggleReaction,
+    required this.onDeletePost,
     required this.onRichAttachmentPostUpdated,
     required this.onRichAttachmentGotoLocation,
     required this.actionScopeId,
     required this.emojiRepositoryFactory,
     required this.accountId,
+    required this.currentUserId,
     required this.onSelectChannel,
   });
 
@@ -492,11 +502,13 @@ class _PostList extends StatefulWidget {
   final Future<void> Function() onLoadNewer;
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
+  final Future<bool> Function(ChannelPost) onDeletePost;
   final ValueChanged<ChannelPost> onRichAttachmentPostUpdated;
   final ValueChanged<String> onRichAttachmentGotoLocation;
   final String actionScopeId;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
+  final String currentUserId;
   final ValueChanged<String>? onSelectChannel;
 
   @override
@@ -730,11 +742,14 @@ class _PostListState extends State<_PostList> {
       highlighted: post.id == widget.focusedPostId,
       onOpenThread: widget.onOpenThread,
       onToggleReaction: widget.onToggleReaction,
+      onDelete: () => widget.onDeletePost(post),
       onRichAttachmentPostUpdated: widget.onRichAttachmentPostUpdated,
       onRichAttachmentGotoLocation: widget.onRichAttachmentGotoLocation,
       actionScopeId: widget.actionScopeId,
       emojiRepositoryFactory: widget.emojiRepositoryFactory,
       accountId: widget.accountId,
+      canDelete: post.author.id == widget.currentUserId,
+      canEdit: post.author.id == widget.currentUserId,
       onSelectChannel: widget.onSelectChannel,
     );
   }
@@ -749,11 +764,14 @@ class _PostRow extends StatelessWidget {
     required this.highlighted,
     required this.onOpenThread,
     required this.onToggleReaction,
+    required this.onDelete,
     required this.onRichAttachmentPostUpdated,
     required this.onRichAttachmentGotoLocation,
     required this.actionScopeId,
     required this.emojiRepositoryFactory,
     required this.accountId,
+    required this.canDelete,
+    required this.canEdit,
     required this.onSelectChannel,
     super.key,
   });
@@ -765,11 +783,14 @@ class _PostRow extends StatelessWidget {
   final bool highlighted;
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
+  final Future<bool> Function() onDelete;
   final ValueChanged<ChannelPost> onRichAttachmentPostUpdated;
   final ValueChanged<String> onRichAttachmentGotoLocation;
   final String actionScopeId;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
+  final bool canDelete;
+  final bool canEdit;
   final ValueChanged<String>? onSelectChannel;
 
   @override
@@ -777,6 +798,9 @@ class _PostRow extends StatelessWidget {
     return MessageInteractionSurface(
       onOpenThread: () => onOpenThread(post),
       onToggleReaction: (String emojiName) => onToggleReaction(post, emojiName),
+      onDelete: onDelete,
+      canDelete: canDelete,
+      canEdit: canEdit,
       emojiRepositoryFactory: emojiRepositoryFactory,
       accountId: accountId,
       postPermalink: postPermalink,

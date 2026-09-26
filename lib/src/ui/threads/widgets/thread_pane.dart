@@ -32,6 +32,7 @@ class ThreadPane extends ConsumerStatefulWidget {
     this.onSelectChannel,
     this.stateScopeId,
     this.onReplySent,
+    this.onPostDeleted,
     this.onThreadRead,
     this.onThreadUnfollowed,
     super.key,
@@ -48,6 +49,7 @@ class ThreadPane extends ConsumerStatefulWidget {
   final ValueChanged<String>? onSelectChannel;
   final String? stateScopeId;
   final ValueChanged<ChannelPost>? onReplySent;
+  final ValueChanged<ChannelPost>? onPostDeleted;
   final ValueChanged<DateTime>? onThreadRead;
   final ValueChanged<String>? onThreadUnfollowed;
 
@@ -208,6 +210,9 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                 _toggleReaction(root, reaction.emojiName),
                             onAddReaction: (String emojiName) =>
                                 _toggleReaction(root, emojiName),
+                            onDelete: () => _deletePost(root),
+                            canDelete: root.author.id == session?.userId,
+                            canEdit: root.author.id == session?.userId,
                             emojiRepositoryFactory: session == null
                                 ? null
                                 : () => ref.read(customEmojiRepositoryProvider),
@@ -278,6 +283,14 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                       state.thread.replies[index],
                                       emojiName,
                                     ),
+                                onDelete: () =>
+                                    _deletePost(state.thread.replies[index]),
+                                canDelete:
+                                    state.thread.replies[index].author.id ==
+                                    session?.userId,
+                                canEdit:
+                                    state.thread.replies[index].author.id ==
+                                    session?.userId,
                                 emojiRepositoryFactory: session == null
                                     ? null
                                     : () => ref.read(
@@ -465,6 +478,16 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
     return succeeded;
   }
 
+  Future<bool> _deletePost(ChannelPost post) async {
+    final bool deleted = await ref
+        .read(_threadStateProvider.notifier)
+        .deletePost(post.id);
+    if (!deleted || !mounted) return false;
+    widget.onPostDeleted?.call(post);
+    if (post.id == widget.rootPostId) widget.onClose();
+    return deleted;
+  }
+
   ThreadRequest get _request => (
     rootPostId: widget.rootPostId,
     teamId: widget.teamId ?? widget.channel.teamId,
@@ -594,6 +617,9 @@ class _ThreadPost extends StatelessWidget {
     required this.onSelectChannel,
     required this.onToggleReaction,
     required this.onAddReaction,
+    required this.onDelete,
+    required this.canDelete,
+    required this.canEdit,
     required this.emojiRepositoryFactory,
     required this.accountId,
     required this.actionScopeId,
@@ -609,6 +635,9 @@ class _ThreadPost extends StatelessWidget {
   final ValueChanged<String>? onSelectChannel;
   final Future<void> Function(PostReaction reaction) onToggleReaction;
   final Future<bool> Function(String emojiName) onAddReaction;
+  final Future<bool> Function() onDelete;
+  final bool canDelete;
+  final bool canEdit;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
   final String actionScopeId;
@@ -620,6 +649,9 @@ class _ThreadPost extends StatelessWidget {
     return MessageInteractionSurface(
       onOpenThread: null,
       onToggleReaction: onAddReaction,
+      onDelete: onDelete,
+      canDelete: canDelete,
+      canEdit: canEdit,
       emojiRepositoryFactory: emojiRepositoryFactory,
       accountId: accountId,
       postPermalink: postPermalink,

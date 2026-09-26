@@ -114,6 +114,32 @@ void main() {
     expect(find.text(MessageActionsStrings.linkCopied), findsOneWidget);
   });
 
+  testWidgets('runs deletion from the touch message actions', (
+    WidgetTester tester,
+  ) async {
+    var deleted = 0;
+    await tester.pumpWidget(
+      _app(
+        onOpenThread: () {},
+        onDelete: () async {
+          deleted += 1;
+          return true;
+        },
+        canDelete: true,
+        canEdit: true,
+      ),
+    );
+
+    await tester.longPress(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text(MessageActionsStrings.delete));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(MessageActionsStrings.delete));
+    await tester.pumpAndSettle();
+
+    expect(deleted, 1);
+  });
+
   testWidgets('touch tap on message padding opens its thread exactly once', (
     WidgetTester tester,
   ) async {
@@ -130,6 +156,18 @@ void main() {
     await tester.pump();
 
     expect(openCount, 1);
+  });
+
+  testWidgets('does not show Edit or Delete for another author post', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_app(onOpenThread: () {}));
+
+    await tester.longPress(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+
+    expect(find.text(MessageActionsStrings.delete), findsNothing);
+    expect(find.text(MessageActionsStrings.edit), findsNothing);
   });
 
   testWidgets(
@@ -291,6 +329,8 @@ void main() {
         onOpenThread: () => openCount += 1,
         messageHeight: 24,
         followingMessage: true,
+        canDelete: true,
+        canEdit: true,
       ),
     );
     final TestGesture mouse = await tester.createGesture(
@@ -328,6 +368,7 @@ void main() {
     expect(openCount, 0);
     expect(find.text(MessageActionsStrings.forward), findsOneWidget);
     expect(find.text(MessageActionsStrings.delete), findsOneWidget);
+    expect(find.text(MessageActionsStrings.edit), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -384,6 +425,27 @@ void main() {
       'text': 'https://chat.example.com/team-a/pl/post-1',
     });
     expect(find.text(MessageActionsStrings.linkCopied), findsOneWidget);
+  });
+
+  testWidgets('mouse popup hides owner-only actions for another author', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_app(onOpenThread: () {}));
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: tester.getCenter(find.text('Message')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('more-message-actions')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(MessageActionsStrings.edit), findsNothing);
+    expect(find.text(MessageActionsStrings.delete), findsNothing);
   });
 
   testWidgets('mouse long press on Markdown text does not open touch sheet', (
@@ -512,6 +574,9 @@ Widget _app({
   TextScaler textScaler = TextScaler.noScaling,
   CustomEmojiRepository? repository,
   Future<bool> Function(String emojiName)? onToggleReaction,
+  Future<bool> Function()? onDelete,
+  bool canDelete = false,
+  bool canEdit = false,
   Uri? postPermalink,
 }) => MaterialApp(
   builder: (BuildContext context, Widget? child) => MediaQuery(
@@ -533,6 +598,9 @@ Widget _app({
                   : () => repository,
               accountId: repository == null ? '' : 'account-a',
               onToggleReaction: onToggleReaction,
+              onDelete: onDelete,
+              canDelete: canDelete,
+              canEdit: canEdit,
               postPermalink: postPermalink,
               child: SizedBox(
                 height: messageHeight,

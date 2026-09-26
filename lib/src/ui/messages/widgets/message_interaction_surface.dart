@@ -51,6 +51,9 @@ class MessageInteractionSurface extends StatefulWidget {
     required this.onOpenThread,
     required this.child,
     this.onToggleReaction,
+    this.onDelete,
+    this.canDelete = false,
+    this.canEdit = false,
     this.emojiRepositoryFactory,
     this.accountId = '',
     this.postPermalink,
@@ -60,6 +63,9 @@ class MessageInteractionSurface extends StatefulWidget {
   final VoidCallback? onOpenThread;
   final Widget child;
   final Future<bool> Function(String emojiName)? onToggleReaction;
+  final Future<bool> Function()? onDelete;
+  final bool canDelete;
+  final bool canEdit;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
   final Uri? postPermalink;
@@ -151,6 +157,7 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
             isScrollControlled: true,
             builder: (BuildContext context) => _MessageActionsBottomSheet(
               canCopyLink: widget.postPermalink != null,
+              canDelete: widget.canDelete,
             ),
           );
       if (!mounted || result == null) return;
@@ -214,6 +221,18 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
   }
 
   Future<void> _handleAction(_MessageAction action) async {
+    if (action == _MessageAction.delete) {
+      final bool deleted =
+          await (widget.onDelete?.call() ?? Future<bool>.value(false));
+      if (!deleted && mounted) {
+        ScaffoldMessenger.maybeOf(context)
+          ?..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text(MessageActionsStrings.deleteFailed)),
+          );
+      }
+      return;
+    }
     if (action != _MessageAction.copyLink) return;
     final Uri? permalink = widget.postPermalink;
     if (permalink == null) return;
@@ -272,6 +291,8 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
                         onEmojiSelected: _submitReaction,
                         onOpenPicker: _openPointerPicker,
                         canCopyLink: widget.postPermalink != null,
+                        canDelete: widget.canDelete,
+                        canEdit: widget.canEdit,
                         onActionSelected: _handleAction,
                         onMoreMenuOpened: _handleMoreActionsMenuOpen,
                         onMoreMenuClosed: _handleMoreActionsMenuClosed,
@@ -353,6 +374,8 @@ class _QuickMessageActions extends StatelessWidget {
     required this.onEmojiSelected,
     required this.onOpenPicker,
     required this.canCopyLink,
+    required this.canDelete,
+    required this.canEdit,
     required this.onActionSelected,
     required this.onMoreMenuOpened,
     required this.onMoreMenuClosed,
@@ -362,6 +385,8 @@ class _QuickMessageActions extends StatelessWidget {
   final Future<void> Function(String) onEmojiSelected;
   final Future<void> Function(BuildContext) onOpenPicker;
   final bool canCopyLink;
+  final bool canDelete;
+  final bool canEdit;
   final Future<void> Function(_MessageAction) onActionSelected;
   final VoidCallback onMoreMenuOpened;
   final VoidCallback onMoreMenuClosed;
@@ -413,8 +438,11 @@ class _QuickMessageActions extends StatelessWidget {
               onMoreMenuClosed();
               unawaited(onActionSelected(action));
             },
-            itemBuilder: (BuildContext context) =>
-                _menuItems(canCopyLink: canCopyLink),
+            itemBuilder: (BuildContext context) => _menuItems(
+              canCopyLink: canCopyLink,
+              canDelete: canDelete,
+              canEdit: canEdit,
+            ),
           ),
         ],
       ),
@@ -437,9 +465,13 @@ class _EmojiAction extends StatelessWidget {
 }
 
 class _MessageActionsBottomSheet extends StatelessWidget {
-  const _MessageActionsBottomSheet({required this.canCopyLink});
+  const _MessageActionsBottomSheet({
+    required this.canCopyLink,
+    required this.canDelete,
+  });
 
   final bool canCopyLink;
+  final bool canDelete;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -481,7 +513,10 @@ class _MessageActionsBottomSheet extends StatelessWidget {
             ),
           ),
           const Divider(),
-          for (final _MessageAction action in _bottomSheetActions)
+          for (final _MessageAction action in _bottomSheetActions.where(
+            (_MessageAction action) =>
+                action != _MessageAction.delete || canDelete,
+          ))
             ListTile(
               leading: Icon(action.icon),
               title: Text(action.label),
@@ -491,6 +526,9 @@ class _MessageActionsBottomSheet extends StatelessWidget {
                   context,
                 ).pop(_MessageSheetResult.action(action)),
                 _MessageAction.copyLink => null,
+                _MessageAction.delete => () => Navigator.of(
+                  context,
+                ).pop(_MessageSheetResult.action(action)),
                 _ => _mockAction,
               },
               minTileHeight: 48,
@@ -548,9 +586,14 @@ const List<_MessageAction> _bottomSheetActions = <_MessageAction>[
   _MessageAction.save,
   _MessageAction.copyText,
   _MessageAction.pin,
+  _MessageAction.delete,
 ];
 
-List<PopupMenuEntry<_MessageAction>> _menuItems({required bool canCopyLink}) =>
+List<PopupMenuEntry<_MessageAction>> _menuItems({
+  required bool canCopyLink,
+  required bool canDelete,
+  required bool canEdit,
+}) =>
     <_MessageAction>[
           _MessageAction.reply,
           _MessageAction.forward,
@@ -561,8 +604,8 @@ List<PopupMenuEntry<_MessageAction>> _menuItems({required bool canCopyLink}) =>
           _MessageAction.pin,
           _MessageAction.copyText,
           _MessageAction.copyLink,
-          _MessageAction.edit,
-          _MessageAction.delete,
+          if (canEdit) _MessageAction.edit,
+          if (canDelete) _MessageAction.delete,
         ]
         .map((action) {
           final bool destructive = action == _MessageAction.delete;

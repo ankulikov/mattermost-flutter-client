@@ -170,6 +170,9 @@ abstract interface class MattermostApi {
   /// Creates a channel post or a threaded reply through the REST API.
   Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post);
 
+  /// Permanently deletes a post the authenticated user is allowed to delete.
+  Future<void> deletePost(String postId) => throw UnimplementedError();
+
   /// Dispatches an attachment action through Mattermost, never directly to
   /// the integration URL. The post must be reloaded after a success.
   Future<MattermostPostActionResponseDto> executePostAction({

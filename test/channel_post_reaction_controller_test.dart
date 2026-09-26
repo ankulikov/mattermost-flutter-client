@@ -87,12 +87,51 @@ void main() {
     expect(reaction.count, 2);
     expect(reaction.reactedByCurrentUser, isFalse);
   });
+
+  test(
+    'removes a post from the open channel after deletion succeeds',
+    () async {
+      final _PostRepository posts = _PostRepository();
+      final Provider<AuthSession?> sessionProvider = Provider<AuthSession?>((
+        _,
+      ) {
+        return AuthSession(
+          serverUrl: Uri.parse('https://chat.example.com'),
+          userId: 'me',
+          username: 'current',
+        );
+      });
+      final Provider<PostRepository> postsProvider = Provider<PostRepository>(
+        (_) => posts,
+      );
+      final AsyncNotifierProvider<ChannelPostsController, ChannelPostsViewState>
+      controllerProvider =
+          AsyncNotifierProvider<ChannelPostsController, ChannelPostsViewState>(
+            () => ChannelPostsController(
+              'channel-1',
+              sessionProvider,
+              postsProvider,
+            ),
+          );
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(controllerProvider.future);
+
+      expect(
+        await container.read(controllerProvider.notifier).deletePost('post-1'),
+        isTrue,
+      );
+      expect(posts.deleted, <String>['post-1']);
+      expect(container.read(controllerProvider).requireValue.posts, isEmpty);
+    },
+  );
 }
 
 final class _PostRepository extends PostRepository {
   final List<String> added = <String>[];
   final List<String> removed = <String>[];
   bool failAdd = false;
+  final List<String> deleted = <String>[];
 
   @override
   Future<ChannelPostPage> loadLatest({
@@ -140,4 +179,10 @@ final class _PostRepository extends PostRepository {
     required String postId,
     required String emojiName,
   }) async => removed.add('$postId:$emojiName');
+
+  @override
+  Future<void> deletePost({
+    required AuthSession session,
+    required String postId,
+  }) async => deleted.add(postId);
 }

@@ -173,6 +173,12 @@ final class MattermostPostRepository extends PostRepository {
   }
 
   @override
+  Future<void> deletePost({
+    required AuthSession session,
+    required String postId,
+  }) => _api.deletePost(postId);
+
+  @override
   Future<void> addReaction({
     required AuthSession session,
     required String postId,
