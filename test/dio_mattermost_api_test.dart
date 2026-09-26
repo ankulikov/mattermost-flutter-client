@@ -421,6 +421,18 @@ void main() {
     expect(created.rootId, 'root-1');
   });
 
+  test('deletes a post with an encoded identifier', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(body: '{}');
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    await api.deletePost('post / one');
+
+    expect(adapter.request?.method, 'DELETE');
+    expect(adapter.request?.path, '/posts/post%20%2F%20one');
+  });
+
   test(
     'dispatches an attachment action with encoded IDs and selection',
     () async {

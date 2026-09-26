@@ -77,6 +77,7 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
   bool _markReadRunning = false;
   DateTime? _markedLoadedAt;
   final Set<String> _reactionRequests = <String>{};
+  final Set<String> _deleteRequests = <String>{};
 
   @override
   Future<ThreadViewState> build() async {
@@ -366,6 +367,48 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
       return false;
     } finally {
       _reactionRequests.remove(requestKey);
+    }
+  }
+
+  /// Removes a successfully deleted post from the volatile thread snapshot.
+  Future<bool> deletePost(String postId) async {
+    final AuthSession? session = _session;
+    final ThreadViewState? current = state.value;
+    if (session == null ||
+        current == null ||
+        !_deleteRequests.add(postId) ||
+        _findPost(current.thread, postId) == null) {
+      return false;
+    }
+    try {
+      await _cancellation.run(
+        () => ref
+            .read(_postRepositoryProvider)
+            .deletePost(session: session, postId: postId),
+      );
+      if (_cancellation.isCancelled) return false;
+      final ThreadViewState? latest = state.value;
+      if (latest != null) {
+        final MessageThread thread = latest.thread;
+        state = AsyncData(
+          latest.copyWith(
+            thread: MessageThread(
+              rootPostId: thread.rootPostId,
+              root: thread.root?.id == postId ? null : thread.root,
+              replies: List<ChannelPost>.unmodifiable(
+                thread.replies.where((ChannelPost reply) => reply.id != postId),
+              ),
+              isComplete: thread.isComplete,
+              loadedAt: thread.loadedAt,
+            ),
+          ),
+        );
+      }
+      return true;
+    } on Object {
+      return false;
+    } finally {
+      _deleteRequests.remove(postId);
     }
   }
 

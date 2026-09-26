@@ -14,6 +14,7 @@ abstract final class MessageActionsStrings {
   static const String forward = 'Forward';
   static const String edit = 'Edit';
   static const String delete = 'Delete';
+  static const String deleteFailed = 'Could not delete the message.';
   static const String searchEmojis = 'Search emojis';
   static const String recentlyUsed = 'Recently used';
   static const String smileysAndEmotion = 'Smileys & emotion';

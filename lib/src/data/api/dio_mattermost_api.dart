@@ -509,6 +509,10 @@ final class DioMattermostApi
   }
 
   @override
+  Future<void> deletePost(String postId) =>
+      _delete('/posts/${Uri.encodeComponent(postId)}');
+
+  @override
   Future<MattermostPostActionResponseDto> executePostAction({
     required String postId,
     required String actionId,

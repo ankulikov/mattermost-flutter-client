@@ -83,6 +83,7 @@ final class ChannelPostsController
   int _focusRequest = 0;
   String? _requestedFocusPostId;
   final Set<String> _reactionRequests = <String>{};
+  final Set<String> _deleteRequests = <String>{};
 
   @override
   Future<ChannelPostsViewState> build() async {
@@ -381,6 +382,86 @@ final class ChannelPostsController
     } finally {
       _reactionRequests.remove(requestKey);
     }
+  }
+
+  /// Removes a successfully deleted root post from the open channel snapshot.
+  Future<bool> deletePost(String postId) async {
+    final AuthSession? session = _session;
+    final ChannelPostsViewState? current = state.value;
+    if (session == null ||
+        current == null ||
+        !_deleteRequests.add(postId) ||
+        !current.posts.any((ChannelPost post) => post.id == postId)) {
+      return false;
+    }
+    try {
+      await _cancellation.run(
+        () => _repository!.deletePost(session: session, postId: postId),
+      );
+      if (_cancellation.isCancelled) return false;
+      final ChannelPostsViewState? latest = state.value;
+      if (latest != null) {
+        _removePostFromSnapshot(latest, postId: postId);
+      }
+      return true;
+    } on Object {
+      return false;
+    } finally {
+      _deleteRequests.remove(postId);
+    }
+  }
+
+  /// Applies a deletion already acknowledged by another open view, such as a
+  /// side thread, without issuing a duplicate REST request.
+  void removePostLocally(ChannelPost post) {
+    final ChannelPostsViewState? current = state.value;
+    if (current == null) return;
+    _removePostFromSnapshot(current, postId: post.id, reply: post);
+  }
+
+  void _removePostFromSnapshot(
+    ChannelPostsViewState current, {
+    required String postId,
+    ChannelPost? reply,
+  }) {
+    if (reply == null || reply.rootId.isEmpty) {
+      state = AsyncData(
+        current.copyWith(
+          posts: List<ChannelPost>.unmodifiable(
+            current.posts.where((ChannelPost post) => post.id != postId),
+          ),
+        ),
+      );
+      return;
+    }
+    final ChannelReplySummary? summary = current.replySummaries[reply.rootId];
+    final bool wasKnown = summary?.replyIds.contains(postId) == true;
+    final Map<String, ChannelReplySummary> summaries =
+        <String, ChannelReplySummary>{...current.replySummaries};
+    if (summary != null && wasKnown) {
+      summaries[reply.rootId] = ChannelReplySummary(
+        replyIds: Set<String>.unmodifiable(
+          summary.replyIds.where((String id) => id != postId),
+        ),
+        lastReplyAt: summary.lastReplyAt,
+      );
+    }
+    state = AsyncData(
+      current.copyWith(
+        posts: List<ChannelPost>.unmodifiable(
+          current.posts.map((ChannelPost post) {
+            if (post.id != reply.rootId || !wasKnown) return post;
+            return post.withThreadSummary(
+              replyCount: post.replyCount > 0 ? post.replyCount - 1 : 0,
+              lastReplyAt: post.lastReplyAt,
+            );
+          }),
+        ),
+        replySummaries: Map<String, ChannelReplySummary>.unmodifiable(
+          summaries,
+        ),
+      ),
+    );
   }
 
   /// Replaces a post using the same canonical collection policy as updates.

@@ -49,6 +49,13 @@ abstract class PostRepository {
     String rootPostId = '',
   }) => throw UnimplementedError();
 
+  /// Deletes a post. Presentation owns removing it from its volatile snapshot
+  /// after this command succeeds.
+  Future<void> deletePost({
+    required AuthSession session,
+    required String postId,
+  }) => throw UnimplementedError();
+
   Future<void> addReaction({
     required AuthSession session,
     required String postId,
