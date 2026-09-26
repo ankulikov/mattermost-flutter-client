@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/features/profile/domain/models/current_user_profile.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/current_user_profile_controller.dart';
@@ -25,8 +26,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     ref.listen(currentUserProfileProvider, (previous, next) {
-      final bool failed = next.value?.actionFailed ?? false;
-      if (failed && !(previous?.value?.actionFailed ?? false)) {
+      final bool failed = next.value?.updateStatus is OperationFailed;
+      if (failed && previous?.value?.updateStatus is! OperationFailed) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
@@ -143,7 +144,8 @@ class _ProfileBody extends StatelessWidget {
                       children: <Widget>[
                         _ProfileHeader(
                           profile: profile,
-                          onClearCustomStatus: state.isUpdating
+                          onClearCustomStatus:
+                              state.updateStatus is OperationInProgress
                               ? null
                               : onClearCustomStatus,
                         ),
@@ -156,7 +158,7 @@ class _ProfileBody extends StatelessWidget {
                         const SizedBox(height: 12),
                         _AvailabilityChoices(
                           selected: profile.availability.presence,
-                          enabled: !state.isUpdating,
+                          enabled: state.updateStatus is! OperationInProgress,
                           onSelected: onAvailabilitySelected,
                         ),
                         const SizedBox(height: 28),
@@ -169,7 +171,7 @@ class _ProfileBody extends StatelessWidget {
                         _QuickStatusChoices(
                           statuses: quickStatuses,
                           currentStatus: profile.customStatus,
-                          enabled: !state.isUpdating,
+                          enabled: state.updateStatus is! OperationInProgress,
                           onSelected: onCustomStatusSelected,
                         ),
                         const SizedBox(height: 32),
@@ -186,7 +188,7 @@ class _ProfileBody extends StatelessWidget {
             ),
           ],
         ),
-        if (state.isUpdating)
+        if (state.updateStatus is OperationInProgress)
           const PositionedDirectional(
             top: 0,
             start: 0,

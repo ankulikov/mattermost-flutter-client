@@ -24,7 +24,10 @@ final class MentionAutocompleteState {
   final Object? error;
 
   bool get isLoading => status == MentionAutocompleteStatus.loading;
-  bool get hasResults => result != null && !_isEmpty(result!);
+  bool get hasResults => switch (result) {
+    final MentionSearchResult value => !_isEmpty(value),
+    null => false,
+  };
 
   MentionAutocompleteState copyWith({
     MentionQuery? query,

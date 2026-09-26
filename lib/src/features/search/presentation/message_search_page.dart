@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
@@ -229,7 +230,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
         actions: <Widget>[
           IconButton(
             tooltip: MessageSearchStrings.refresh,
-            onPressed: state.phase == MessageSearchPhase.data
+            onPressed: state.phase is MessageSearchData
                 ? () => unawaited(controller.refresh())
                 : null,
             icon: const Icon(Icons.refresh),
@@ -413,7 +414,7 @@ class _Results extends StatelessWidget {
   final ScrollController scrollController;
   @override
   Widget build(BuildContext context) {
-    if (state.phase == MessageSearchPhase.initialLoading) {
+    if (state.phase is MessageSearchInitialLoading) {
       return Center(
         child: Semantics(
           label: MessageSearchStrings.loading,
@@ -421,13 +422,13 @@ class _Results extends StatelessWidget {
         ),
       );
     }
-    if (state.phase == MessageSearchPhase.initialError) {
+    if (state.phase is MessageSearchInitialFailure) {
       return _Centered(
         message: MessageSearchStrings.searchFailed,
         action: () => unawaited(controller.retry()),
       );
     }
-    if (state.phase == MessageSearchPhase.initial) {
+    if (state.phase is MessageSearchInitial) {
       return const _Centered(message: MessageSearchStrings.syntax);
     }
     if (state.results.isEmpty) {
@@ -475,13 +476,13 @@ class _Pagination extends StatelessWidget {
   final MessageSearchController controller;
   @override
   Widget build(BuildContext context) {
-    if (state.isLoadingMore) {
+    if (state.paginationStatus is OperationInProgress) {
       return const Padding(
         padding: EdgeInsets.all(16),
         child: Center(child: CircularProgressIndicator()),
       );
     }
-    if (state.paginationError != null) {
+    if (state.paginationStatus is OperationFailed) {
       return Center(
         child: TextButton(
           onPressed: () => unawaited(controller.loadMore()),

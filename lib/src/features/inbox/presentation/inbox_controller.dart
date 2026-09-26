@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
@@ -23,28 +24,24 @@ final class InboxInAppNotification {
 final class InboxViewState {
   const InboxViewState({
     required this.snapshot,
-    this.isRefreshing = false,
-    this.refreshFailed = false,
+    this.refreshStatus = const OperationStatus.idle(),
     this.connectionStatus = InboxConnectionStatus.disconnected,
     this.inAppNotification,
   });
 
   final InboxSnapshot snapshot;
-  final bool isRefreshing;
-  final bool refreshFailed;
+  final OperationStatus refreshStatus;
   final InboxConnectionStatus connectionStatus;
   final InboxInAppNotification? inAppNotification;
 
   InboxViewState copyWith({
     InboxSnapshot? snapshot,
-    bool? isRefreshing,
-    bool? refreshFailed,
+    OperationStatus? refreshStatus,
     InboxConnectionStatus? connectionStatus,
     InboxInAppNotification? inAppNotification,
   }) => InboxViewState(
     snapshot: snapshot ?? this.snapshot,
-    isRefreshing: isRefreshing ?? this.isRefreshing,
-    refreshFailed: refreshFailed ?? this.refreshFailed,
+    refreshStatus: refreshStatus ?? this.refreshStatus,
     connectionStatus: connectionStatus ?? this.connectionStatus,
     inAppNotification: inAppNotification ?? this.inAppNotification,
   );
@@ -67,7 +64,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   StreamSubscription<InboxRealtimeEvent>? _realtimeSubscription;
   final List<InboxPostChanged> _pendingRealtimePostChanges =
       <InboxPostChanged>[];
-  bool _busy = false;
+  _InboxOperation _operation = _InboxOperation.idle;
   bool _realtimeRefreshQueued = false;
   var _buildGeneration = 0;
 
@@ -80,7 +77,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     unawaited(_realtimeSubscription?.cancel());
     _realtimeSubscription = null;
     _pendingRealtimePostChanges.clear();
-    _busy = false;
+    _operation = _InboxOperation.idle;
     _realtimeRefreshQueued = false;
     ref.onDispose(() {
       cancellation.cancel();
@@ -96,15 +93,17 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       _postponed = null;
       return InboxViewState(snapshot: InboxSnapshot());
     }
-    _inbox = ref.watch(_inboxProvider);
-    _postponed = ref.watch(_postponedProvider);
+    final InboxRepository inbox = ref.watch(_inboxProvider);
+    final PostponedRepository postponed = ref.watch(_postponedProvider);
+    _inbox = inbox;
+    _postponed = postponed;
     final InboxViewState result = InboxViewState(
-      snapshot: await cancellation.run(() => _inbox!.load(session: session)),
+      snapshot: await cancellation.run(() => inbox.load(session: session)),
     );
     unawaited(
       _listenRealtimeAfterBuild(
         session: session,
-        inbox: _inbox!,
+        inbox: inbox,
         generation: generation,
       ),
     );
@@ -150,9 +149,10 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   /// Replaces a potentially half-open socket and reconciles events missed
   /// while the process was suspended.
   void handleAppResumed() {
-    if (_session == null || _inbox == null) return;
+    final InboxRepository? inbox = _inbox;
+    if (_session == null || inbox == null) return;
     _setConnectionStatus(InboxConnectionStatus.connecting);
-    _inbox!.reconnectRealtime();
+    inbox.reconnectRealtime();
     _realtimeRefreshQueued = true;
     unawaited(_refreshFromRealtime());
   }
@@ -164,7 +164,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       case InboxConnectionChanged(:final status):
         _setConnectionStatus(status);
       case InboxPostChanged():
-        if (_busy) {
+        if (_operation != _InboxOperation.idle) {
           _pendingRealtimePostChanges.add(event);
           return;
         }
@@ -193,11 +193,12 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         snapshot.newItems.any(
           (InboxItem item) => item.postIds.contains(change.postId),
         );
+    final InboxPostCandidate? candidate = change.candidate;
     state = AsyncData(
       current.copyWith(
         snapshot: snapshot,
-        inAppNotification: wasAdded
-            ? InboxInAppNotification(candidate: change.candidate!)
+        inAppNotification: wasAdded && candidate != null
+            ? InboxInAppNotification(candidate: candidate)
             : current.inAppNotification,
       ),
     );
@@ -210,7 +211,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   }
 
   Future<void> _refreshFromRealtime() async {
-    if (_busy || !_realtimeRefreshQueued) return;
+    if (_operation != _InboxOperation.idle || !_realtimeRefreshQueued) return;
     _realtimeRefreshQueued = false;
     await refresh();
   }
@@ -219,10 +220,15 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     final InboxViewState? current = state.value;
     final AuthSession? session = _session;
     final InboxRepository? inbox = _inbox;
-    if (_busy || current == null || session == null || inbox == null) return;
-    _busy = true;
+    if (_operation != _InboxOperation.idle ||
+        current == null ||
+        session == null ||
+        inbox == null) {
+      return;
+    }
+    _operation = _InboxOperation.refresh;
     state = AsyncData(
-      current.copyWith(isRefreshing: true, refreshFailed: false),
+      current.copyWith(refreshStatus: const OperationStatus.inProgress()),
     );
     try {
       final RequestCancellation? cancellation = _cancellation;
@@ -234,15 +240,14 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       state = AsyncData(
         latest.copyWith(
           snapshot: snapshot,
-          isRefreshing: false,
-          refreshFailed: false,
+          refreshStatus: const OperationStatus.idle(),
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       if (_cancellation?.isCancelled == false) {
         final InboxViewState latest = state.value ?? current;
         state = AsyncData(
-          latest.copyWith(isRefreshing: false, refreshFailed: true),
+          latest.copyWith(refreshStatus: OperationStatus.failed(error)),
         );
       }
     } finally {
@@ -292,10 +297,13 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     final InboxViewState? current = state.value;
     final AuthSession? session = _session;
     final InboxRepository? inbox = _inbox;
-    if (_busy || current == null || session == null || inbox == null) {
+    if (_operation != _InboxOperation.idle ||
+        current == null ||
+        session == null ||
+        inbox == null) {
       return false;
     }
-    _busy = true;
+    _operation = _InboxOperation.markRead;
     try {
       await inbox.markRead(session: session, item: item);
       final List<InboxItem> newItems = current.snapshot.newItems
@@ -311,8 +319,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
             hasIncompleteMentionReconstruction:
                 current.snapshot.hasIncompleteMentionReconstruction,
           ),
-          isRefreshing: false,
-          refreshFailed: false,
+          refreshStatus: const OperationStatus.idle(),
         ),
       );
       return true;
@@ -342,10 +349,13 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     final InboxViewState? current = state.value;
     final AuthSession? session = _session;
     final PostponedRepository? postponed = _postponed;
-    if (_busy || current == null || session == null || postponed == null) {
+    if (_operation != _InboxOperation.idle ||
+        current == null ||
+        session == null ||
+        postponed == null) {
       return false;
     }
-    _busy = true;
+    _operation = _InboxOperation.move;
     final DateTime now = DateTime.now().toUtc();
     final PostponedReferenceKind kind = item is ThreadInboxItem
         ? PostponedReferenceKind.thread
@@ -386,8 +396,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
             hasIncompleteMentionReconstruction:
                 current.snapshot.hasIncompleteMentionReconstruction,
           ),
-          isRefreshing: false,
-          refreshFailed: false,
+          refreshStatus: const OperationStatus.idle(),
         ),
       );
       return true;
@@ -399,7 +408,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   }
 
   void _finishBusyOperation() {
-    _busy = false;
+    _operation = _InboxOperation.idle;
     final InboxViewState? current = state.value;
     if (current != null && _pendingRealtimePostChanges.isNotEmpty) {
       for (final InboxPostChanged change in _pendingRealtimePostChanges) {
@@ -452,3 +461,5 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     ),
   };
 }
+
+enum _InboxOperation { idle, refresh, markRead, move }

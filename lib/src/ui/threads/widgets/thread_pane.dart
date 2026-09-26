@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -124,7 +125,8 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
             onClose: widget.onClose,
             showsFollowButton: _request.allowsFollowing,
             isFollowing: displayedState?.isFollowing,
-            isUpdatingFollow: displayedState?.isUpdatingFollow ?? false,
+            isUpdatingFollow:
+                displayedState?.followUpdateStatus is OperationInProgress,
             onToggleFollowing: _toggleFollowing,
           ),
           const Divider(height: 1),
@@ -136,7 +138,8 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
               ),
               data: (ThreadViewState state) {
                 final ChannelPost? root = state.thread.root;
-                if (root == null && state.isRefreshing) {
+                if (root == null &&
+                    state.refreshStatus is OperationInProgress) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (root == null) {
@@ -171,7 +174,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                     };
                 return Column(
                   children: <Widget>[
-                    if (state.refreshFailed)
+                    if (state.refreshStatus is OperationFailed)
                       MaterialBanner(
                         content: const Text(ThreadStrings.loadFailed),
                         actions: <Widget>[
@@ -182,7 +185,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                           ),
                         ],
                       ),
-                    if (state.markReadFailed)
+                    if (state.markReadStatus is OperationFailed)
                       MaterialBanner(
                         content: const Text(ThreadStrings.markReadFailed),
                         actions: <Widget>[
@@ -322,7 +325,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                         ],
                       ),
                     ),
-                    if (state.followUpdateFailed)
+                    if (state.followUpdateStatus is OperationFailed)
                       const MaterialBanner(
                         content: Text(ThreadStrings.followUpdateFailed),
                         actions: <Widget>[],

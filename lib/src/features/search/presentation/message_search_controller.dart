@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
@@ -8,7 +9,27 @@ import 'package:mattermost_flutter/src/features/search/domain/policies/message_s
 import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_repository.dart';
 import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_timezone_repository.dart';
 
-enum MessageSearchPhase { initial, initialLoading, data, initialError }
+sealed class MessageSearchPhase {
+  const MessageSearchPhase();
+}
+
+final class MessageSearchInitial extends MessageSearchPhase {
+  const MessageSearchInitial();
+}
+
+final class MessageSearchInitialLoading extends MessageSearchPhase {
+  const MessageSearchInitialLoading();
+}
+
+final class MessageSearchData extends MessageSearchPhase {
+  const MessageSearchData();
+}
+
+final class MessageSearchInitialFailure extends MessageSearchPhase {
+  const MessageSearchInitialFailure(this.error);
+
+  final Object error;
+}
 
 /// A shell-to-Search handoff. [nonce] makes an intent safe to observe more
 /// than once while a shell rebuilds.
@@ -30,16 +51,13 @@ final class MessageSearchViewState {
   const MessageSearchViewState({
     this.draftQuery = '',
     this.submittedQuery,
-    this.phase = MessageSearchPhase.initial,
+    this.phase = const MessageSearchInitial(),
     this.results = const <MessageSearchResult>[],
     this.nextPage = 0,
     this.hasMore = false,
     this.pageFingerprints = const <String>{},
-    this.isRefreshing = false,
-    this.isLoadingMore = false,
-    this.initialError,
-    this.refreshError,
-    this.paginationError,
+    this.refreshStatus = const OperationStatus.idle(),
+    this.paginationStatus = const OperationStatus.idle(),
     this.focusRequestNonce,
   });
 
@@ -50,11 +68,8 @@ final class MessageSearchViewState {
   final int nextPage;
   final bool hasMore;
   final Set<String> pageFingerprints;
-  final bool isRefreshing;
-  final bool isLoadingMore;
-  final Object? initialError;
-  final Object? refreshError;
-  final Object? paginationError;
+  final OperationStatus refreshStatus;
+  final OperationStatus paginationStatus;
 
   /// The UI requests focus once for each consumed launch intent.
   final Object? focusRequestNonce;
@@ -69,11 +84,8 @@ final class MessageSearchViewState {
     int? nextPage,
     bool? hasMore,
     Set<String>? pageFingerprints,
-    bool? isRefreshing,
-    bool? isLoadingMore,
-    Object? initialError = _unset,
-    Object? refreshError = _unset,
-    Object? paginationError = _unset,
+    OperationStatus? refreshStatus,
+    OperationStatus? paginationStatus,
     Object? focusRequestNonce = _unset,
   }) => MessageSearchViewState(
     draftQuery: draftQuery ?? this.draftQuery,
@@ -85,17 +97,8 @@ final class MessageSearchViewState {
     nextPage: nextPage ?? this.nextPage,
     hasMore: hasMore ?? this.hasMore,
     pageFingerprints: pageFingerprints ?? this.pageFingerprints,
-    isRefreshing: isRefreshing ?? this.isRefreshing,
-    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-    initialError: identical(initialError, _unset)
-        ? this.initialError
-        : initialError,
-    refreshError: identical(refreshError, _unset)
-        ? this.refreshError
-        : refreshError,
-    paginationError: identical(paginationError, _unset)
-        ? this.paginationError
-        : paginationError,
+    refreshStatus: refreshStatus ?? this.refreshStatus,
+    paginationStatus: paginationStatus ?? this.paginationStatus,
     focusRequestNonce: identical(focusRequestNonce, _unset)
         ? this.focusRequestNonce
         : focusRequestNonce,
@@ -195,15 +198,17 @@ final class MessageSearchController extends ChangeNotifier {
     final String? query = _state.submittedQuery;
     if (_disposed ||
         query == null ||
-        _state.phase != MessageSearchPhase.data ||
-        _state.isRefreshing ||
-        _state.isLoadingMore) {
+        _state.phase is! MessageSearchData ||
+        _state.refreshStatus is OperationInProgress ||
+        _state.paginationStatus is OperationInProgress) {
       return;
     }
     final _SearchContext? context = _context;
     if (context == null) return;
     final (RequestCancellation cancellation, int generation) = _beginRequest();
-    _setState(_state.copyWith(isRefreshing: true, refreshError: null));
+    _setState(
+      _state.copyWith(refreshStatus: const OperationStatus.inProgress()),
+    );
     try {
       final MessageSearchPage page = await _loadPage(
         context: context,
@@ -218,7 +223,7 @@ final class MessageSearchController extends ChangeNotifier {
           error is RequestCancelledException) {
         return;
       }
-      _setState(_state.copyWith(isRefreshing: false, refreshError: error));
+      _setState(_state.copyWith(refreshStatus: OperationStatus.failed(error)));
     } finally {
       _finishRequest(cancellation);
     }
@@ -226,10 +231,10 @@ final class MessageSearchController extends ChangeNotifier {
 
   Future<void> loadMore() async {
     if (_disposed ||
-        _state.phase != MessageSearchPhase.data ||
+        _state.phase is! MessageSearchData ||
         !_state.hasMore ||
-        _state.isRefreshing ||
-        _state.isLoadingMore) {
+        _state.refreshStatus is OperationInProgress ||
+        _state.paginationStatus is OperationInProgress) {
       return;
     }
     final String? query = _state.submittedQuery;
@@ -237,7 +242,9 @@ final class MessageSearchController extends ChangeNotifier {
     if (query == null || context == null) return;
     final int pageNumber = _state.nextPage;
     final (RequestCancellation cancellation, int generation) = _beginRequest();
-    _setState(_state.copyWith(isLoadingMore: true, paginationError: null));
+    _setState(
+      _state.copyWith(paginationStatus: const OperationStatus.inProgress()),
+    );
     try {
       final MessageSearchPage page = await _loadPage(
         context: context,
@@ -248,7 +255,12 @@ final class MessageSearchController extends ChangeNotifier {
       if (!_isCurrent(cancellation, generation)) return;
       final MessageSearchViewState current = _state;
       if (current.pageFingerprints.contains(page.fingerprint)) {
-        _setState(current.copyWith(isLoadingMore: false, hasMore: false));
+        _setState(
+          current.copyWith(
+            paginationStatus: const OperationStatus.idle(),
+            hasMore: false,
+          ),
+        );
         return;
       }
       final MessageSearchPage merged = mergeMessageSearchPages(
@@ -270,8 +282,7 @@ final class MessageSearchController extends ChangeNotifier {
           nextPage: pageNumber + 1,
           hasMore: merged.hasMore,
           pageFingerprints: Set<String>.unmodifiable(fingerprints),
-          isLoadingMore: false,
-          paginationError: null,
+          paginationStatus: const OperationStatus.idle(),
         ),
       );
     } on Object catch (error) {
@@ -279,7 +290,9 @@ final class MessageSearchController extends ChangeNotifier {
           error is RequestCancelledException) {
         return;
       }
-      _setState(_state.copyWith(isLoadingMore: false, paginationError: error));
+      _setState(
+        _state.copyWith(paginationStatus: OperationStatus.failed(error)),
+      );
     } finally {
       _finishRequest(cancellation);
     }
@@ -295,7 +308,7 @@ final class MessageSearchController extends ChangeNotifier {
       MessageSearchViewState(
         draftQuery: _state.draftQuery,
         submittedQuery: normalized,
-        phase: MessageSearchPhase.initialLoading,
+        phase: const MessageSearchInitialLoading(),
       ),
     );
     try {
@@ -312,12 +325,7 @@ final class MessageSearchController extends ChangeNotifier {
           error is RequestCancelledException) {
         return;
       }
-      _setState(
-        _state.copyWith(
-          phase: MessageSearchPhase.initialError,
-          initialError: error,
-        ),
-      );
+      _setState(_state.copyWith(phase: MessageSearchInitialFailure(error)));
     } finally {
       _finishRequest(cancellation);
     }
@@ -329,7 +337,7 @@ final class MessageSearchController extends ChangeNotifier {
   }) => MessageSearchViewState(
     draftQuery: _state.draftQuery,
     submittedQuery: query,
-    phase: MessageSearchPhase.data,
+    phase: const MessageSearchData(),
     results: List<MessageSearchResult>.unmodifiable(page.results),
     nextPage: page.page + 1,
     hasMore: page.hasMore && page.results.isNotEmpty,

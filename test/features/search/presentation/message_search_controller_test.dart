@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -16,11 +17,11 @@ void main() {
       final MessageSearchController controller = _controller(repository);
 
       controller.updateDraft('  “needle”  ');
-      expect(controller.state.phase, MessageSearchPhase.initial);
+      expect(controller.state.phase, isA<MessageSearchInitial>());
       expect(repository.requests, isEmpty);
 
       final Future<void> submit = controller.submit();
-      expect(controller.state.phase, MessageSearchPhase.initialLoading);
+      expect(controller.state.phase, isA<MessageSearchInitialLoading>());
       await _waitForRequests(repository, 1);
       repository.completeNext(_page('first', <String>['a'], hasMore: true));
       await submit;
@@ -46,7 +47,7 @@ void main() {
 
       repository.completeAt(0, _page('first', <String>['old']));
       await first;
-      expect(controller.state.phase, MessageSearchPhase.initialLoading);
+      expect(controller.state.phase, isA<MessageSearchInitialLoading>());
       repository.completeAt(1, _page('second', <String>['new']));
       await second;
 
@@ -66,15 +67,18 @@ void main() {
         repository.failNext(StateError('offline'));
         await initial;
 
-        expect(controller.state.phase, MessageSearchPhase.initialError);
-        expect(controller.state.initialError, isA<StateError>());
+        expect(controller.state.phase, isA<MessageSearchInitialFailure>());
+        expect(
+          (controller.state.phase as MessageSearchInitialFailure).error,
+          isA<StateError>(),
+        );
         controller.updateDraft('different draft');
         final Future<void> retry = controller.retry();
         await _waitForRequests(repository, 2);
         expect(repository.requests.last.terms, 'needle');
         repository.completeNext(_page('first', <String>['a']));
         await retry;
-        expect(controller.state.phase, MessageSearchPhase.data);
+        expect(controller.state.phase, isA<MessageSearchData>());
         controller.dispose();
       },
     );
@@ -91,13 +95,17 @@ void main() {
         await initial;
 
         final Future<void> refresh = controller.refresh();
-        expect(controller.state.isRefreshing, isTrue);
+        expect(controller.state.refreshStatus, isA<OperationInProgress>());
         expect(controller.state.results.single.post.id, 'a');
         await _waitForRequests(repository, 2);
         repository.failNext(StateError('offline'));
         await refresh;
-        expect(controller.state.phase, MessageSearchPhase.data);
-        expect(controller.state.refreshError, isA<StateError>());
+        expect(controller.state.phase, isA<MessageSearchData>());
+        expect(controller.state.refreshStatus, isA<OperationFailed>());
+        expect(
+          (controller.state.refreshStatus as OperationFailed).error,
+          isA<StateError>(),
+        );
 
         controller.updateDraft('different draft');
         final Future<void> retry = controller.retry();
@@ -120,7 +128,7 @@ void main() {
       await initial;
 
       final Future<void> more = controller.loadMore();
-      expect(controller.state.isLoadingMore, isTrue);
+      expect(controller.state.paginationStatus, isA<OperationInProgress>());
       await _waitForRequests(repository, 2);
       repository.completeNext(
         _page('second', <String>['a', 'b'], hasMore: true),
@@ -141,7 +149,7 @@ void main() {
       );
       await repeated;
       expect(controller.state.hasMore, isFalse);
-      expect(controller.state.paginationError, isNull);
+      expect(controller.state.paginationStatus, isA<OperationIdle>());
       controller.dispose();
     });
 
@@ -156,7 +164,7 @@ void main() {
         controller.updateContext(session: _session, teamId: 'other');
         repository.completeNext(_page('first', <String>['a']));
         await pending;
-        expect(controller.state.phase, MessageSearchPhase.initial);
+        expect(controller.state.phase, isA<MessageSearchInitial>());
         expect(controller.state.results, isEmpty);
 
         const SearchLaunchIntent intent = SearchLaunchIntent(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
@@ -90,8 +91,9 @@ class _InboxPageState extends ConsumerState<InboxPage>
         ),
         data: (InboxViewState state) => Column(
           children: <Widget>[
-            if (state.isRefreshing) const LinearProgressIndicator(minHeight: 2),
-            if (state.refreshFailed)
+            if (state.refreshStatus is OperationInProgress)
+              const LinearProgressIndicator(minHeight: 2),
+            if (state.refreshStatus is OperationFailed)
               const MaterialBanner(
                 content: Text(InboxStrings.refreshFailed),
                 actions: <Widget>[SizedBox.shrink()],

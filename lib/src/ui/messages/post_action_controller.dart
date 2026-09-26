@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -20,13 +21,11 @@ typedef PostActionControlKey = ({
 
 final class PostActionControlState {
   const PostActionControlState({
-    this.isLoading = false,
-    this.error,
+    this.submitStatus = const OperationStatus.idle(),
     this.feedback = '',
     this.realtimeUpdatedPost,
   });
-  final bool isLoading;
-  final Object? error;
+  final OperationStatus submitStatus;
   final String feedback;
   final ChannelPost? realtimeUpdatedPost;
 }
@@ -57,8 +56,7 @@ final class PostActionControlController
         case PostActionRealtimePostReceived(:final post)
             when post.id == _key.postId:
           state = PostActionControlState(
-            isLoading: state.isLoading,
-            error: state.error,
+            submitStatus: state.submitStatus,
             feedback: state.feedback,
             realtimeUpdatedPost: post,
           );
@@ -78,13 +76,15 @@ final class PostActionControlController
     String? selectedOption,
   }) async {
     final AuthSession? session = ref.read(authSessionProvider);
-    if (state.isLoading || session == null) return null;
+    if (state.submitStatus is OperationInProgress || session == null) {
+      return null;
+    }
     final PostActionRealtimeCoordinator coordinator = ref.read(
       postActionRealtimeCoordinatorProvider,
     );
     coordinator.register(_key);
     state = PostActionControlState(
-      isLoading: true,
+      submitStatus: const OperationStatus.inProgress(),
       feedback: state.feedback,
       realtimeUpdatedPost: state.realtimeUpdatedPost,
     );
@@ -100,6 +100,7 @@ final class PostActionControlController
           );
       coordinator.complete(_key);
       state = PostActionControlState(
+        submitStatus: const OperationStatus.idle(),
         feedback: state.feedback,
         realtimeUpdatedPost: state.realtimeUpdatedPost,
       );
@@ -107,7 +108,7 @@ final class PostActionControlController
     } on Object catch (error) {
       coordinator.unregister(_key);
       state = PostActionControlState(
-        error: error,
+        submitStatus: OperationStatus.failed(error),
         feedback: state.feedback,
         realtimeUpdatedPost: state.realtimeUpdatedPost,
       );

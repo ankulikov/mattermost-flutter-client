@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
@@ -9,22 +10,18 @@ import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.d
 final class ChannelSidebarViewState {
   const ChannelSidebarViewState({
     required this.snapshot,
-    this.isRefreshing = false,
-    this.refreshFailed = false,
+    this.refreshStatus = const OperationStatus.idle(),
   });
 
   final ChannelSidebarSnapshot snapshot;
-  final bool isRefreshing;
-  final bool refreshFailed;
+  final OperationStatus refreshStatus;
 
   ChannelSidebarViewState copyWith({
     ChannelSidebarSnapshot? snapshot,
-    bool? isRefreshing,
-    bool? refreshFailed,
+    OperationStatus? refreshStatus,
   }) => ChannelSidebarViewState(
     snapshot: snapshot ?? this.snapshot,
-    isRefreshing: isRefreshing ?? this.isRefreshing,
-    refreshFailed: refreshFailed ?? this.refreshFailed,
+    refreshStatus: refreshStatus ?? this.refreshStatus,
   );
 }
 
@@ -69,7 +66,7 @@ final class ChannelSidebarController
       state = const AsyncLoading<ChannelSidebarViewState>();
     } else {
       state = AsyncData(
-        current.copyWith(isRefreshing: true, refreshFailed: false),
+        current.copyWith(refreshStatus: const OperationStatus.inProgress()),
       );
     }
     try {
@@ -84,7 +81,7 @@ final class ChannelSidebarController
       state = latest == null
           ? AsyncError<ChannelSidebarViewState>(error, stackTrace)
           : AsyncData(
-              latest.copyWith(isRefreshing: false, refreshFailed: true),
+              latest.copyWith(refreshStatus: OperationStatus.failed(error)),
             );
     } finally {
       _refreshing = false;

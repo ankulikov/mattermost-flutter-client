@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
@@ -13,11 +14,9 @@ final class ChannelPostsViewState {
     this.replySummaries = const <String, ChannelReplySummary>{},
     this.beforePostId,
     this.afterPostId,
-    this.isLoadingOlder = false,
-    this.isLoadingNewer = false,
-    this.isFocusing = false,
-    this.loadFailed = false,
-    this.focusFailed = false,
+    this.olderLoadStatus = const OperationStatus.idle(),
+    this.newerLoadStatus = const OperationStatus.idle(),
+    this.focusStatus = const OperationStatus.idle(),
     this.focusPostId,
   });
 
@@ -27,11 +26,9 @@ final class ChannelPostsViewState {
   final Map<String, ChannelReplySummary> replySummaries;
   final String? beforePostId;
   final String? afterPostId;
-  final bool isLoadingOlder;
-  final bool isLoadingNewer;
-  final bool isFocusing;
-  final bool loadFailed;
-  final bool focusFailed;
+  final OperationStatus olderLoadStatus;
+  final OperationStatus newerLoadStatus;
+  final OperationStatus focusStatus;
   final String? focusPostId;
 
   ChannelPostsViewState copyWith({
@@ -41,11 +38,9 @@ final class ChannelPostsViewState {
     Map<String, ChannelReplySummary>? replySummaries,
     String? beforePostId,
     String? afterPostId,
-    bool? isLoadingOlder,
-    bool? isLoadingNewer,
-    bool? isFocusing,
-    bool? loadFailed,
-    bool? focusFailed,
+    OperationStatus? olderLoadStatus,
+    OperationStatus? newerLoadStatus,
+    OperationStatus? focusStatus,
     String? focusPostId,
   }) => ChannelPostsViewState(
     posts: posts ?? this.posts,
@@ -54,11 +49,9 @@ final class ChannelPostsViewState {
     replySummaries: replySummaries ?? this.replySummaries,
     beforePostId: beforePostId ?? this.beforePostId,
     afterPostId: afterPostId ?? this.afterPostId,
-    isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
-    isLoadingNewer: isLoadingNewer ?? this.isLoadingNewer,
-    isFocusing: isFocusing ?? this.isFocusing,
-    loadFailed: loadFailed ?? this.loadFailed,
-    focusFailed: focusFailed ?? this.focusFailed,
+    olderLoadStatus: olderLoadStatus ?? this.olderLoadStatus,
+    newerLoadStatus: newerLoadStatus ?? this.newerLoadStatus,
+    focusStatus: focusStatus ?? this.focusStatus,
     focusPostId: focusPostId ?? this.focusPostId,
   );
 }
@@ -77,8 +70,6 @@ final class ChannelPostsController
   late RequestCancellation _cancellation;
   AuthSession? _session;
   PostRepository? _repository;
-  bool _olderRunning = false;
-  bool _newerRunning = false;
   bool _sendRunning = false;
   int _focusRequest = 0;
   String? _requestedFocusPostId;
@@ -126,18 +117,17 @@ final class ChannelPostsController
     final PostRepository? repository = _repository;
     final ChannelPostsViewState? current = state.value;
     final String? beforePostId = current?.beforePostId;
-    if (_olderRunning ||
-        session == null ||
+    if (session == null ||
         repository == null ||
         current == null ||
+        current.olderLoadStatus is OperationInProgress ||
         beforePostId == null ||
         !current.hasOlder) {
       return;
     }
     final RequestCancellation cancellation = _cancellation;
-    _olderRunning = true;
     state = AsyncData(
-      current.copyWith(isLoadingOlder: true, loadFailed: false),
+      current.copyWith(olderLoadStatus: const OperationStatus.inProgress()),
     );
     try {
       final ChannelPostPage page = await cancellation.run(
@@ -160,23 +150,24 @@ final class ChannelPostsController
           hasOlder: page.hasOlder,
           replySummaries: replySummaries,
           beforePostId: page.beforePostId,
-          isLoadingOlder: false,
+          olderLoadStatus: const OperationStatus.idle(),
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       if (cancellation.isCancelled) return;
       final ChannelPostsViewState? latest = state.value;
       if (latest != null) {
         state = AsyncData(
-          latest.copyWith(isLoadingOlder: false, loadFailed: true),
+          latest.copyWith(olderLoadStatus: OperationStatus.failed(error)),
         );
       }
     } finally {
-      _olderRunning = false;
       if (!cancellation.isCancelled) {
         final ChannelPostsViewState? latest = state.value;
-        if (latest != null && latest.isLoadingOlder) {
-          state = AsyncData(latest.copyWith(isLoadingOlder: false));
+        if (latest != null && latest.olderLoadStatus is OperationInProgress) {
+          state = AsyncData(
+            latest.copyWith(olderLoadStatus: const OperationStatus.idle()),
+          );
         }
       }
     }
@@ -187,18 +178,17 @@ final class ChannelPostsController
     final PostRepository? repository = _repository;
     final ChannelPostsViewState? current = state.value;
     final String? afterPostId = current?.afterPostId;
-    if (_newerRunning ||
-        session == null ||
+    if (session == null ||
         repository == null ||
         current == null ||
+        current.newerLoadStatus is OperationInProgress ||
         afterPostId == null ||
         !current.hasNewer) {
       return;
     }
     final RequestCancellation cancellation = _cancellation;
-    _newerRunning = true;
     state = AsyncData(
-      current.copyWith(isLoadingNewer: true, loadFailed: false),
+      current.copyWith(newerLoadStatus: const OperationStatus.inProgress()),
     );
     try {
       final ChannelPostPage page = await cancellation.run(
@@ -221,23 +211,24 @@ final class ChannelPostsController
           hasNewer: page.hasNewer,
           replySummaries: replySummaries,
           afterPostId: page.afterPostId ?? afterPostId,
-          isLoadingNewer: false,
+          newerLoadStatus: const OperationStatus.idle(),
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       if (cancellation.isCancelled) return;
       final ChannelPostsViewState? latest = state.value;
       if (latest != null) {
         state = AsyncData(
-          latest.copyWith(isLoadingNewer: false, loadFailed: true),
+          latest.copyWith(newerLoadStatus: OperationStatus.failed(error)),
         );
       }
     } finally {
-      _newerRunning = false;
       if (!cancellation.isCancelled) {
         final ChannelPostsViewState? latest = state.value;
-        if (latest != null && latest.isLoadingNewer) {
-          state = AsyncData(latest.copyWith(isLoadingNewer: false));
+        if (latest != null && latest.newerLoadStatus is OperationInProgress) {
+          state = AsyncData(
+            latest.copyWith(newerLoadStatus: const OperationStatus.idle()),
+          );
         }
       }
     }
@@ -250,11 +241,16 @@ final class ChannelPostsController
         state.value ??
         const ChannelPostsViewState(posts: <ChannelPost>[], hasOlder: false);
     if (session == null || repository == null) return;
-    if (current.focusPostId == postId && !current.focusFailed) return;
+    if (current.focusPostId == postId &&
+        current.focusStatus is! OperationFailed) {
+      return;
+    }
     _requestedFocusPostId = postId;
     final int request = ++_focusRequest;
     final RequestCancellation cancellation = _cancellation;
-    state = AsyncData(current.copyWith(isFocusing: true, focusFailed: false));
+    state = AsyncData(
+      current.copyWith(focusStatus: const OperationStatus.inProgress()),
+    );
     try {
       final ChannelPostPage page = await cancellation.run(
         () => repository.loadAround(
@@ -275,12 +271,12 @@ final class ChannelPostsController
           focusPostId: postId,
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       if (request != _focusRequest || cancellation.isCancelled) return;
       final ChannelPostsViewState? latest = state.value;
       if (latest != null) {
         state = AsyncData(
-          latest.copyWith(isFocusing: false, focusFailed: true),
+          latest.copyWith(focusStatus: OperationStatus.failed(error)),
         );
       }
     }
@@ -297,16 +293,17 @@ final class ChannelPostsController
     required String pendingPostId,
   }) async {
     final AuthSession? session = _session;
+    final PostRepository? repository = _repository;
     if (_sendRunning) {
       throw StateError('A channel message is already being sent');
     }
-    if (session == null || state.value == null) {
+    if (session == null || repository == null || state.value == null) {
       throw StateError('Channel messages are not ready');
     }
     _sendRunning = true;
     try {
       final ChannelPost sent = await _cancellation.run(
-        () => _repository!.sendText(
+        () => repository.sendText(
           session: session,
           channelId: channelId,
           message: message,
@@ -330,9 +327,11 @@ final class ChannelPostsController
     required String emojiName,
   }) async {
     final AuthSession? session = _session;
+    final PostRepository? repository = _repository;
     final ChannelPostsViewState? current = state.value;
     final String requestKey = '$postId\u0000$emojiName';
     if (session == null ||
+        repository == null ||
         current == null ||
         !_reactionRequests.add(requestKey)) {
       return false;
@@ -353,7 +352,7 @@ final class ChannelPostsController
     try {
       if (remove) {
         await _cancellation.run(
-          () => _repository!.removeReaction(
+          () => repository.removeReaction(
             session: session,
             postId: postId,
             emojiName: emojiName,
@@ -361,7 +360,7 @@ final class ChannelPostsController
         );
       } else {
         await _cancellation.run(
-          () => _repository!.addReaction(
+          () => repository.addReaction(
             session: session,
             postId: postId,
             emojiName: emojiName,
@@ -387,8 +386,10 @@ final class ChannelPostsController
   /// Removes a successfully deleted root post from the open channel snapshot.
   Future<bool> deletePost(String postId) async {
     final AuthSession? session = _session;
+    final PostRepository? repository = _repository;
     final ChannelPostsViewState? current = state.value;
     if (session == null ||
+        repository == null ||
         current == null ||
         !_deleteRequests.add(postId) ||
         !current.posts.any((ChannelPost post) => post.id == postId)) {
@@ -396,7 +397,7 @@ final class ChannelPostsController
     }
     try {
       await _cancellation.run(
-        () => _repository!.deletePost(session: session, postId: postId),
+        () => repository.deletePost(session: session, postId: postId),
       );
       if (_cancellation.isCancelled) return false;
       final ChannelPostsViewState? latest = state.value;
@@ -480,17 +481,18 @@ final class ChannelPostsController
     if (current == null || reply.rootId.isEmpty) return;
     final ChannelReplySummary? previous = current.replySummaries[reply.rootId];
     final bool wasKnown = previous?.replyIds.contains(reply.id) == true;
+    final ChannelReplySummary updatedSummary = ChannelReplySummary(
+      replyIds: Set<String>.unmodifiable(<String>{
+        ...?previous?.replyIds,
+        reply.id,
+      }),
+      lastReplyAt: latestDateTime(previous?.lastReplyAt, reply.sentAt),
+    );
     final Map<String, ChannelReplySummary> summaries =
         Map<String, ChannelReplySummary>.unmodifiable(
           <String, ChannelReplySummary>{
             ...current.replySummaries,
-            reply.rootId: ChannelReplySummary(
-              replyIds: Set<String>.unmodifiable(<String>{
-                ...?previous?.replyIds,
-                reply.id,
-              }),
-              lastReplyAt: latestDateTime(previous?.lastReplyAt, reply.sentAt),
-            ),
+            reply.rootId: updatedSummary,
           },
         );
     state = AsyncData(
@@ -499,7 +501,7 @@ final class ChannelPostsController
           current.posts.map((ChannelPost post) {
             if (post.id != reply.rootId) return post;
             final int incrementedCount = post.replyCount + (wasKnown ? 0 : 1);
-            final int observedCount = summaries[reply.rootId]!.replyIds.length;
+            final int observedCount = updatedSummary.replyIds.length;
             return post.withThreadSummary(
               replyCount: incrementedCount > observedCount
                   ? incrementedCount

@@ -18,9 +18,7 @@ import 'package:mattermost_flutter/src/ui/posts/post_permalink_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_controller.dart';
 
-export '../data/providers/infrastructure_providers.dart';
 export '../data/providers/repository_providers.dart';
-export '../data/providers/session_providers.dart';
 
 final NotifierProvider<AuthController, AuthState> authControllerProvider =
     NotifierProvider<AuthController, AuthState>(

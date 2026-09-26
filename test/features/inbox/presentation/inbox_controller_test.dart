@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -117,7 +118,10 @@ void main() {
 
       realtime.add(const InboxRefreshRequired());
       await Future<void>.delayed(Duration.zero);
-      expect(container.read(provider).requireValue.isRefreshing, isTrue);
+      expect(
+        container.read(provider).requireValue.refreshStatus,
+        isA<OperationInProgress>(),
+      );
       expect(
         container.read(provider).requireValue.snapshot.newItems.single.postIds,
         <String>['old'],
@@ -168,14 +172,19 @@ void main() {
         ..listen(provider, (_, _) {});
       addTearDown(container.dispose);
       final InboxViewState initial = await container.read(provider.future);
-      expect(initial.isRefreshing, isFalse);
+      expect(initial.refreshStatus, isA<OperationIdle>());
 
       final Future<void> request = container.read(provider.notifier).refresh();
-      expect(container.read(provider).value?.isRefreshing, isTrue);
+      expect(
+        container.read(provider).value?.refreshStatus,
+        isA<OperationInProgress>(),
+      );
       refresh.complete(InboxSnapshot());
       await request;
-      expect(container.read(provider).value?.isRefreshing, isFalse);
-      expect(container.read(provider).value?.refreshFailed, isFalse);
+      expect(
+        container.read(provider).value?.refreshStatus,
+        isA<OperationIdle>(),
+      );
     },
   );
 
@@ -195,7 +204,10 @@ void main() {
       await container.read(provider.future);
       await container.read(provider.notifier).refresh();
       expect(container.read(provider).hasValue, isTrue);
-      expect(container.read(provider).value?.refreshFailed, isTrue);
+      expect(
+        container.read(provider).value?.refreshStatus,
+        isA<OperationFailed>(),
+      );
     },
   );
 

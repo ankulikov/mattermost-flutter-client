@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
@@ -10,20 +11,16 @@ final class FollowedThreadsViewState {
     this.total = 0,
     this.totalUnreadThreads = 0,
     this.totalUnreadMentions = 0,
-    this.isLoadingMore = false,
-    this.loadMoreFailed = false,
-    this.isRefreshing = false,
-    this.refreshFailed = false,
+    this.paginationStatus = const OperationStatus.idle(),
+    this.refreshStatus = const OperationStatus.idle(),
   });
 
   final List<FollowedThread> items;
   final int total;
   final int totalUnreadThreads;
   final int totalUnreadMentions;
-  final bool isLoadingMore;
-  final bool loadMoreFailed;
-  final bool isRefreshing;
-  final bool refreshFailed;
+  final OperationStatus paginationStatus;
+  final OperationStatus refreshStatus;
 
   bool get hasMore => items.length < total;
 
@@ -32,19 +29,15 @@ final class FollowedThreadsViewState {
     int? total,
     int? totalUnreadThreads,
     int? totalUnreadMentions,
-    bool? isLoadingMore,
-    bool? loadMoreFailed,
-    bool? isRefreshing,
-    bool? refreshFailed,
+    OperationStatus? paginationStatus,
+    OperationStatus? refreshStatus,
   }) => FollowedThreadsViewState(
     items: items ?? this.items,
     total: total ?? this.total,
     totalUnreadThreads: totalUnreadThreads ?? this.totalUnreadThreads,
     totalUnreadMentions: totalUnreadMentions ?? this.totalUnreadMentions,
-    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-    loadMoreFailed: loadMoreFailed ?? this.loadMoreFailed,
-    isRefreshing: isRefreshing ?? this.isRefreshing,
-    refreshFailed: refreshFailed ?? this.refreshFailed,
+    paginationStatus: paginationStatus ?? this.paginationStatus,
+    refreshStatus: refreshStatus ?? this.refreshStatus,
   );
 }
 
@@ -62,7 +55,6 @@ final class FollowedThreadsController
   late RequestCancellation _cancellation;
   AuthSession? _session;
   ThreadRepository? _repository;
-  bool _busy = false;
 
   @override
   Future<FollowedThreadsViewState> build() async {
@@ -85,14 +77,17 @@ final class FollowedThreadsController
 
   Future<void> refresh() async {
     final FollowedThreadsViewState? current = state.value;
-    if (_busy || current == null) return;
+    if (current == null ||
+        current.refreshStatus is OperationInProgress ||
+        current.paginationStatus is OperationInProgress) {
+      return;
+    }
     final AuthSession? session = _session;
     final ThreadRepository? repository = _repository;
     if (session == null || repository == null) return;
     final RequestCancellation cancellation = _cancellation;
-    _busy = true;
     state = AsyncData(
-      current.copyWith(isRefreshing: true, refreshFailed: false),
+      current.copyWith(refreshStatus: const OperationStatus.inProgress()),
     );
     try {
       state = AsyncData(
@@ -102,28 +97,29 @@ final class FollowedThreadsController
           ),
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       if (cancellation.isCancelled) return;
       state = AsyncData(
-        current.copyWith(isRefreshing: false, refreshFailed: true),
+        current.copyWith(refreshStatus: OperationStatus.failed(error)),
       );
-    } finally {
-      _busy = false;
     }
   }
 
   Future<void> loadMore() async {
     final FollowedThreadsViewState? current = state.value;
-    if (_busy || current == null || !current.hasMore || current.items.isEmpty) {
+    if (current == null ||
+        current.refreshStatus is OperationInProgress ||
+        current.paginationStatus is OperationInProgress ||
+        !current.hasMore ||
+        current.items.isEmpty) {
       return;
     }
     final AuthSession? session = _session;
     final ThreadRepository? repository = _repository;
     if (session == null || repository == null) return;
     final RequestCancellation cancellation = _cancellation;
-    _busy = true;
     state = AsyncData(
-      current.copyWith(isLoadingMore: true, loadMoreFailed: false),
+      current.copyWith(paginationStatus: const OperationStatus.inProgress()),
     );
     try {
       final FollowedThreadsPage page = await cancellation.run(
@@ -145,13 +141,11 @@ final class FollowedThreadsController
           totalUnreadMentions: page.totalUnreadMentions,
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       if (cancellation.isCancelled) return;
       state = AsyncData(
-        current.copyWith(isLoadingMore: false, loadMoreFailed: true),
+        current.copyWith(paginationStatus: OperationStatus.failed(error)),
       );
-    } finally {
-      _busy = false;
     }
   }
 

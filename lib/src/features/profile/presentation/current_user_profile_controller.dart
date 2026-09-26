@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/features/profile/domain/models/current_user_profile.dart';
@@ -8,22 +9,18 @@ import 'package:mattermost_flutter/src/features/profile/domain/repositories/curr
 final class CurrentUserProfileViewState {
   const CurrentUserProfileViewState({
     required this.profile,
-    this.isUpdating = false,
-    this.actionFailed = false,
+    this.updateStatus = const OperationStatus.idle(),
   });
 
   final CurrentUserProfile profile;
-  final bool isUpdating;
-  final bool actionFailed;
+  final OperationStatus updateStatus;
 
   CurrentUserProfileViewState copyWith({
     CurrentUserProfile? profile,
-    bool? isUpdating,
-    bool? actionFailed,
+    OperationStatus? updateStatus,
   }) => CurrentUserProfileViewState(
     profile: profile ?? this.profile,
-    isUpdating: isUpdating ?? this.isUpdating,
-    actionFailed: actionFailed ?? this.actionFailed,
+    updateStatus: updateStatus ?? this.updateStatus,
   );
 }
 
@@ -52,19 +49,21 @@ final class CurrentUserProfileController
 
   Future<void> refresh() async {
     final CurrentUserProfileViewState? current = state.value;
-    if (current == null || current.isUpdating) return;
+    if (current == null || current.updateStatus is OperationInProgress) return;
     final int actionId = ++_actionId;
-    state = AsyncData(current.copyWith(isUpdating: true, actionFailed: false));
+    state = AsyncData(
+      current.copyWith(updateStatus: const OperationStatus.inProgress()),
+    );
     try {
       final CurrentUserProfile profile = await ref
           .read(_repositoryProvider)
           .load();
       if (actionId != _actionId) return;
       state = AsyncData(CurrentUserProfileViewState(profile: profile));
-    } on Object {
+    } on Object catch (error) {
       if (actionId != _actionId) return;
       state = AsyncData(
-        current.copyWith(isUpdating: false, actionFailed: true),
+        current.copyWith(updateStatus: OperationStatus.failed(error)),
       );
     }
   }
@@ -74,9 +73,11 @@ final class CurrentUserProfileController
     AvailabilityExpiry? expiry,
   }) async {
     final CurrentUserProfileViewState? current = state.value;
-    if (current == null || current.isUpdating) return;
+    if (current == null || current.updateStatus is OperationInProgress) return;
     final int actionId = ++_actionId;
-    state = AsyncData(current.copyWith(isUpdating: true, actionFailed: false));
+    state = AsyncData(
+      current.copyWith(updateStatus: const OperationStatus.inProgress()),
+    );
     try {
       final DateTime? expiresAt = presence == UserPresence.online
           ? null
@@ -93,19 +94,21 @@ final class CurrentUserProfileController
           profile: current.profile.copyWith(availability: availability),
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       if (actionId != _actionId) return;
       state = AsyncData(
-        current.copyWith(isUpdating: false, actionFailed: true),
+        current.copyWith(updateStatus: OperationStatus.failed(error)),
       );
     }
   }
 
   Future<void> setQuickCustomStatus(QuickCustomStatus status) async {
     final CurrentUserProfileViewState? current = state.value;
-    if (current == null || current.isUpdating) return;
+    if (current == null || current.updateStatus is OperationInProgress) return;
     final int actionId = ++_actionId;
-    state = AsyncData(current.copyWith(isUpdating: true, actionFailed: false));
+    state = AsyncData(
+      current.copyWith(updateStatus: const OperationStatus.inProgress()),
+    );
     final DateTime expiresAt = customStatusExpiration(status.duration, _now());
     try {
       await ref
@@ -128,19 +131,21 @@ final class CurrentUserProfileController
           ),
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       if (actionId != _actionId) return;
       state = AsyncData(
-        current.copyWith(isUpdating: false, actionFailed: true),
+        current.copyWith(updateStatus: OperationStatus.failed(error)),
       );
     }
   }
 
   Future<void> clearCustomStatus() async {
     final CurrentUserProfileViewState? current = state.value;
-    if (current == null || current.isUpdating) return;
+    if (current == null || current.updateStatus is OperationInProgress) return;
     final int actionId = ++_actionId;
-    state = AsyncData(current.copyWith(isUpdating: true, actionFailed: false));
+    state = AsyncData(
+      current.copyWith(updateStatus: const OperationStatus.inProgress()),
+    );
     try {
       await ref.read(_repositoryProvider).clearCustomStatus();
       if (actionId != _actionId) return;
@@ -149,10 +154,10 @@ final class CurrentUserProfileController
           profile: current.profile.copyWith(clearCustomStatus: true),
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       if (actionId != _actionId) return;
       state = AsyncData(
-        current.copyWith(isUpdating: false, actionFailed: true),
+        current.copyWith(updateStatus: OperationStatus.failed(error)),
       );
     }
   }

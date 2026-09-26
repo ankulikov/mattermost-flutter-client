@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -111,14 +112,14 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
             _ChannelHeader(
               channel: channel,
               isLoading:
-                  viewState?.isLoadingOlder == true ||
-                  viewState?.isLoadingNewer == true ||
-                  viewState?.isFocusing == true,
+                  viewState?.olderLoadStatus is OperationInProgress ||
+                  viewState?.newerLoadStatus is OperationInProgress ||
+                  viewState?.focusStatus is OperationInProgress,
               onBack: widget.onBack,
               onSearchInChannel: widget.onSearchInChannel,
             ),
             const Divider(height: 1),
-            if (viewState?.focusFailed == true)
+            if (viewState?.focusStatus is OperationFailed)
               MaterialBanner(
                 content: const Text(
                   ChannelPostsStrings.linkedMessageLoadFailed,
@@ -139,7 +140,9 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                 ),
                 data: (ChannelPostsViewState state) {
                   final List<ChannelPost> items = state.posts;
-                  if (items.isEmpty && state.loadFailed) {
+                  if (items.isEmpty &&
+                      (state.olderLoadStatus is OperationFailed ||
+                          state.newerLoadStatus is OperationFailed)) {
                     return _PostsError(
                       onRetry: () => ref.read(_postsProvider.notifier).retry(),
                     );
@@ -152,12 +155,14 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                     serverUrl: serverUrl,
                     teamName: teamName,
                     posts: items,
-                    isLoadingOlder: state.isLoadingOlder,
-                    isLoadingNewer: state.isLoadingNewer,
+                    olderLoadStatus: state.olderLoadStatus,
+                    newerLoadStatus: state.newerLoadStatus,
                     hasOlder: state.hasOlder,
                     hasNewer: state.hasNewer,
                     focusedPostId: state.focusPostId,
-                    autoLoadOlder: !state.loadFailed && !state.isFocusing,
+                    autoLoadOlder:
+                        state.olderLoadStatus is! OperationFailed &&
+                        state.focusStatus is! OperationInProgress,
                     onLoadOlder: () =>
                         ref.read(_postsProvider.notifier).loadOlder(),
                     onLoadNewer: () =>
@@ -468,8 +473,8 @@ class _PostList extends StatefulWidget {
     required this.serverUrl,
     required this.teamName,
     required this.posts,
-    required this.isLoadingOlder,
-    required this.isLoadingNewer,
+    required this.olderLoadStatus,
+    required this.newerLoadStatus,
     required this.hasOlder,
     required this.hasNewer,
     required this.focusedPostId,
@@ -492,8 +497,8 @@ class _PostList extends StatefulWidget {
   final Uri? serverUrl;
   final String teamName;
   final List<ChannelPost> posts;
-  final bool isLoadingOlder;
-  final bool isLoadingNewer;
+  final OperationStatus olderLoadStatus;
+  final OperationStatus newerLoadStatus;
   final bool hasOlder;
   final bool hasNewer;
   final String? focusedPostId;
@@ -540,11 +545,13 @@ class _PostListState extends State<_PostList> {
   void didUpdateWidget(covariant _PostList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.channelId != widget.channelId ||
-        (oldWidget.isLoadingOlder && !widget.isLoadingOlder)) {
+        (oldWidget.olderLoadStatus is OperationInProgress &&
+            widget.olderLoadStatus is! OperationInProgress)) {
       _autoLoadPending = false;
     }
     if (oldWidget.channelId != widget.channelId ||
-        (oldWidget.isLoadingNewer && !widget.isLoadingNewer)) {
+        (oldWidget.newerLoadStatus is OperationInProgress &&
+            widget.newerLoadStatus is! OperationInProgress)) {
       _newerLoadPending = false;
     }
     if (oldWidget.focusedPostId != widget.focusedPostId) {
@@ -594,7 +601,11 @@ class _PostListState extends State<_PostList> {
   }
 
   void _requestOlder({bool automatic = false}) {
-    if (_autoLoadPending || widget.isLoadingOlder || !widget.hasOlder) return;
+    if (_autoLoadPending ||
+        widget.olderLoadStatus is OperationInProgress ||
+        !widget.hasOlder) {
+      return;
+    }
     if (automatic) _automaticLoadCount += 1;
     _autoLoadPending = true;
     unawaited(
@@ -607,7 +618,11 @@ class _PostListState extends State<_PostList> {
   }
 
   void _requestNewer() {
-    if (_newerLoadPending || widget.isLoadingNewer || !widget.hasNewer) return;
+    if (_newerLoadPending ||
+        widget.newerLoadStatus is OperationInProgress ||
+        !widget.hasNewer) {
+      return;
+    }
     _newerLoadPending = true;
     unawaited(
       widget.onLoadNewer().whenComplete(() {
@@ -627,9 +642,10 @@ class _PostListState extends State<_PostList> {
           );
     if (focusIndex >= 0) return _buildFocusedList(focusIndex);
     final bool showManualLoad =
-        _automaticLoadCount >= _maxAutomaticLoads &&
+        (_automaticLoadCount >= _maxAutomaticLoads ||
+            widget.olderLoadStatus is OperationFailed) &&
         widget.hasOlder &&
-        !widget.isLoadingOlder;
+        widget.olderLoadStatus is! OperationInProgress;
     return NotificationListener<ScrollMetricsNotification>(
       onNotification: (ScrollMetricsNotification notification) {
         _scheduleViewportCheck();
@@ -642,7 +658,9 @@ class _PostListState extends State<_PostList> {
         padding: const EdgeInsets.fromLTRB(10, 12, 10, 24),
         itemCount:
             widget.posts.length +
-            (widget.isLoadingOlder || showManualLoad ? 1 : 0),
+            (widget.olderLoadStatus is OperationInProgress || showManualLoad
+                ? 1
+                : 0),
         itemBuilder: (BuildContext context, int index) {
           if (index == widget.posts.length) {
             if (showManualLoad) {
@@ -651,7 +669,11 @@ class _PostListState extends State<_PostList> {
                 child: Center(
                   child: OutlinedButton(
                     onPressed: _requestOlder,
-                    child: const Text(ChannelPostsStrings.loadOlder),
+                    child: Text(
+                      widget.olderLoadStatus is OperationFailed
+                          ? ChannelPostsStrings.retry
+                          : ChannelPostsStrings.loadOlder,
+                    ),
                   ),
                 ),
               );
@@ -684,8 +706,10 @@ class _PostListState extends State<_PostList> {
     center: _focusCenterKey,
     anchor: 0.35,
     slivers: <Widget>[
-      if (widget.isLoadingOlder)
+      if (widget.olderLoadStatus is OperationInProgress)
         _loadingSliver(ChannelPostsStrings.loadingOlder),
+      if (widget.olderLoadStatus is OperationFailed)
+        _retrySliver(widget.onLoadOlder),
       SliverList(
         delegate: SliverChildBuilderDelegate(
           // Slivers before the center grow upward, so their builder order must
@@ -703,7 +727,10 @@ class _PostListState extends State<_PostList> {
           childCount: widget.posts.length - focusIndex,
         ),
       ),
-      if (widget.isLoadingNewer) _loadingSliver(ChannelPostsStrings.loading),
+      if (widget.newerLoadStatus is OperationInProgress)
+        _loadingSliver(ChannelPostsStrings.loading),
+      if (widget.newerLoadStatus is OperationFailed)
+        _retrySliver(widget.onLoadNewer),
     ],
   );
 
@@ -718,6 +745,15 @@ class _PostListState extends State<_PostList> {
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
         ),
+      ),
+    ),
+  );
+
+  Widget _retrySliver(Future<void> Function() retry) => SliverToBoxAdapter(
+    child: Center(
+      child: TextButton(
+        onPressed: () => unawaited(retry()),
+        child: const Text(ChannelPostsStrings.retry),
       ),
     ),
   );

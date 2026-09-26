@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/post_action.dart';
@@ -445,7 +446,9 @@ class _ButtonAction extends ConsumerWidget {
         Tooltip(
           message: action.tooltip,
           child: ElevatedButton(
-            onPressed: onAction == null || (actionState?.isLoading ?? false)
+            onPressed:
+                onAction == null ||
+                    actionState?.submitStatus is OperationInProgress
                 ? null
                 : () => unawaited(
                     _execute(
@@ -463,9 +466,11 @@ class _ButtonAction extends ConsumerWidget {
             child: Text(action.name),
           ),
         ),
-        if (actionState?.error != null) const _ActionError(),
-        if (actionState?.feedback.isNotEmpty == true)
-          _ActionFeedback(actionState!.feedback),
+        if (actionState?.submitStatus is OperationFailed) const _ActionError(),
+        if (actionState case PostActionControlState(
+          feedback: final feedback,
+        ) when feedback.isNotEmpty)
+          _ActionFeedback(feedback),
       ],
     );
   }
@@ -538,7 +543,8 @@ class _SelectAction extends ConsumerWidget {
               if (isSystemSelect)
                 OutlinedButton.icon(
                   onPressed:
-                      onAction == null || (actionState?.isLoading ?? false)
+                      onAction == null ||
+                          actionState?.submitStatus is OperationInProgress
                       ? null
                       : () async {
                           final String? value = await showSystemSelectPicker(
@@ -585,7 +591,7 @@ class _SelectAction extends ConsumerWidget {
                   onChanged:
                       onAction == null ||
                           action.options.isEmpty ||
-                          (actionState?.isLoading ?? false)
+                          actionState?.submitStatus is OperationInProgress
                       ? null
                       : (String? value) {
                           if (value != null) {
@@ -604,9 +610,12 @@ class _SelectAction extends ConsumerWidget {
                           }
                         },
                 ),
-              if (actionState?.error != null) const _ActionError(),
-              if (actionState?.feedback.isNotEmpty == true)
-                _ActionFeedback(actionState!.feedback),
+              if (actionState?.submitStatus is OperationFailed)
+                const _ActionError(),
+              if (actionState case PostActionControlState(
+                feedback: final feedback,
+              ) when feedback.isNotEmpty)
+                _ActionFeedback(feedback),
             ],
           ),
         );

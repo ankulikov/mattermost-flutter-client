@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
@@ -12,42 +13,30 @@ import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postpo
 final class ThreadViewState {
   const ThreadViewState({
     required this.thread,
-    this.isRefreshing = false,
-    this.refreshFailed = false,
-    this.isMarkingRead = false,
-    this.markReadFailed = false,
+    this.refreshStatus = const OperationStatus.idle(),
+    this.markReadStatus = const OperationStatus.idle(),
     this.isFollowing = false,
-    this.isUpdatingFollow = false,
-    this.followUpdateFailed = false,
+    this.followUpdateStatus = const OperationStatus.idle(),
   });
 
   final MessageThread thread;
-  final bool isRefreshing;
-  final bool refreshFailed;
-  final bool isMarkingRead;
-  final bool markReadFailed;
+  final OperationStatus refreshStatus;
+  final OperationStatus markReadStatus;
   final bool isFollowing;
-  final bool isUpdatingFollow;
-  final bool followUpdateFailed;
+  final OperationStatus followUpdateStatus;
 
   ThreadViewState copyWith({
     MessageThread? thread,
-    bool? isRefreshing,
-    bool? refreshFailed,
-    bool? isMarkingRead,
-    bool? markReadFailed,
+    OperationStatus? refreshStatus,
+    OperationStatus? markReadStatus,
     bool? isFollowing,
-    bool? isUpdatingFollow,
-    bool? followUpdateFailed,
+    OperationStatus? followUpdateStatus,
   }) => ThreadViewState(
     thread: thread ?? this.thread,
-    isRefreshing: isRefreshing ?? this.isRefreshing,
-    refreshFailed: refreshFailed ?? this.refreshFailed,
-    isMarkingRead: isMarkingRead ?? this.isMarkingRead,
-    markReadFailed: markReadFailed ?? this.markReadFailed,
+    refreshStatus: refreshStatus ?? this.refreshStatus,
+    markReadStatus: markReadStatus ?? this.markReadStatus,
     isFollowing: isFollowing ?? this.isFollowing,
-    isUpdatingFollow: isUpdatingFollow ?? this.isUpdatingFollow,
-    followUpdateFailed: followUpdateFailed ?? this.followUpdateFailed,
+    followUpdateStatus: followUpdateStatus ?? this.followUpdateStatus,
   );
 }
 
@@ -72,9 +61,7 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
   late RequestCancellation _cancellation;
   AuthSession? _session;
   ThreadRepository? _repository;
-  bool _refreshing = false;
   bool _sendRunning = false;
-  bool _markReadRunning = false;
   DateTime? _markedLoadedAt;
   final Set<String> _reactionRequests = <String>{};
   final Set<String> _deleteRequests = <String>{};
@@ -111,32 +98,38 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
   Future<void> retry() async {
     final AuthSession? session = _session;
     final ThreadRepository? repository = _repository;
-    if (_refreshing || session == null || repository == null) return;
+    if (session == null ||
+        repository == null ||
+        state.value?.refreshStatus is OperationInProgress) {
+      return;
+    }
     final RequestCancellation cancellation = _cancellation;
-    _refreshing = true;
     final ThreadViewState? current = state.value;
     if (current == null) {
       state = const AsyncLoading<ThreadViewState>();
     } else {
       state = AsyncData(
-        current.copyWith(isRefreshing: true, refreshFailed: false),
+        current.copyWith(refreshStatus: const OperationStatus.inProgress()),
       );
     }
     try {
       final MessageThread thread = await cancellation.run(
         () => repository.load(session: session, rootPostId: rootPostId),
       );
-      state = AsyncData(ThreadViewState(thread: thread));
+      state = AsyncData(
+        ThreadViewState(
+          thread: thread,
+          isFollowing: current?.isFollowing ?? false,
+        ),
+      );
     } on Object catch (error, stackTrace) {
       if (cancellation.isCancelled) return;
       final ThreadViewState? latest = state.value;
       state = latest == null
           ? AsyncError<ThreadViewState>(error, stackTrace)
           : AsyncData(
-              latest.copyWith(isRefreshing: false, refreshFailed: true),
+              latest.copyWith(refreshStatus: OperationStatus.failed(error)),
             );
-    } finally {
-      _refreshing = false;
     }
   }
 
@@ -182,18 +175,17 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     final ThreadRepository? repository = _repository;
     final ThreadViewState? current = state.value;
     final DateTime? loadedAt = current?.thread.loadedAt;
-    if (_markReadRunning ||
-        session == null ||
+    if (session == null ||
         repository == null ||
         current == null ||
+        current.markReadStatus is OperationInProgress ||
         !current.thread.isComplete ||
         loadedAt == null) {
       return false;
     }
     if (_markedLoadedAt == loadedAt) return true;
-    _markReadRunning = true;
     state = AsyncData(
-      current.copyWith(isMarkingRead: true, markReadFailed: false),
+      current.copyWith(markReadStatus: const OperationStatus.inProgress()),
     );
     try {
       await _cancellation.run(
@@ -208,21 +200,19 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
       final ThreadViewState? latest = state.value;
       if (latest != null) {
         state = AsyncData(
-          latest.copyWith(isMarkingRead: false, markReadFailed: false),
+          latest.copyWith(markReadStatus: const OperationStatus.idle()),
         );
       }
       return true;
-    } on Object {
+    } on Object catch (error) {
       if (_cancellation.isCancelled) return false;
       final ThreadViewState? latest = state.value;
       if (latest != null) {
         state = AsyncData(
-          latest.copyWith(isMarkingRead: false, markReadFailed: true),
+          latest.copyWith(markReadStatus: OperationStatus.failed(error)),
         );
       }
       return false;
-    } finally {
-      _markReadRunning = false;
     }
   }
 
@@ -235,12 +225,12 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
         current == null ||
         !allowsFollowing ||
         teamId.isEmpty ||
-        current.isUpdatingFollow) {
+        current.followUpdateStatus is OperationInProgress) {
       return false;
     }
     final bool follow = !current.isFollowing;
     state = AsyncData(
-      current.copyWith(isUpdatingFollow: true, followUpdateFailed: false),
+      current.copyWith(followUpdateStatus: const OperationStatus.inProgress()),
     );
     try {
       if (follow) {
@@ -274,14 +264,13 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
                   ],
                 ),
           );
-        } on Object {
+        } on Object catch (error) {
           final ThreadViewState? latest = state.value;
           if (latest != null) {
             state = AsyncData(
               latest.copyWith(
                 isFollowing: false,
-                isUpdatingFollow: false,
-                followUpdateFailed: true,
+                followUpdateStatus: OperationStatus.failed(error),
               ),
             );
           }
@@ -293,17 +282,16 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
         state = AsyncData(
           latest.copyWith(
             isFollowing: follow,
-            isUpdatingFollow: false,
-            followUpdateFailed: false,
+            followUpdateStatus: const OperationStatus.idle(),
           ),
         );
       }
       return true;
-    } on Object {
+    } on Object catch (error) {
       final ThreadViewState? latest = state.value;
       if (!_cancellation.isCancelled && latest != null) {
         state = AsyncData(
-          latest.copyWith(isUpdatingFollow: false, followUpdateFailed: true),
+          latest.copyWith(followUpdateStatus: OperationStatus.failed(error)),
         );
       }
       return false;

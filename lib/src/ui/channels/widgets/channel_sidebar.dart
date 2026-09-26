@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
@@ -39,8 +40,7 @@ class ChannelSidebar extends ConsumerWidget {
             _InitialError(onRetry: () => unawaited(refreshChannelSidebar(ref))),
         data: (ChannelSidebarViewState viewState) => _SidebarContent(
           snapshot: viewState.snapshot,
-          isRefreshing: viewState.isRefreshing,
-          refreshFailed: viewState.refreshFailed,
+          refreshStatus: viewState.refreshStatus,
           onRefresh: () => refreshChannelSidebar(ref),
           onChannelSelected: onChannelSelected,
         ),
@@ -79,15 +79,13 @@ class _InitialError extends StatelessWidget {
 class _SidebarContent extends StatefulWidget {
   const _SidebarContent({
     required this.snapshot,
-    required this.isRefreshing,
-    required this.refreshFailed,
+    required this.refreshStatus,
     required this.onRefresh,
     required this.onChannelSelected,
   });
 
   final ChannelSidebarSnapshot snapshot;
-  final bool isRefreshing;
-  final bool refreshFailed;
+  final OperationStatus refreshStatus;
   final RefreshCallback onRefresh;
   final VoidCallback? onChannelSelected;
 
@@ -142,8 +140,9 @@ class _SidebarContentState extends State<_SidebarContent> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _TeamHeader(team: widget.snapshot.team, onRefresh: widget.onRefresh),
-        if (widget.isRefreshing) const LinearProgressIndicator(minHeight: 2),
-        if (widget.refreshFailed)
+        if (widget.refreshStatus is OperationInProgress)
+          const LinearProgressIndicator(minHeight: 2),
+        if (widget.refreshStatus is OperationFailed)
           const MaterialBanner(
             content: Text(ChannelSidebarStrings.refreshFailed),
             actions: <Widget>[SizedBox.shrink()],

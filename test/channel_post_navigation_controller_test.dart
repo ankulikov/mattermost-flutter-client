@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
@@ -54,13 +55,12 @@ void main() {
       await controller.focusOn('focus');
       ChannelPostsViewState state = container.read(provider).requireValue;
       expect(state.posts.single.id, 'recent');
-      expect(state.focusFailed, isTrue);
-      expect(state.isFocusing, isFalse);
+      expect(state.focusStatus, isA<OperationFailed>());
 
       repository.failAround = false;
       await controller.retryFocus();
       state = container.read(provider).requireValue;
-      expect(state.focusFailed, isFalse);
+      expect(state.focusStatus, isA<OperationIdle>());
       expect(state.focusPostId, 'focus');
     },
   );

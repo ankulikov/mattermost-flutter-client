@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
@@ -223,8 +224,9 @@ class _ThreadsBody extends ConsumerWidget {
     }
     return Column(
       children: <Widget>[
-        if (state.isRefreshing) const LinearProgressIndicator(minHeight: 2),
-        if (state.refreshFailed)
+        if (state.refreshStatus is OperationInProgress)
+          const LinearProgressIndicator(minHeight: 2),
+        if (state.refreshStatus is OperationFailed)
           MaterialBanner(
             content: const Text(FollowedThreadsStrings.refreshFailed),
             actions: <Widget>[
@@ -246,8 +248,8 @@ class _ThreadsBody extends ConsumerWidget {
               itemBuilder: (BuildContext context, int index) {
                 if (index == state.items.length) {
                   return _LoadMore(
-                    loading: state.isLoadingMore,
-                    failed: state.loadMoreFailed,
+                    loading: state.paginationStatus is OperationInProgress,
+                    failed: state.paginationStatus is OperationFailed,
                     onPressed: () => ref
                         .read(followedThreadsProvider(teamId).notifier)
                         .loadMore(),
