@@ -124,6 +124,7 @@ class MessageBody extends ConsumerWidget {
     this.serverUrl,
     this.onSelectChannel,
     this.onOpenPostLink,
+    this.onQuoteSelection,
     this.deletedMessage,
     super.key,
   });
@@ -132,6 +133,7 @@ class MessageBody extends ConsumerWidget {
   final Uri? serverUrl;
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<String>? onOpenPostLink;
+  final ValueChanged<String>? onQuoteSelection;
   final String? deletedMessage;
 
   @override
@@ -150,6 +152,7 @@ class MessageBody extends ConsumerWidget {
       serverUrl: serverUrl,
       onSelectChannel: onSelectChannel,
       onOpenPostLink: onOpenPostLink,
+      onQuoteSelection: onQuoteSelection,
     );
   }
 }
@@ -165,6 +168,7 @@ class MessageMarkdown extends ConsumerWidget {
     this.serverUrl,
     this.onSelectChannel,
     this.onOpenPostLink,
+    this.onQuoteSelection,
     this.textStyle,
     super.key,
   });
@@ -174,6 +178,7 @@ class MessageMarkdown extends ConsumerWidget {
   final Uri? serverUrl;
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<String>? onOpenPostLink;
+  final ValueChanged<String>? onQuoteSelection;
   final TextStyle? textStyle;
 
   @override
@@ -211,6 +216,7 @@ class MessageMarkdown extends ConsumerWidget {
       serverUrl: serverUrl,
       onTapChannel: onSelectChannel,
       onTapPostLink: onOpenPostLink,
+      onQuoteSelection: onQuoteSelection,
       textStyle: bodyStyle,
       inlineParserKey:
           '${resolvedMentionNames.join(',')}|${resolvedGroupNames.join(',')}',

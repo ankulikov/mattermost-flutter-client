@@ -260,6 +260,81 @@ void main() {
     await _dismissActionsSheet(tester);
   });
 
+  testWidgets('thread touch mode opens actions on tap', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        onOpenThread: null,
+        touchBehavior: MessageTouchBehavior.actionsOnTap,
+      ),
+    );
+
+    await tester.tap(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+      findsOneWidget,
+    );
+    await _dismissActionsSheet(tester);
+  });
+
+  testWidgets('thread touch actions fit compact width with large text', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        onOpenThread: null,
+        width: 300,
+        textScaler: const TextScaler.linear(2),
+        touchBehavior: MessageTouchBehavior.actionsOnTap,
+      ),
+    );
+
+    await tester.tap(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await _dismissActionsSheet(tester);
+  });
+
+  testWidgets('thread long press selects text and puts Quote first', (
+    WidgetTester tester,
+  ) async {
+    String? quoted;
+    await tester.pumpWidget(
+      _app(
+        onOpenThread: null,
+        touchBehavior: MessageTouchBehavior.actionsOnTap,
+        onQuoteSelection: (String text) => quoted = text,
+      ),
+    );
+
+    await tester.longPress(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+
+    expect(_selectionOverlay(tester), isNotNull);
+    expect(
+      find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+      findsNothing,
+    );
+    final Finder quote = find.text(MessageActionsStrings.quote);
+    final Finder copy = find.text('Copy');
+    expect(quote, findsOneWidget);
+    expect(copy, findsOneWidget);
+    expect(tester.getTopLeft(quote).dx, lessThan(tester.getTopLeft(copy).dx));
+
+    await tester.tap(quote);
+    await tester.pumpAndSettle();
+
+    expect(quoted, 'Message');
+  });
+
   testWidgets('stylus tap uses the Markdown touch interaction', (
     WidgetTester tester,
   ) async {
@@ -319,6 +394,28 @@ void main() {
       expect(openCount, 0);
     },
   );
+
+  testWidgets('mouse click on message padding opens its thread exactly once', (
+    WidgetTester tester,
+  ) async {
+    var openCount = 0;
+    await tester.pumpWidget(_app(onOpenThread: () => openCount += 1));
+    final Rect surface = tester.getRect(
+      find.byKey(const ValueKey<String>('message-highlight')),
+    );
+
+    await tester.tapAt(
+      Offset(surface.left + 2, surface.bottom - 2),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    expect(openCount, 1);
+    expect(
+      find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+      findsNothing,
+    );
+  });
 
   testWidgets('quick actions stay interactive above the following message', (
     WidgetTester tester,
@@ -578,6 +675,8 @@ Widget _app({
   bool canDelete = false,
   bool canEdit = false,
   Uri? postPermalink,
+  MessageTouchBehavior touchBehavior = MessageTouchBehavior.openThreadOnTap,
+  ValueChanged<String>? onQuoteSelection,
 }) => MaterialApp(
   builder: (BuildContext context, Widget? child) => MediaQuery(
     data: MediaQuery.of(context).copyWith(textScaler: textScaler),
@@ -602,9 +701,13 @@ Widget _app({
               canDelete: canDelete,
               canEdit: canEdit,
               postPermalink: postPermalink,
+              touchBehavior: touchBehavior,
               child: SizedBox(
                 height: messageHeight,
-                child: const MattermostMarkdown(data: 'Message'),
+                child: MattermostMarkdown(
+                  data: 'Message',
+                  onQuoteSelection: onQuoteSelection,
+                ),
               ),
             ),
             if (followingMessage)

@@ -59,6 +59,8 @@ class ThreadPane extends ConsumerStatefulWidget {
 
 class _ThreadPaneState extends ConsumerState<ThreadPane> {
   late final ScrollController _scrollController = ScrollController();
+  final MessageComposerController _composerController =
+      MessageComposerController();
   late final int _initialUnreadReplies = widget.unreadReplies;
   final GlobalKey _unreadDividerKey = GlobalKey();
   final GlobalKey _highlightedPostKey = GlobalKey();
@@ -206,6 +208,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                               teamName: teamName,
                             ),
                             onSelectChannel: widget.onSelectChannel,
+                            onQuoteSelection: _composerController.insertQuote,
                             onToggleReaction: (PostReaction reaction) =>
                                 _toggleReaction(root, reaction.emojiName),
                             onAddReaction: (String emojiName) =>
@@ -273,6 +276,8 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                   teamName: teamName,
                                 ),
                                 onSelectChannel: widget.onSelectChannel,
+                                onQuoteSelection:
+                                    _composerController.insertQuote,
                                 onToggleReaction: (PostReaction reaction) =>
                                     _toggleReaction(
                                       state.thread.replies[index],
@@ -327,6 +332,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                         'thread-composer-${widget.rootPostId}',
                       ),
                       destinationId: 'thread-${widget.rootPostId}',
+                      composerController: _composerController,
                       placeholder: MessageComposerStrings.replyPlaceholder,
                       emojiRepositoryFactory: session == null
                           ? null
@@ -615,6 +621,7 @@ class _ThreadPost extends StatelessWidget {
     required this.serverUrl,
     required this.postPermalink,
     required this.onSelectChannel,
+    required this.onQuoteSelection,
     required this.onToggleReaction,
     required this.onAddReaction,
     required this.onDelete,
@@ -633,6 +640,7 @@ class _ThreadPost extends StatelessWidget {
   final Uri? serverUrl;
   final Uri? postPermalink;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String> onQuoteSelection;
   final Future<void> Function(PostReaction reaction) onToggleReaction;
   final Future<bool> Function(String emojiName) onAddReaction;
   final Future<bool> Function() onDelete;
@@ -648,6 +656,7 @@ class _ThreadPost extends StatelessWidget {
   Widget build(BuildContext context) {
     return MessageInteractionSurface(
       onOpenThread: null,
+      touchBehavior: MessageTouchBehavior.actionsOnTap,
       onToggleReaction: onAddReaction,
       onDelete: onDelete,
       canDelete: canDelete,
@@ -681,6 +690,7 @@ class _ThreadPost extends StatelessWidget {
                       post: post,
                       serverUrl: serverUrl,
                       onSelectChannel: onSelectChannel,
+                      onQuoteSelection: onQuoteSelection,
                       onOpenPostLink: (String postId) =>
                           unawaited(PostPermalinkRoute.push(context, postId)),
                       deletedMessage: ThreadStrings.deletedMessage,

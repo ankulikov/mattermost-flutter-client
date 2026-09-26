@@ -22,6 +22,28 @@ import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 typedef SubmitMessage =
     Future<void> Function(String message, String pendingPostId);
 
+/// Presentation command surface for inserting content into a composer.
+final class MessageComposerController {
+  _MessageComposerState? _state;
+
+  /// Inserts [text] as a Markdown block quote and focuses the composer.
+  void insertQuote(String text) => _state?._insertQuote(text);
+
+  void _attach(_MessageComposerState state) => _state = state;
+
+  void _detach(_MessageComposerState state) {
+    if (identical(_state, state)) _state = null;
+  }
+}
+
+/// Formats selected display text as a Mattermost Markdown block quote.
+String formatMarkdownQuote(String text) => text
+    .replaceAll('\r\n', '\n')
+    .replaceAll('\r', '\n')
+    .split('\n')
+    .map((String line) => '> $line')
+    .join('\n');
+
 /// Shared text-only composer for channel posts and thread replies.
 class MessageComposer extends StatefulWidget {
   const MessageComposer({
@@ -33,6 +55,7 @@ class MessageComposer extends StatefulWidget {
     this.teamId,
     this.channelId,
     this.accountId = '',
+    this.composerController,
     super.key,
   });
 
@@ -44,6 +67,7 @@ class MessageComposer extends StatefulWidget {
   final String? teamId;
   final String? channelId;
   final String accountId;
+  final MessageComposerController? composerController;
 
   @override
   State<MessageComposer> createState() => _MessageComposerState();
@@ -169,11 +193,16 @@ class _MessageComposerState extends State<MessageComposer> {
         overflow: TextOverflow.ellipsis,
       ),
     )..addListener(_onTextChanged);
+    widget.composerController?._attach(this);
   }
 
   @override
   void didUpdateWidget(covariant MessageComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.composerController != widget.composerController) {
+      oldWidget.composerController?._detach(this);
+      widget.composerController?._attach(this);
+    }
     if (oldWidget.destinationId != widget.destinationId) {
       _controller.clear();
       _pendingPostId = null;
@@ -193,6 +222,7 @@ class _MessageComposerState extends State<MessageComposer> {
 
   @override
   void dispose() {
+    widget.composerController?._detach(this);
     _controller
       ..removeListener(_onTextChanged)
       ..dispose();
@@ -203,6 +233,22 @@ class _MessageComposerState extends State<MessageComposer> {
     _mentionController?.dispose();
     _mentionNavigation.dispose();
     super.dispose();
+  }
+
+  void _insertQuote(String selectedText) {
+    if (_sending || selectedText.isEmpty) return;
+    final TextEditingValue value = _controller.value;
+    final TextSelection selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final bool startsAtLineBoundary =
+        selection.start == 0 || value.text[selection.start - 1] == '\n';
+    final String quoted = formatMarkdownQuote(selectedText);
+    final String replacement = '${startsAtLineBoundary ? '' : '\n'}$quoted\n\n';
+    _controller
+      ..selection = selection
+      ..replaceSelectionWithText(replacement);
+    _focusNode.requestFocus();
   }
 
   void _onTextChanged() {
