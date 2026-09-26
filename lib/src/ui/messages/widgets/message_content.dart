@@ -11,6 +11,7 @@ class MessageContent extends StatelessWidget {
     this.serverUrl,
     this.onSelectChannel,
     this.onOpenPostLink,
+    this.onQuoteSelection,
     this.deletedMessage,
     this.onRichAttachmentAction,
     this.actionScopeId,
@@ -23,6 +24,7 @@ class MessageContent extends StatelessWidget {
   final Uri? serverUrl;
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<String>? onOpenPostLink;
+  final ValueChanged<String>? onQuoteSelection;
   final String? deletedMessage;
   final RichAttachmentActionCallback? onRichAttachmentAction;
   final String? actionScopeId;
@@ -38,6 +40,7 @@ class MessageContent extends StatelessWidget {
         serverUrl: serverUrl,
         onSelectChannel: onSelectChannel,
         onOpenPostLink: onOpenPostLink,
+        onQuoteSelection: onQuoteSelection,
         deletedMessage: deletedMessage,
       ),
       if (!post.isDeleted && post.richAttachments.isNotEmpty) ...<Widget>[

@@ -15,6 +15,46 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart
 import 'support/fake_emoji_repository.dart';
 
 void main() {
+  test('formats every selected line as a Markdown quote', () {
+    expect(
+      formatMarkdownQuote('First line\r\nSecond line\n'),
+      '> First line\n> Second line\n> ',
+    );
+  });
+
+  testWidgets('composer controller inserts a multiline quote and focuses', (
+    WidgetTester tester,
+  ) async {
+    final MessageComposerController composerController =
+        MessageComposerController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageComposer(
+            destinationId: 'thread-1',
+            placeholder: 'Reply',
+            composerController: composerController,
+            onSubmit: (_, _) async {},
+          ),
+        ),
+      ),
+    );
+    final Finder input = find.byKey(
+      const ValueKey<String>('message-input-thread-1'),
+    );
+    await tester.enterText(input, 'Existing draft');
+
+    composerController.insertQuote('First line\nSecond line');
+    await tester.pump();
+
+    final TextField field = tester.widget<TextField>(input);
+    expect(
+      field.controller?.text,
+      'Existing draft\n> First line\n> Second line\n\n',
+    );
+    expect(field.focusNode?.hasFocus, isTrue);
+  });
+
   testWidgets('keeps a failed draft and reuses its pending post id', (
     WidgetTester tester,
   ) async {

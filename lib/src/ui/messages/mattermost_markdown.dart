@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
@@ -9,6 +10,7 @@ import 'package:highlight/highlight.dart' as syntax;
 import 'package:markdown/markdown.dart' as md;
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/message_actions_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -85,6 +87,7 @@ class MattermostMarkdown extends StatefulWidget {
     this.inlineReplacements = const <MattermostInlineReplacement>[],
     this.inlineLinkReplacements = const <MattermostInlineLinkReplacement>[],
     this.inlineParserKey,
+    this.onQuoteSelection,
     super.key,
   });
 
@@ -100,6 +103,7 @@ class MattermostMarkdown extends StatefulWidget {
   /// Changes when asynchronous replacement eligibility changes while [data]
   /// stays the same, forcing the Markdown AST to be parsed again.
   final Object? inlineParserKey;
+  final ValueChanged<String>? onQuoteSelection;
 
   @override
   State<MattermostMarkdown> createState() => _MattermostMarkdownState();
@@ -126,6 +130,7 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
   MarkdownStyleSheet? _cachedStyleSheet;
   Map<String, MarkdownElementBuilder>? _cachedBuilders;
   late md.ExtensionSet _extensionSet;
+  String? _selectedText;
 
   @override
   void initState() {
@@ -245,6 +250,10 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
         MessageInteractionScope.maybeOf(context);
     return SelectionArea(
       key: _selectionAreaKey,
+      onSelectionChanged: (SelectedContent? content) {
+        _selectedText = content?.plainText;
+      },
+      contextMenuBuilder: _buildSelectionContextMenu,
       child: interactionScope == null
           ? body
           : _TouchMessageInteractionBridge(
@@ -258,6 +267,31 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
 
   void _clearSelection() {
     _selectionAreaKey.currentState?.selectableRegion.clearSelection();
+  }
+
+  Widget _buildSelectionContextMenu(
+    BuildContext context,
+    SelectableRegionState selectableRegionState,
+  ) {
+    final String? selectedText = _selectedText;
+    final ValueChanged<String>? onQuoteSelection = widget.onQuoteSelection;
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: selectableRegionState.contextMenuAnchors,
+      buttonItems: <ContextMenuButtonItem>[
+        if (onQuoteSelection != null &&
+            selectedText != null &&
+            selectedText.isNotEmpty)
+          ContextMenuButtonItem(
+            label: MessageActionsStrings.quote,
+            onPressed: () {
+              ContextMenuController.removeAny();
+              onQuoteSelection(selectedText);
+              selectableRegionState.clearSelection();
+            },
+          ),
+        ...selectableRegionState.contextMenuButtonItems,
+      ],
+    );
   }
 
   md.ExtensionSet _buildExtensionSet(
@@ -383,10 +417,11 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
 
 /// Captures touch-like Markdown gestures inside a message interaction scope.
 ///
-/// The bridge stays below [SelectionArea], so it wins touch gesture contests
-/// against text selection without changing mouse or keyboard selection. It is
-/// intentionally excluded from semantics: links and the parent post surface
-/// remain the meaningful accessible controls.
+/// The bridge stays below [SelectionArea], so configured touch recognizers win
+/// their gesture contests without changing mouse or keyboard selection. When
+/// [onLongPressStart] is null, native long-press selection remains available.
+/// It is intentionally excluded from semantics: links and the parent post
+/// surface remain the meaningful accessible controls.
 class _TouchMessageInteractionBridge extends StatelessWidget {
   const _TouchMessageInteractionBridge({
     required this.onTouchStart,
@@ -397,7 +432,7 @@ class _TouchMessageInteractionBridge extends StatelessWidget {
 
   final VoidCallback onTouchStart;
   final VoidCallback onTap;
-  final VoidCallback onLongPressStart;
+  final VoidCallback? onLongPressStart;
   final Widget child;
 
   @override
@@ -418,15 +453,18 @@ class _TouchMessageInteractionBridge extends StatelessWidget {
                   recognizer.onTap = onTap;
                 },
               ),
-          LongPressGestureRecognizer:
-              GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-                () => LongPressGestureRecognizer(
-                  supportedDevices: _touchLikePointerKinds,
+          if (onLongPressStart != null)
+            LongPressGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<
+                  LongPressGestureRecognizer
+                >(
+                  () => LongPressGestureRecognizer(
+                    supportedDevices: _touchLikePointerKinds,
+                  ),
+                  (LongPressGestureRecognizer recognizer) {
+                    recognizer.onLongPressStart = (_) => onLongPressStart!();
+                  },
                 ),
-                (LongPressGestureRecognizer recognizer) {
-                  recognizer.onLongPressStart = (_) => onLongPressStart();
-                },
-              ),
         },
         child: child,
       ),

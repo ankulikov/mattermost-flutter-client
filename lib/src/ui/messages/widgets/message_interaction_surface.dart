@@ -10,9 +10,10 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/emoji_picker.dart';
 /// Shares post-level touch interactions with an interactive Markdown body.
 ///
 /// [MattermostMarkdown] consumes this scope only when it is rendered inside a
-/// [MessageInteractionSurface]. Its touch-only recognizers call these callbacks
-/// so that the local [SelectionArea] does not win the gesture arena. Markdown
-/// rendered without this scope remains independently selectable.
+/// [MessageInteractionSurface]. Its touch-only recognizers call the configured
+/// callbacks. A null long-press callback leaves that gesture to the local
+/// [SelectionArea]. Markdown rendered without this scope remains independently
+/// selectable.
 class MessageInteractionScope extends InheritedWidget {
   const MessageInteractionScope({
     required this.onTouchTap,
@@ -21,14 +22,11 @@ class MessageInteractionScope extends InheritedWidget {
     super.key,
   });
 
-  /// Opens the thread when touch tap wins over Markdown selection.
-  ///
-  /// This is deliberately non-null even when the row has no open-thread action:
-  /// the no-op still prevents touch selection in an already open thread.
+  /// Handles a touch tap when it wins over Markdown selection.
   final VoidCallback onTouchTap;
 
-  /// Starts a recognized touch long press and opens post actions.
-  final VoidCallback onTouchLongPressStart;
+  /// Handles touch long press, or leaves it to native selection when null.
+  final VoidCallback? onTouchLongPressStart;
 
   static MessageInteractionScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<MessageInteractionScope>();
@@ -45,6 +43,16 @@ class MessageInteractionScope extends InheritedWidget {
       onTouchLongPressStart != oldWidget.onTouchLongPressStart;
 }
 
+/// Touch gesture policy for a message row.
+enum MessageTouchBehavior {
+  /// A tap opens the thread and a long press opens message actions.
+  openThreadOnTap,
+
+  /// A tap opens message actions while a long press remains available for
+  /// native text selection.
+  actionsOnTap,
+}
+
 /// Adapts a message row to touch and precise pointer interactions.
 class MessageInteractionSurface extends StatefulWidget {
   const MessageInteractionSurface({
@@ -57,6 +65,7 @@ class MessageInteractionSurface extends StatefulWidget {
     this.emojiRepositoryFactory,
     this.accountId = '',
     this.postPermalink,
+    this.touchBehavior = MessageTouchBehavior.openThreadOnTap,
     super.key,
   });
 
@@ -69,6 +78,7 @@ class MessageInteractionSurface extends StatefulWidget {
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final String accountId;
   final Uri? postPermalink;
+  final MessageTouchBehavior touchBehavior;
 
   @override
   State<MessageInteractionSurface> createState() =>
@@ -129,6 +139,14 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     unawaited(_showActionsSheet());
   }
 
+  void _handleTouchTap() {
+    if (widget.touchBehavior == MessageTouchBehavior.actionsOnTap) {
+      unawaited(_showActionsSheet(useHapticFeedback: false));
+      return;
+    }
+    _openThread();
+  }
+
   void _handleTouchLongPressEnd() {
     if (_touchHighlighted && mounted) {
       setState(() => _touchHighlighted = false);
@@ -145,11 +163,11 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     }
   }
 
-  Future<void> _showActionsSheet() async {
+  Future<void> _showActionsSheet({bool useHapticFeedback = true}) async {
     if (_actionsSheetOpen || !mounted) return;
     _actionsSheetOpen = true;
     try {
-      unawaited(HapticFeedback.lightImpact());
+      if (useHapticFeedback) unawaited(HapticFeedback.lightImpact());
       final _MessageSheetResult? result =
           await showModalBottomSheet<_MessageSheetResult>(
             context: context,
@@ -313,23 +331,28 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
                     TapGestureRecognizer:
                         GestureRecognizerFactoryWithHandlers<
                           TapGestureRecognizer
-                        >(TapGestureRecognizer.new, (
-                          TapGestureRecognizer recognizer,
-                        ) {
-                          recognizer.onTap = _openThread;
-                        }),
-                    LongPressGestureRecognizer:
-                        GestureRecognizerFactoryWithHandlers<
-                          LongPressGestureRecognizer
                         >(
-                          () => LongPressGestureRecognizer(
+                          () => TapGestureRecognizer(
                             supportedDevices: _touchLikePointerKinds,
                           ),
-                          (LongPressGestureRecognizer recognizer) {
-                            recognizer.onLongPressStart = (_) =>
-                                _handleTouchLongPressStart();
+                          (TapGestureRecognizer recognizer) {
+                            recognizer.onTap = _handleTouchTap;
                           },
                         ),
+                    if (widget.touchBehavior ==
+                        MessageTouchBehavior.openThreadOnTap)
+                      LongPressGestureRecognizer:
+                          GestureRecognizerFactoryWithHandlers<
+                            LongPressGestureRecognizer
+                          >(
+                            () => LongPressGestureRecognizer(
+                              supportedDevices: _touchLikePointerKinds,
+                            ),
+                            (LongPressGestureRecognizer recognizer) {
+                              recognizer.onLongPressStart = (_) =>
+                                  _handleTouchLongPressStart();
+                            },
+                          ),
                   },
                   child: Container(
                     key: const ValueKey<String>('message-highlight'),
@@ -344,8 +367,12 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
                       vertical: 2,
                     ),
                     child: MessageInteractionScope(
-                      onTouchTap: _openThread,
-                      onTouchLongPressStart: _handleTouchLongPressStart,
+                      onTouchTap: _handleTouchTap,
+                      onTouchLongPressStart:
+                          widget.touchBehavior ==
+                              MessageTouchBehavior.openThreadOnTap
+                          ? _handleTouchLongPressStart
+                          : null,
                       child: widget.child,
                     ),
                   ),
