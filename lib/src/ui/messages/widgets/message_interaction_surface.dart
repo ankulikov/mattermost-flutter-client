@@ -147,6 +147,14 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     _openThread();
   }
 
+  void _handleTapUp(TapUpDetails details) {
+    if (_isTouchLike(details.kind)) {
+      _handleTouchTap();
+      return;
+    }
+    _openThread();
+  }
+
   void _handleTouchLongPressEnd() {
     if (_touchHighlighted && mounted) {
       setState(() => _touchHighlighted = false);
@@ -331,14 +339,11 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
                     TapGestureRecognizer:
                         GestureRecognizerFactoryWithHandlers<
                           TapGestureRecognizer
-                        >(
-                          () => TapGestureRecognizer(
-                            supportedDevices: _touchLikePointerKinds,
-                          ),
-                          (TapGestureRecognizer recognizer) {
-                            recognizer.onTap = _handleTouchTap;
-                          },
-                        ),
+                        >(TapGestureRecognizer.new, (
+                          TapGestureRecognizer recognizer,
+                        ) {
+                          recognizer.onTapUp = _handleTapUp;
+                        }),
                     if (widget.touchBehavior ==
                         MessageTouchBehavior.openThreadOnTap)
                       LongPressGestureRecognizer:

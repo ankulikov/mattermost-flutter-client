@@ -395,6 +395,28 @@ void main() {
     },
   );
 
+  testWidgets('mouse click on message padding opens its thread exactly once', (
+    WidgetTester tester,
+  ) async {
+    var openCount = 0;
+    await tester.pumpWidget(_app(onOpenThread: () => openCount += 1));
+    final Rect surface = tester.getRect(
+      find.byKey(const ValueKey<String>('message-highlight')),
+    );
+
+    await tester.tapAt(
+      Offset(surface.left + 2, surface.bottom - 2),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    expect(openCount, 1);
+    expect(
+      find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
+      findsNothing,
+    );
+  });
+
   testWidgets('quick actions stay interactive above the following message', (
     WidgetTester tester,
   ) async {
