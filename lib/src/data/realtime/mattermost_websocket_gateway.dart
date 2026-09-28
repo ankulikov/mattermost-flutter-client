@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:mattermost_flutter/src/data/realtime/network_availability_monitor.dart';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -10,16 +11,16 @@ final class MattermostWebSocketGateway
   MattermostWebSocketGateway({
     WebSocketConnector? connector,
     Duration Function(int attempt)? retryDelay,
-    Stream<void> reconnectSignals = const Stream<void>.empty(),
+    NetworkAvailabilityMonitor? networkMonitor,
     this.connectionTimeout = const Duration(seconds: 15),
     this.authenticationTimeout = const Duration(seconds: 15),
   }) : _connector = connector ?? _connect,
        _retryDelay = retryDelay ?? _defaultRetryDelay,
-       _reconnectSignals = reconnectSignals;
+       _networkMonitor = networkMonitor;
 
   final WebSocketConnector _connector;
   final Duration Function(int attempt) _retryDelay;
-  final Stream<void> _reconnectSignals;
+  final NetworkAvailabilityMonitor? _networkMonitor;
   final Set<void Function()> _reconnectCallbacks = <void Function()>{};
   final Duration connectionTimeout;
   final Duration authenticationTimeout;
@@ -44,12 +45,36 @@ final class MattermostWebSocketGateway
     final Completer<void> stopped = Completer<void>();
     WebSocketConnection? activeConnection;
     StreamSubscription<Object?>? activeSubscription;
-    StreamSubscription<void>? reconnectSubscription;
+    StreamSubscription<NetworkAvailability>? networkSubscription;
     Completer<void>? reconnectRequested;
+    var networkAvailable = true;
+    var networkRevision = 0;
+    WebSocketConnectionStatus? lastConnectionStatus;
 
     void requestReconnect() {
       final Completer<void>? current = reconnectRequested;
       if (current != null && !current.isCompleted) current.complete();
+    }
+
+    void updateNetworkAvailability(NetworkAvailability availability) {
+      networkRevision += 1;
+      final bool next = availability == NetworkAvailability.available;
+      if (next == networkAvailable) return;
+      networkAvailable = next;
+      requestReconnect();
+    }
+
+    void emitConnectionStatus(
+      WebSocketConnectionStatus status, {
+      bool isReconnect = false,
+    }) {
+      if (lastConnectionStatus == status && !isReconnect) return;
+      lastConnectionStatus = status;
+      _add(
+        controller,
+        stopped,
+        WebSocketConnectionSignal(status: status, isReconnect: isReconnect),
+      );
     }
 
     Future<void> closeActive() async {
@@ -71,7 +96,7 @@ final class MattermostWebSocketGateway
       if (!stopped.isCompleted) stopped.complete();
       _reconnectCallbacks.remove(requestReconnect);
       try {
-        await reconnectSubscription?.cancel();
+        await networkSubscription?.cancel();
       } on Object {
         // A platform connectivity stream may already be unavailable.
       }
@@ -84,13 +109,12 @@ final class MattermostWebSocketGateway
       while (!stopped.isCompleted) {
         final Completer<void> reconnect = Completer<void>();
         reconnectRequested = reconnect;
-        _add(
-          controller,
-          stopped,
-          const WebSocketConnectionSignal(
-            status: WebSocketConnectionStatus.connecting,
-          ),
-        );
+        if (!networkAvailable) {
+          emitConnectionStatus(WebSocketConnectionStatus.disconnected);
+          await Future.any(<Future<void>>[stopped.future, reconnect.future]);
+          continue;
+        }
+        emitConnectionStatus(WebSocketConnectionStatus.connecting);
         final Completer<void> authenticated = Completer<void>();
         final Completer<void> disconnected = Completer<void>();
         var lastSequence = -1;
@@ -178,13 +202,9 @@ final class MattermostWebSocketGateway
           if (!authenticated.isCompleted) {
             throw StateError('Socket closed before authentication');
           }
-          _add(
-            controller,
-            stopped,
-            WebSocketConnectionSignal(
-              status: WebSocketConnectionStatus.connected,
-              isReconnect: hasConnected,
-            ),
+          emitConnectionStatus(
+            WebSocketConnectionStatus.connected,
+            isReconnect: hasConnected,
           );
           hasConnected = true;
           attempt = 0;
@@ -200,13 +220,9 @@ final class MattermostWebSocketGateway
           await closeActive();
         }
         if (stopped.isCompleted) break;
-        _add(
-          controller,
-          stopped,
-          const WebSocketConnectionSignal(
-            status: WebSocketConnectionStatus.disconnected,
-          ),
-        );
+        if (networkAvailable && reconnect.isCompleted) continue;
+        emitConnectionStatus(WebSocketConnectionStatus.disconnected);
+        if (!networkAvailable) continue;
         attempt++;
         await Future.any(<Future<void>>[
           Future<void>.delayed(_retryDelay(attempt)),
@@ -220,14 +236,28 @@ final class MattermostWebSocketGateway
     controller = StreamController<WebSocketGatewaySignal>(
       onListen: () {
         _reconnectCallbacks.add(requestReconnect);
-        reconnectSubscription = _reconnectSignals.listen(
-          (_) => requestReconnect(),
+        final NetworkAvailabilityMonitor? networkMonitor = _networkMonitor;
+        networkSubscription = networkMonitor?.changes.listen(
+          updateNetworkAvailability,
           onError: (Object error, StackTrace stackTrace) {
             // Connectivity is only an optimization. Socket close/error and
             // bounded retry remain authoritative when the plugin is missing.
           },
         );
-        unawaited(run());
+        unawaited(() async {
+          if (networkMonitor != null) {
+            final int revisionBeforeCheck = networkRevision;
+            try {
+              final NetworkAvailability initial = await networkMonitor.current;
+              if (revisionBeforeCheck == networkRevision) {
+                updateNetworkAvailability(initial);
+              }
+            } on Object {
+              // A failed radio-status check must not prevent socket attempts.
+            }
+          }
+          if (!stopped.isCompleted) await run();
+        }());
       },
       onCancel: stop,
     );

@@ -228,9 +228,12 @@ list prefix: `- `, `* ` и `1. ` остаются видимыми и созда
 `docs/MESSAGE_EDITOR_PLAN.md`.
 
 Собственный post из REST-ответа сразу добавляется в volatile state открытого
-канала или треда. Inbox дополнительно использует аутентифицированный
-`SessionRealtimeService`: он владеет единственным `WebSocketGateway` активной
-сессии и раздаёт декодированные transport-сигналы repository-подписчикам.
+канала или треда. Авторизованная оболочка запускает
+`SessionRealtimeService` для активной сессии независимо от выбранной вкладки:
+он владеет единственным `WebSocketGateway` и раздаёт декодированные
+transport-сигналы repository-подписчикам через фильтры event type/channel.
+Именованные группы событий фиксируют точки расширения для posts, threads,
+user status, preferences и ephemeral feedback без дополнительных соединений.
 Transport отвечает за reconnect и sequence gaps; Inbox-фильтр пропускает только
 его события и известные пользователю каналы, а domain policy сливает
 типизированные post-дельты с тем же canonicalization/grouping pipeline, который
@@ -357,9 +360,10 @@ Read продвигает
 источник root-поста — Mentions или Direct Messages. Для CRT-треда read обновляет
 thread read timestamp в команде, из которой этот тред был загружен.
 
-После успешного REST snapshot Inbox асинхронно открывает WebSocket и показывает
-в заголовке зеленый/красный индикатор состояния. Realtime mention в первой
-версии определяется только по `@username` текущего пользователя; DM/GM
+WebSocket открывается на уровне активной авторизованной сессии и не зависит от
+того, открыт ли Inbox. Inbox показывает в заголовке зеленый индикатор для
+connected, желтый для connecting и красный для disconnected. Realtime mention
+в первой версии определяется только по `@username` текущего пользователя; DM/GM
 доставляются целиком, а обычные каналы дополнительно учитывают effective
 all-messages notification policy. Первый connect только обновляет индикатор;
 reconnect и пропуск `seq` запускают атомарную сверку с REST.
@@ -367,8 +371,9 @@ reconnect и пропуск `seq` запускают атомарную свер
 Inbox controller живет на уровне авторизованной оболочки, а не открытой вкладки:
 переходы между Channels, Inbox и тредами не закрывают его realtime-подписку.
 Возврат приложения в `resumed` принудительно заменяет потенциально полуоткрытый
-WebSocket и запускает REST-сверку; появление доступной сети также прерывает
-текущий reconnect/backoff и создает новое соединение. Новая подходящая realtime
+WebSocket и запускает REST-сверку. При исчезновении доступной сети transport
+закрывает активный socket и не расходует reconnect-попытки; появление сети
+прерывает ожидание/backoff и сразу создаёт новое соединение. Новая подходящая realtime
 коммуникация атомарно обновляет Inbox и его навигационный индикатор, а оболочка
 показывает foreground SnackBar. Initial snapshot, reconnect-сверка, edit/delete
 и повторная доставка одного post id не создают in-app уведомление. Системные

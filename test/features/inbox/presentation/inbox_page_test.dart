@@ -18,7 +18,7 @@ import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
-  testWidgets('shows red and green realtime connection indicators', (
+  testWidgets('shows red, yellow and green realtime connection indicators', (
     WidgetTester tester,
   ) async {
     final StreamController<InboxRealtimeEvent> realtime =
@@ -55,6 +55,25 @@ void main() {
         (BoxDecoration decoration) => decoration.color,
         'color',
         Colors.red,
+      ),
+    );
+
+    realtime.add(
+      const InboxConnectionChanged(InboxConnectionStatus.connecting),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Inbox realtime is connecting'), findsOneWidget);
+    expect(
+      tester
+          .widget<Container>(
+            find.descendant(of: indicator, matching: find.byType(Container)),
+          )
+          .decoration,
+      isA<BoxDecoration>().having(
+        (BoxDecoration decoration) => decoration.color,
+        'color',
+        Colors.amber,
       ),
     );
 

@@ -3,6 +3,47 @@ import 'dart:async';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
+
+/// A feature's interest in the session-wide Mattermost event stream.
+///
+/// Event names remain transport strings because Mattermost can add server and
+/// plugin events without requiring the shared connection owner to change.
+final class SessionRealtimeSubscription {
+  const SessionRealtimeSubscription({
+    required this.eventNames,
+    this.acceptsChannel,
+  });
+
+  final Set<String> eventNames;
+  final bool Function(String channelId)? acceptsChannel;
+
+  bool accepts(MattermostWebSocketEvent event) {
+    if (!eventNames.contains(event.name)) return false;
+    final bool Function(String channelId)? channelFilter = acceptsChannel;
+    final String channelId = event.channelId;
+    return channelFilter == null ||
+        channelId.isEmpty ||
+        channelFilter(channelId);
+  }
+}
+
+/// Named event groups for current and future feature subscriptions.
+abstract final class MattermostRealtimeEventGroups {
+  static const Set<String> posts = <String>{
+    'posted',
+    'post_edited',
+    'post_deleted',
+  };
+  static const Set<String> threads = <String>{'thread_updated'};
+  static const Set<String> userStatus = <String>{'status_change'};
+  static const Set<String> preferences = <String>{
+    'preference_changed',
+    'preferences_changed',
+    'preferences_deleted',
+  };
+  static const Set<String> ephemeral = <String>{'ephemeral_message'};
+}
 
 sealed class SessionRealtimeSignal {
   const SessionRealtimeSignal();
@@ -26,7 +67,7 @@ final class SessionRealtimeEventReceived extends SessionRealtimeSignal {
 
 /// Owns one authenticated WebSocket and fans its decoded signals out to all
 /// session features. Feature repositories map events into domain models.
-final class SessionRealtimeService {
+final class SessionRealtimeService implements RealtimeConnectionService {
   SessionRealtimeService({
     required WebSocketGateway gateway,
     required CredentialStore credentialStore,
@@ -41,55 +82,104 @@ final class SessionRealtimeService {
   AuthSession? _session;
   var _generation = 0;
   bool _disposed = false;
+  WebSocketConnectionStatus _connectionStatus =
+      WebSocketConnectionStatus.disconnected;
 
   Stream<SessionRealtimeSignal> watch({
     required AuthSession session,
-    required Set<String> eventNames,
-    bool Function(String channelId)? acceptsChannel,
+    required SessionRealtimeSubscription subscription,
   }) {
-    _ensureStarted(session);
-    return _signals.stream.where((SessionRealtimeSignal signal) {
-      if (signal case SessionRealtimeEventReceived(:final event)) {
-        if (!eventNames.contains(event.name)) return false;
-        final String channelId = event.channelId;
-        if (acceptsChannel != null &&
-            channelId.isNotEmpty &&
-            !acceptsChannel(channelId)) {
-          return false;
-        }
-      }
-      return true;
+    return Stream<SessionRealtimeSignal>.multi((controller) {
+      unawaited(setSession(session));
+      controller.add(SessionRealtimeConnectionChanged(_connectionStatus));
+      final StreamSubscription<SessionRealtimeSignal> signalSubscription =
+          _signals.stream.listen(
+            (SessionRealtimeSignal signal) {
+              if (signal case SessionRealtimeEventReceived(:final event)) {
+                if (!subscription.accepts(event)) return;
+              }
+              controller.add(signal);
+            },
+            onError: controller.addError,
+            onDone: controller.close,
+          );
+      controller.onCancel = signalSubscription.cancel;
     });
   }
 
+  @override
+  RealtimeConnectionStatus get connectionStatus =>
+      _mapConnectionStatus(_connectionStatus);
+
+  @override
+  Stream<RealtimeConnectionStatus> get connectionStatuses =>
+      Stream<RealtimeConnectionStatus>.multi((controller) {
+        controller.add(connectionStatus);
+        final StreamSubscription<SessionRealtimeSignal> signalSubscription =
+            _signals.stream.listen(
+              (SessionRealtimeSignal signal) {
+                if (signal case SessionRealtimeConnectionChanged(
+                  :final status,
+                )) {
+                  controller.add(_mapConnectionStatus(status));
+                }
+              },
+              onError: controller.addError,
+              onDone: controller.close,
+            );
+        controller.onCancel = signalSubscription.cancel;
+      }).distinct();
+
+  @override
   void reconnect() {
+    if (_session == null || _disposed) return;
+    if (_subscription == null) {
+      unawaited(setSession(_session));
+      return;
+    }
     final WebSocketGateway gateway = _gateway;
     if (gateway is ReconnectableWebSocketGateway) gateway.reconnect();
   }
 
-  void _ensureStarted(AuthSession session) {
+  /// Starts the single socket for [session], or stops it when session is null.
+  Future<void> setSession(AuthSession? session) async {
     if (_disposed) return;
-    if (_session?.durableDataScopeId == session.durableDataScopeId &&
+    if (session != null &&
+        _session?.durableDataScopeId == session.durableDataScopeId &&
         _subscription != null) {
       return;
     }
     final int generation = ++_generation;
     _session = session;
-    unawaited(_subscription?.cancel());
+    final StreamSubscription<WebSocketGatewaySignal>? previous = _subscription;
     _subscription = null;
-    unawaited(_start(session, generation));
+    try {
+      await previous?.cancel();
+    } on Object {
+      // A dead platform socket must not block the replacement connection.
+    }
+    if (_disposed || generation != _generation) return;
+    if (session == null) {
+      _emitConnectionStatus(WebSocketConnectionStatus.disconnected);
+      return;
+    }
+    await _start(session, generation);
   }
 
   Future<void> _start(AuthSession session, int generation) async {
-    final ({Uri serverUrl, String token})? credentials = await _credentialStore
-        .read();
+    _emitConnectionStatus(WebSocketConnectionStatus.connecting);
+    final ({Uri serverUrl, String token})? credentials;
+    try {
+      credentials = await _credentialStore.read();
+    } on Object {
+      if (!_disposed && generation == _generation) {
+        _emitConnectionStatus(WebSocketConnectionStatus.disconnected);
+      }
+      return;
+    }
     if (_disposed || generation != _generation) return;
     if (credentials == null || credentials.serverUrl != session.serverUrl) {
-      _signals.add(
-        const SessionRealtimeConnectionChanged(
-          WebSocketConnectionStatus.disconnected,
-        ),
-      );
+      _emitConnectionStatus(WebSocketConnectionStatus.disconnected);
       return;
     }
     _subscription = _gateway
@@ -104,7 +194,7 @@ final class SessionRealtimeService {
             if (_disposed || generation != _generation) return;
             switch (signal) {
               case WebSocketConnectionSignal(:final status, :final isReconnect):
-                _signals.add(SessionRealtimeConnectionChanged(status));
+                _emitConnectionStatus(status);
                 if (status == WebSocketConnectionStatus.connected &&
                     isReconnect) {
                   _signals.add(const SessionRealtimeRecoveryRequired());
@@ -117,21 +207,45 @@ final class SessionRealtimeService {
           },
           onError: (Object error, StackTrace stackTrace) {
             if (!_disposed && generation == _generation) {
-              _signals.add(
-                const SessionRealtimeConnectionChanged(
-                  WebSocketConnectionStatus.disconnected,
-                ),
-              );
+              _emitConnectionStatus(WebSocketConnectionStatus.disconnected);
+            }
+          },
+          onDone: () {
+            if (!_disposed && generation == _generation) {
+              _subscription = null;
+              _emitConnectionStatus(WebSocketConnectionStatus.disconnected);
             }
           },
         );
   }
 
+  void _emitConnectionStatus(WebSocketConnectionStatus status) {
+    if (_connectionStatus == status) return;
+    _connectionStatus = status;
+    if (!_disposed && !_signals.isClosed) {
+      _signals.add(SessionRealtimeConnectionChanged(status));
+    }
+  }
+
+  static RealtimeConnectionStatus _mapConnectionStatus(
+    WebSocketConnectionStatus status,
+  ) => switch (status) {
+    WebSocketConnectionStatus.connecting => RealtimeConnectionStatus.connecting,
+    WebSocketConnectionStatus.connected => RealtimeConnectionStatus.connected,
+    WebSocketConnectionStatus.disconnected =>
+      RealtimeConnectionStatus.disconnected,
+  };
+
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
     _generation += 1;
-    await _subscription?.cancel();
+    try {
+      await _subscription?.cancel();
+    } on Object {
+      // Disposal remains best-effort when the platform socket already failed.
+    }
+    _connectionStatus = WebSocketConnectionStatus.disconnected;
     await _signals.close();
   }
 }

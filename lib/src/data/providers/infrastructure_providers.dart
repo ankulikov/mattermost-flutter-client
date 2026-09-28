@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_client_factory.dart';
 import 'package:mattermost_flutter/src/data/cache/avatar_cache.dart';
@@ -9,7 +8,9 @@ import 'package:mattermost_flutter/src/data/database/database_provider.dart';
 import 'package:mattermost_flutter/src/data/database/recent_emoji_cache.dart';
 import 'package:mattermost_flutter/src/data/database/user_profile_cache_dao.dart';
 import 'package:mattermost_flutter/src/data/platform/system_attachment_file_saver.dart';
+import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
 import 'package:mattermost_flutter/src/data/realtime/mattermost_websocket_gateway.dart';
+import 'package:mattermost_flutter/src/data/realtime/network_availability_monitor.dart';
 import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
@@ -29,13 +30,7 @@ final Provider<MattermostApiClientFactory> mattermostApiClientFactoryProvider =
 final Provider<WebSocketGateway> webSocketGatewayProvider =
     Provider<WebSocketGateway>(
       (Ref ref) => MattermostWebSocketGateway(
-        reconnectSignals: Connectivity().onConnectivityChanged
-            .where(
-              (List<ConnectivityResult> results) => results.any(
-                (ConnectivityResult it) => it != ConnectivityResult.none,
-              ),
-            )
-            .map((List<ConnectivityResult> _) {}),
+        networkMonitor: ConnectivityNetworkAvailabilityMonitor(),
       ),
     );
 
@@ -44,6 +39,11 @@ final Provider<SessionRealtimeService> sessionRealtimeServiceProvider =
       final SessionRealtimeService service = SessionRealtimeService(
         gateway: ref.watch(webSocketGatewayProvider),
         credentialStore: ref.watch(credentialStoreProvider),
+      );
+      ref.listen(
+        activeAccountSessionProvider,
+        (previous, next) => unawaited(service.setSession(next)),
+        fireImmediately: true,
       );
       ref.onDispose(() => unawaited(service.dispose()));
       return service;
