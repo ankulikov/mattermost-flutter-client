@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
@@ -9,6 +11,8 @@ import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page_controller.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_settings_controller.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/current_user_profile_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
@@ -228,12 +232,56 @@ final followedThreadsProvider = AsyncNotifierProvider.autoDispose
       ),
     );
 
-final AsyncNotifierProvider<InboxController, InboxViewState> inboxProvider =
-    AsyncNotifierProvider<InboxController, InboxViewState>(
-      () => InboxController(
+final AsyncNotifierProvider<InboxSessionController, InboxSessionViewState>
+inboxSessionProvider =
+    AsyncNotifierProvider<InboxSessionController, InboxSessionViewState>(
+      () => InboxSessionController(
         authSessionProvider,
         inboxRepositoryProvider,
         postponedRepositoryProvider,
+        threadProvider: threadRepositoryProvider,
+        settingsProvider: inboxSettingsRepositoryProvider,
+        inAppNotificationEventsProvider: inboxInAppNotificationEventsProvider,
+      ),
+    );
+
+/// The authenticated-shell Inbox projection. It stays alive when Inbox is not
+/// the selected destination so badge and realtime notifications remain current.
+@Deprecated('Use inboxSessionProvider instead.')
+final AsyncNotifierProvider<InboxSessionController, InboxSessionViewState>
+inboxProvider = inboxSessionProvider;
+
+/// One-shot foreground Inbox events for shell-level presentation.
+///
+/// This is session-scoped infrastructure rather than notifier state: Inbox
+/// controller rebuilds must not replace a stream a mounted shell consumes.
+final Provider<InboxInAppNotificationEvents>
+inboxInAppNotificationEventsProvider = Provider<InboxInAppNotificationEvents>((
+  Ref ref,
+) {
+  final InboxInAppNotificationEvents events = InboxInAppNotificationEvents();
+  ref.onDispose(() {
+    unawaited(events.dispose());
+  });
+  return events;
+});
+
+/// State that only belongs to one mounted Inbox page.
+final inboxPageProvider =
+    NotifierProvider.autoDispose<InboxPageController, InboxPageViewState>(
+      () => InboxPageController(inboxSessionProvider),
+    );
+
+/// Screen-scoped client-owned Inbox settings form.
+final inboxSettingsProvider =
+    AsyncNotifierProvider.autoDispose<
+      InboxSettingsController,
+      InboxSettingsViewState
+    >(
+      () => InboxSettingsController(
+        authSessionProvider,
+        inboxSettingsRepositoryProvider,
+        inboxSessionProvider: inboxSessionProvider,
       ),
     );
 

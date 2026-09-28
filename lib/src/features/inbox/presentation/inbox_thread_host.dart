@@ -7,6 +7,7 @@ import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_channel_route.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
+import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
 import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -44,10 +45,10 @@ final class InboxThreadTarget {
           unreadReplies: thread.unreadReplies,
           positionAtEndWhenRead: thread.unreadReplies == 0,
         ),
-      ChannelPostInboxItem(candidate: final candidate) => InboxThreadTarget(
-        rootPostId: _rootPostId(candidate.post),
-        channel: candidate.channel,
-        teamId: candidate.channel.teamId,
+      ChannelPostInboxItem() => throw ArgumentError.value(
+        item,
+        'item',
+        'Channel posts must use permalink navigation',
       ),
       DirectMessageBundleInboxItem(messages: [final message]) =>
         InboxThreadTarget(
@@ -59,6 +60,11 @@ final class InboxThreadTarget {
         item,
         'item',
         'Multi-message bundles open their channel, not a thread',
+      ),
+      UnavailablePostponedInboxItem() => throw ArgumentError.value(
+        item,
+        'item',
+        'Unavailable postponed items cannot be opened',
       ),
     };
   }
@@ -102,6 +108,7 @@ class InboxThreadHost extends ConsumerStatefulWidget {
 class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
   InboxThreadTarget? _selectedTarget;
   SidebarChannel? _selectedChannel;
+  String? _selectedPermalinkPostId;
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +118,19 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
       ),
     );
     final Widget inbox = widget.inboxBuilder(context, (InboxItem item) {
+      if (item case ChannelPostInboxItem(post: final post)) {
+        if (widget.showAdjacentWorkspace) {
+          setState(() {
+            _selectedTarget = null;
+            _selectedChannel = null;
+            _selectedPermalinkPostId = post.id;
+          });
+          return;
+        }
+        unawaited(PostPermalinkRoute.push(context, post.id));
+        return;
+      }
+      if (item is UnavailablePostponedInboxItem) return;
       if (item case DirectMessageBundleInboxItem(
         messages: final messages,
       ) when messages.length > 1) {
@@ -119,6 +139,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
           setState(() {
             _selectedTarget = null;
             _selectedChannel = channel;
+            _selectedPermalinkPostId = null;
           });
           return;
         }
@@ -138,6 +159,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
         setState(() {
           _selectedChannel = null;
           _selectedTarget = target;
+          _selectedPermalinkPostId = null;
         });
         return;
       }
@@ -153,6 +175,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
 
     final InboxThreadTarget? target = _selectedTarget;
     final SidebarChannel? channel = _selectedChannel;
+    final String? permalinkPostId = _selectedPermalinkPostId;
     return Row(
       key: const ValueKey<String>('inbox-thread-host-wide'),
       children: <Widget>[
@@ -164,7 +187,9 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
         const VerticalDivider(width: 1),
         Expanded(
           child: IndexedStack(
-            index: channel != null
+            index: permalinkPostId != null
+                ? 3
+                : channel != null
                 ? 2
                 : target != null
                 ? 1
@@ -198,6 +223,16 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
                     onBack: () => setState(() => _selectedChannel = null),
                   ),
                 ),
+              if (permalinkPostId == null)
+                const SizedBox.shrink()
+              else
+                PostPermalinkRoute(
+                  key: ValueKey<String>('inbox-linked-post-$permalinkPostId'),
+                  postId: permalinkPostId,
+                  stateScopeId: 'inbox-linked-post-$permalinkPostId',
+                  onClose: () =>
+                      setState(() => _selectedPermalinkPostId = null),
+                ),
             ],
           ),
         ),
@@ -229,7 +264,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
   );
 
   void _removeUnfollowedThread(String rootPostId) {
-    ref.read(inboxProvider.notifier).removeUnfollowedThread(rootPostId);
+    ref.read(inboxSessionProvider.notifier).removeUnfollowedThread(rootPostId);
     if (mounted && _selectedTarget?.rootPostId == rootPostId) {
       setState(() => _selectedTarget = null);
     }

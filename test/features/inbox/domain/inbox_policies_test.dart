@@ -5,6 +5,7 @@ import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/canonical_inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/apply_inbox_post_change.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/canonicalize_inbox_candidates.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/classify_inbox_section.dart';
@@ -67,15 +68,135 @@ void main() {
       expect(result.newItems, isEmpty);
       expect(result.postponedItems.single.postIds, <String>['postponed']);
     });
+
+    test(
+      'edits an existing preview without changing its membership reason',
+      () {
+        final InboxPostCandidate original = _postCandidate(
+          id: 'post',
+          direct: true,
+          reason: InboxAttentionReason.directMention,
+        );
+        final InboxPostCandidate editedWirePreview = _postCandidate(
+          id: 'post',
+          direct: false,
+          authorId: 'different-author',
+          message: 'edited preview',
+          reason: InboxAttentionReason.allMessagesSubscription,
+        );
+        final InboxSnapshot result = applyInboxPostChange(
+          snapshot: InboxSnapshot(
+            newItems: <InboxItem>[
+              DirectMessageBundleInboxItem(
+                channelId: 'dm',
+                authorId: 'other',
+                automationClass: InboxAutomationClass.person,
+                messages: <InboxPostCandidate>[original],
+              ),
+            ],
+          ),
+          postId: 'post',
+          candidate: editedWirePreview,
+          kind: InboxPostChangeKind.edited,
+        );
+
+        final InboxPostCandidate retained =
+            (result.newItems.single as DirectMessageBundleInboxItem)
+                .messages
+                .single;
+        expect(retained.post.message, editedWirePreview.post.message);
+        expect(retained.reason, InboxAttentionReason.directMention);
+        expect(retained.channel.id, 'dm');
+        expect(retained.post.author.id, 'different-author');
+      },
+    );
+
+    test('does not create an unknown item from an edit', () {
+      final InboxSnapshot result = applyInboxPostChange(
+        snapshot: InboxSnapshot(),
+        postId: 'unknown',
+        candidate: _postCandidate(id: 'unknown'),
+        kind: InboxPostChangeKind.edited,
+      );
+
+      expect(result.newItems, isEmpty);
+    });
+
+    test('deletes one direct message from a bundle idempotently', () {
+      final InboxPostCandidate first = _postCandidate(
+        id: 'first',
+        direct: true,
+      );
+      final InboxPostCandidate second = _postCandidate(
+        id: 'second',
+        direct: true,
+      );
+      final InboxSnapshot initial = InboxSnapshot(
+        newItems: <InboxItem>[
+          DirectMessageBundleInboxItem(
+            channelId: 'dm',
+            authorId: 'other',
+            automationClass: InboxAutomationClass.person,
+            messages: <InboxPostCandidate>[first, second],
+          ),
+        ],
+      );
+
+      final InboxSnapshot deleted = applyInboxPostChange(
+        snapshot: initial,
+        postId: 'first',
+        candidate: null,
+        kind: InboxPostChangeKind.deleted,
+      );
+      final InboxSnapshot duplicate = applyInboxPostChange(
+        snapshot: deleted,
+        postId: 'first',
+        candidate: null,
+        kind: InboxPostChangeKind.deleted,
+      );
+
+      expect(deleted.newItems.single.postIds, <String>['second']);
+      expect(duplicate.newItems.single.postIds, <String>['second']);
+    });
+
+    test('deletes a followed root item', () {
+      final InboxSnapshot result = applyInboxPostChange(
+        snapshot: InboxSnapshot(
+          newItems: <InboxItem>[
+            ThreadInboxItem(
+              thread: _thread(rootId: 'root'),
+              channel: _channel(),
+              teamId: 'team',
+            ),
+          ],
+        ),
+        postId: 'root',
+        candidate: null,
+        kind: InboxPostChangeKind.deleted,
+      );
+
+      expect(result.newItems, isEmpty);
+    });
   });
 
   group('classifyInboxSection', () {
-    test('classifies channel mentions and automation messages', () {
+    test('keeps ordinary channel activity separate from mentions', () {
       expect(
         classifyInboxSection(
           ChannelPostInboxItem(candidate: _postCandidate(id: 'mention')),
         ),
         InboxSection.mentions,
+      );
+      expect(
+        classifyInboxSection(
+          ChannelPostInboxItem(
+            candidate: _postCandidate(
+              id: 'ordinary',
+              reason: InboxAttentionReason.allMessagesSubscription,
+            ),
+          ),
+        ),
+        InboxSection.allActivity,
       );
       expect(
         classifyInboxSection(
@@ -202,7 +323,7 @@ void main() {
   });
 
   group('groupDirectMessages', () {
-    test('groups messages from one sender regardless of time gap', () {
+    test('groups adjacent messages up to the inclusive two-minute bound', () {
       final DateTime start = DateTime.utc(2026);
       final List<InboxItem> items =
           groupDirectMessages(<CanonicalInboxCandidate>[
@@ -213,27 +334,85 @@ void main() {
               _postCandidate(
                 id: 'two',
                 direct: true,
-                at: start.add(const Duration(days: 3)),
+                at: start.add(
+                  defaultDirectMessageGroupingWindow -
+                      const Duration(milliseconds: 1),
+                ),
+              ),
+            ),
+            CanonicalDirectPostCandidate(
+              _postCandidate(
+                id: 'three',
+                direct: true,
+                at: start.add(defaultDirectMessageGroupingWindow),
               ),
             ),
           ]);
 
       expect(items, hasLength(1));
-      expect(items.single.postIds, <String>['one', 'two']);
+      expect(items.single.postIds, <String>['one', 'two', 'three']);
     });
 
-    test('keeps direct messages from different senders separate', () {
+    test('starts a new bundle after a gap beyond the window', () {
+      final DateTime start = DateTime.utc(2026);
       final List<InboxItem> items =
           groupDirectMessages(<CanonicalInboxCandidate>[
             CanonicalDirectPostCandidate(
-              _postCandidate(id: 'ada', direct: true, authorId: 'ada'),
+              _postCandidate(id: 'one', direct: true, at: start),
             ),
             CanonicalDirectPostCandidate(
-              _postCandidate(id: 'grace', direct: true, authorId: 'grace'),
+              _postCandidate(
+                id: 'two',
+                direct: true,
+                at: start.add(
+                  defaultDirectMessageGroupingWindow +
+                      const Duration(milliseconds: 1),
+                ),
+              ),
             ),
           ]);
 
-      expect(items, hasLength(2));
+      expect(items.map((InboxItem item) => item.postIds), <List<String>>[
+        <String>['one'],
+        <String>['two'],
+      ]);
+    });
+
+    test('breaks a bundle at an intervening direct author', () {
+      final DateTime start = DateTime.utc(2026);
+      final List<InboxItem> items =
+          groupDirectMessages(<CanonicalInboxCandidate>[
+            CanonicalDirectPostCandidate(
+              _postCandidate(
+                id: 'first-ada',
+                direct: true,
+                authorId: 'ada',
+                at: start,
+              ),
+            ),
+            CanonicalDirectPostCandidate(
+              _postCandidate(
+                id: 'grace',
+                direct: true,
+                authorId: 'grace',
+                at: start.add(const Duration(seconds: 10)),
+              ),
+            ),
+            CanonicalDirectPostCandidate(
+              _postCandidate(
+                id: 'second-ada',
+                direct: true,
+                authorId: 'ada',
+                at: start.add(const Duration(seconds: 20)),
+              ),
+            ),
+          ]);
+
+      expect(items.map((InboxItem item) => item.postIds), <List<String>>[
+        <String>['first-ada'],
+        <String>['grace'],
+        <String>['second-ada'],
+      ]);
     });
 
     test('does not group people with automation messages', () {
@@ -263,6 +442,54 @@ void main() {
           InboxAutomationClass.person,
           InboxAutomationClass.automation,
         ],
+      );
+    });
+
+    test('is deterministic for batched and reordered realtime input', () {
+      final DateTime start = DateTime.utc(2026);
+      final List<CanonicalInboxCandidate> batch = <CanonicalInboxCandidate>[
+        CanonicalDirectPostCandidate(
+          _postCandidate(
+            id: 'second',
+            direct: true,
+            at: start.add(const Duration(seconds: 60)),
+          ),
+        ),
+        CanonicalDirectPostCandidate(
+          _postCandidate(id: 'first', direct: true, at: start),
+        ),
+        CanonicalDirectPostCandidate(
+          _postCandidate(
+            id: 'other-channel',
+            direct: true,
+            at: start.add(const Duration(seconds: 90)),
+            channelId: 'other-dm',
+          ),
+        ),
+      ];
+
+      final List<InboxItem> forward = groupDirectMessages(batch);
+      final List<InboxItem> reversed = groupDirectMessages(batch.reversed);
+
+      expect(
+        forward.map((InboxItem item) => item.key),
+        reversed.map((InboxItem item) => item.key),
+      );
+      expect(
+        forward.map((InboxItem item) => item.postIds),
+        reversed.map((InboxItem item) => item.postIds),
+      );
+      expect(forward.expand((InboxItem item) => item.postIds).toSet(), <String>{
+        'first',
+        'second',
+        'other-channel',
+      });
+      expect(
+        forward.fold<int>(
+          0,
+          (int count, InboxItem item) => count + item.postIds.length,
+        ),
+        3,
       );
     });
   });
@@ -327,20 +554,22 @@ InboxPostCandidate _postCandidate({
   String rootId = '',
   bool direct = false,
   String authorId = 'other',
+  String? message,
   DateTime? at,
+  String? channelId,
   InboxAttentionReason reason = InboxAttentionReason.directMention,
   bool fromWebhook = false,
 }) => InboxPostCandidate(
   post: Post(
     id: id,
-    channelId: direct ? 'dm' : 'channel',
+    channelId: channelId ?? (direct ? 'dm' : 'channel'),
     author: PostAuthor(id: authorId, displayName: authorId),
     sentAt: at ?? DateTime.utc(2026),
-    message: id,
+    message: message ?? id,
     rootId: rootId,
   ),
   channel: SidebarChannel(
-    id: direct ? 'dm' : 'channel',
+    id: channelId ?? (direct ? 'dm' : 'channel'),
     teamId: 'team',
     name: 'name',
     displayName: 'name',

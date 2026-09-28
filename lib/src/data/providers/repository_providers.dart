@@ -27,8 +27,10 @@ import 'package:mattermost_flutter/src/domain/repositories/rich_attachment_optio
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_inbox_repository.dart';
+import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_inbox_settings_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_postponed_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_settings_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 import 'package:mattermost_flutter/src/features/mentions/data/repositories/mattermost_mention_repository.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
@@ -185,12 +187,20 @@ final Provider<PostponedRepository> postponedRepositoryProvider =
       ),
     );
 
+final Provider<InboxSettingsRepository> inboxSettingsRepositoryProvider =
+    Provider<InboxSettingsRepository>(
+      (Ref ref) => MattermostInboxSettingsRepository(
+        api: ref.watch(activeMattermostApiProvider),
+      ),
+    );
+
 final Provider<InboxRepository> inboxRepositoryProvider =
     Provider<InboxRepository>(
       (Ref ref) => MattermostInboxRepository(
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         postponed: ref.watch(postponedRepositoryProvider),
+        settings: ref.watch(inboxSettingsRepositoryProvider),
         realtime: ref.watch(sessionRealtimeServiceProvider),
       ),
     );

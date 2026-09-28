@@ -16,10 +16,16 @@ import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 /// so a Back action always removes this page instead of revealing an
 /// intermediate channel screen.
 class LinkedPostPage extends ConsumerWidget {
-  const LinkedPostPage({required this.target, this.stateScopeId, super.key});
+  const LinkedPostPage({
+    required this.target,
+    this.stateScopeId,
+    this.onClose,
+    super.key,
+  });
 
   final PostNavigationTarget target;
   final String? stateScopeId;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,6 +45,7 @@ class LinkedPostPage extends ConsumerWidget {
                 target: target,
                 serverUrl: serverUrl,
                 stateScopeId: stateScopeId ?? target.linkedPostId,
+                onClose: onClose ?? context.pop,
               );
             }
             return ChannelPostsPane(
@@ -48,7 +55,7 @@ class LinkedPostPage extends ConsumerWidget {
               channel: target.channel,
               navigationTarget: target,
               stateScopeId: stateScopeId ?? target.linkedPostId,
-              onBack: context.pop,
+              onBack: onClose ?? context.pop,
             );
           },
         ),
@@ -62,16 +69,18 @@ class _CompactLinkedThread extends StatelessWidget {
     required this.target,
     required this.serverUrl,
     required this.stateScopeId,
+    required this.onClose,
   });
 
   final PostNavigationTarget target;
   final Uri? serverUrl;
   final String stateScopeId;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) => CallbackShortcuts(
     bindings: <ShortcutActivator, VoidCallback>{
-      const SingleActivator(LogicalKeyboardKey.escape): context.pop,
+      const SingleActivator(LogicalKeyboardKey.escape): onClose,
     },
     child: Focus(
       autofocus: true,
@@ -83,7 +92,7 @@ class _CompactLinkedThread extends StatelessWidget {
         serverUrl: serverUrl,
         teamId: target.channel.teamId,
         stateScopeId: stateScopeId,
-        onClose: context.pop,
+        onClose: onClose,
       ),
     ),
   );

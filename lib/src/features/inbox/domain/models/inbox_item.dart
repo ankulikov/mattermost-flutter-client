@@ -4,6 +4,8 @@ import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_completeness.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
 
 enum InboxQueue { newItems, postponed }
 
@@ -103,22 +105,74 @@ final class DirectMessageBundleInboxItem extends InboxItem {
       );
 }
 
+/// A durable postponed reference whose server content cannot be displayed.
+///
+/// The item deliberately contains no hydrated post, author, or channel data.
+/// Keeping the original reference lets the user explicitly remove it without
+/// silently deleting a server preference that may be temporarily inaccessible.
+final class UnavailablePostponedInboxItem extends InboxItem {
+  UnavailablePostponedInboxItem({required this.reference})
+    : super(postponedAt: reference.addedAt);
+
+  final PostponedReference reference;
+
+  @override
+  String get key =>
+      'postponed-unavailable:${reference.kind.name}:${reference.canonicalId}';
+
+  @override
+  List<String> get postIds =>
+      List<String>.unmodifiable(<String>[reference.postId]);
+
+  @override
+  Set<String> get threadRootIds =>
+      reference.kind == PostponedReferenceKind.thread
+      ? Set<String>.unmodifiable(<String>{reference.postId})
+      : const <String>{};
+
+  @override
+  DateTime get lastActivityAt => reference.addedAt;
+}
+
 /// The presentation-ready result of a single atomic Inbox reconciliation.
 final class InboxSnapshot {
   InboxSnapshot({
     Iterable<InboxItem> newItems = const <InboxItem>[],
     Iterable<InboxItem> postponedItems = const <InboxItem>[],
     this.builtAt,
-    this.hasIncompleteMentionReconstruction = false,
+    InboxCompleteness completeness = InboxCompleteness.exact,
+    @Deprecated('Use completeness instead.')
+    bool? hasIncompleteMentionReconstruction,
+    Iterable<InboxSourceDiagnosticCode> diagnosticsCodes =
+        const <InboxSourceDiagnosticCode>[],
+    Iterable<InboxSourceFailure> sourceFailures = const <InboxSourceFailure>[],
   }) : newItems = UnmodifiableListView<InboxItem>(newItems.toList()),
        postponedItems = UnmodifiableListView<InboxItem>(
          postponedItems.toList(),
+       ),
+       completeness =
+           completeness == InboxCompleteness.exact &&
+               hasIncompleteMentionReconstruction == true
+           ? InboxCompleteness.approximateMentions
+           : completeness,
+       diagnosticsCodes = UnmodifiableSetView<InboxSourceDiagnosticCode>(
+         Set<InboxSourceDiagnosticCode>.of(diagnosticsCodes),
+       ),
+       sourceFailures = UnmodifiableSetView<InboxSourceFailure>(
+         Set<InboxSourceFailure>.of(sourceFailures),
        );
 
   final List<InboxItem> newItems;
   final List<InboxItem> postponedItems;
   final DateTime? builtAt;
-  final bool hasIncompleteMentionReconstruction;
+  final InboxCompleteness completeness;
+  final Set<InboxSourceDiagnosticCode> diagnosticsCodes;
+  final Set<InboxSourceFailure> sourceFailures;
+
+  /// Legacy bridge for callers that only understood historical mention gaps.
+  @Deprecated('Use completeness instead.')
+  bool get hasIncompleteMentionReconstruction =>
+      completeness == InboxCompleteness.approximateMentions;
 
   /// Whether Inbox should draw attention in the app navigation.
   ///

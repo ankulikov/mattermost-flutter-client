@@ -752,9 +752,23 @@ final class DioMattermostApi
     final void Function() detach = cancellation.addListener(token.cancel);
     try {
       return await request(token);
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 429) {
+        throw MattermostRateLimitException(
+          retryAfter: _retryAfter(error.response?.headers),
+        );
+      }
+      rethrow;
     } finally {
       detach();
     }
+  }
+
+  static Duration? _retryAfter(Headers? headers) {
+    final String? value = headers?.value('retry-after');
+    if (value == null) return null;
+    final int? seconds = int.tryParse(value.trim());
+    return seconds == null || seconds < 0 ? null : Duration(seconds: seconds);
   }
 
   static Map<String, Object?> _object(Object? value) {

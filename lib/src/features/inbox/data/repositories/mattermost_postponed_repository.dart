@@ -13,6 +13,7 @@ final class MattermostPostponedRepository extends PostponedRepository {
 
   static const String category = 'postponed_messages';
   static const int batchSize = 100;
+  static const int _maxReferenceJsonCharacters = 4096;
 
   final MattermostApi _api;
 
@@ -48,50 +49,111 @@ final class MattermostPostponedRepository extends PostponedRepository {
     required AuthSession session,
     required List<PostponedReference> references,
   }) async {
-    for (final List<PostponedReference> batch in _batches(references)) {
-      await _api.savePreferences(
-        userId: session.userId,
-        preferences: batch
-            .map((PostponedReference reference) {
-              return MattermostPreferenceDto(
-                userId: session.userId,
-                category: category,
-                name: reference.canonicalId,
-                value: jsonEncode(<String, Object?>{
-                  'v': 1,
-                  'post_id': reference.postId,
-                  'added_at': reference.addedAt.millisecondsSinceEpoch,
-                  if (reference.targetPostId != null)
-                    'target_post_id': reference.targetPostId,
-                  'kind': reference.kind.name,
-                }),
-              );
-            })
-            .toList(growable: false),
-      );
+    final PostponedBatchOutcome outcome = await saveWithOutcome(
+      session: session,
+      references: references,
+    );
+    if (outcome.requiresReconciliation) {
+      throw const PostponedBatchReconciliationRequired();
     }
   }
+
+  @override
+  Future<PostponedBatchOutcome> saveWithOutcome({
+    required AuthSession session,
+    required List<PostponedReference> references,
+  }) => _mutateWithOutcome(
+    references: references,
+    mutate: (List<PostponedReference> batch) => _api.savePreferences(
+      userId: session.userId,
+      preferences: batch
+          .map((PostponedReference reference) {
+            return MattermostPreferenceDto(
+              userId: session.userId,
+              category: category,
+              name: reference.canonicalId,
+              value: jsonEncode(<String, Object?>{
+                'v': 1,
+                'post_id': reference.postId,
+                'added_at': reference.addedAt.millisecondsSinceEpoch,
+                if (reference.targetPostId != null)
+                  'target_post_id': reference.targetPostId,
+                'kind': reference.kind.name,
+              }),
+            );
+          })
+          .toList(growable: false),
+    ),
+  );
 
   @override
   Future<void> remove({
     required AuthSession session,
     required List<PostponedReference> references,
   }) async {
-    for (final List<PostponedReference> batch in _batches(references)) {
-      await _api.deletePreferences(
-        userId: session.userId,
-        preferences: batch
-            .map(
-              (PostponedReference reference) => MattermostPreferenceDto(
-                userId: session.userId,
-                category: category,
-                name: reference.canonicalId,
-                value: '',
-              ),
-            )
-            .toList(growable: false),
-      );
+    final PostponedBatchOutcome outcome = await removeWithOutcome(
+      session: session,
+      references: references,
+    );
+    if (outcome.requiresReconciliation) {
+      throw const PostponedBatchReconciliationRequired();
     }
+  }
+
+  @override
+  Future<PostponedBatchOutcome> removeWithOutcome({
+    required AuthSession session,
+    required List<PostponedReference> references,
+  }) => _mutateWithOutcome(
+    references: references,
+    mutate: (List<PostponedReference> batch) => _api.deletePreferences(
+      userId: session.userId,
+      preferences: batch
+          .map(
+            (PostponedReference reference) => MattermostPreferenceDto(
+              userId: session.userId,
+              category: category,
+              name: reference.canonicalId,
+              value: '',
+            ),
+          )
+          .toList(growable: false),
+    ),
+  );
+
+  Future<PostponedBatchOutcome> _mutateWithOutcome({
+    required List<PostponedReference> references,
+    required Future<void> Function(List<PostponedReference> batch) mutate,
+  }) async {
+    final List<PostponedReference> requested = _deduplicate(references);
+    final List<PostponedReference> confirmed = <PostponedReference>[];
+    for (final List<PostponedReference> batch in _batches(requested)) {
+      try {
+        await mutate(batch);
+      } on Object {
+        // A transport failure cannot prove that the server rejected this
+        // batch. Even the first batch therefore requires an authoritative
+        // reload before presentation can claim a requested reference moved.
+        return PostponedBatchOutcome(
+          requested: requested,
+          confirmed: confirmed,
+          requiresReconciliation: true,
+        );
+      }
+      confirmed.addAll(batch);
+    }
+    return PostponedBatchOutcome.confirmed(requested);
+  }
+
+  static List<PostponedReference> _deduplicate(
+    Iterable<PostponedReference> references,
+  ) {
+    final Map<String, PostponedReference> unique =
+        <String, PostponedReference>{};
+    for (final PostponedReference reference in references) {
+      unique.putIfAbsent(reference.canonicalId, () => reference);
+    }
+    return unique.values.toList(growable: false);
   }
 
   static PostponedReference? _parse(
@@ -100,7 +162,8 @@ final class MattermostPostponedRepository extends PostponedRepository {
   ) {
     if (preference.userId != currentUserId ||
         preference.category != category ||
-        preference.name.isEmpty) {
+        preference.name.isEmpty ||
+        preference.value.length > _maxReferenceJsonCharacters) {
       return null;
     }
     try {

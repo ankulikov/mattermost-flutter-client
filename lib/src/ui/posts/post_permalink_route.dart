@@ -16,6 +16,7 @@ class PostPermalinkRoute extends ConsumerWidget {
   const PostPermalinkRoute({
     required this.postId,
     required this.stateScopeId,
+    this.onClose,
     super.key,
   });
 
@@ -24,6 +25,13 @@ class PostPermalinkRoute extends ConsumerWidget {
 
   final String postId;
   final String stateScopeId;
+
+  /// Overrides route pop when the permalink is rendered in an adjacent pane.
+  ///
+  /// The normal route keeps [onClose] null and continues to pop its own
+  /// navigation entry. Hosts that retain their source pane can close only the
+  /// adjacent permalink without popping the source route.
+  final VoidCallback? onClose;
 
   static Future<void> push(BuildContext context, String postId) =>
       context.push<void>(location(postId));
@@ -37,59 +45,84 @@ class PostPermalinkRoute extends ConsumerWidget {
       postPermalinkProvider(postId),
     );
     return value.when(
-      loading: () => const _PostPermalinkLoadingPage(),
+      loading: () => _PostPermalinkLoadingPage(onClose: onClose),
       error: (Object error, StackTrace stackTrace) => _PostPermalinkErrorPage(
         onRetry: () =>
             unawaited(ref.read(postPermalinkProvider(postId).notifier).retry()),
+        onClose: onClose,
       ),
-      data: (target) =>
-          LinkedPostPage(target: target, stateScopeId: stateScopeId),
+      data: (target) => LinkedPostPage(
+        target: target,
+        stateScopeId: stateScopeId,
+        onClose: onClose,
+      ),
     );
   }
 }
 
 class _PostPermalinkLoadingPage extends StatelessWidget {
-  const _PostPermalinkLoadingPage();
+  const _PostPermalinkLoadingPage({this.onClose});
+
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: Center(
-        child: Semantics(
-          label: ChannelPostsStrings.loadingLinkedMessage,
-          child: const CircularProgressIndicator(),
-        ),
+      child: Stack(
+        children: <Widget>[
+          if (onClose != null)
+            Align(
+              alignment: Alignment.topLeft,
+              child: BackButton(onPressed: onClose),
+            ),
+          Center(
+            child: Semantics(
+              label: ChannelPostsStrings.loadingLinkedMessage,
+              child: const CircularProgressIndicator(),
+            ),
+          ),
+        ],
       ),
     ),
   );
 }
 
 class _PostPermalinkErrorPage extends StatelessWidget {
-  const _PostPermalinkErrorPage({required this.onRetry});
+  const _PostPermalinkErrorPage({required this.onRetry, this.onClose});
 
   final VoidCallback onRetry;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              const Text(
-                ChannelPostsStrings.linkedMessageLoadFailed,
-                textAlign: TextAlign.center,
+      child: Stack(
+        children: <Widget>[
+          if (onClose != null)
+            Align(
+              alignment: Alignment.topLeft,
+              child: BackButton(onPressed: onClose),
+            ),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Text(
+                    ChannelPostsStrings.linkedMessageLoadFailed,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: onRetry,
+                    child: const Text(ChannelPostsStrings.retry),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: onRetry,
-                child: const Text(ChannelPostsStrings.retry),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     ),
   );

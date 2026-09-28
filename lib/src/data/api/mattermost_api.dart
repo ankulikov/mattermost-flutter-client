@@ -1,5 +1,17 @@
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 
+/// A framework-neutral representation of a server rate limit.
+///
+/// API implementations translate their transport-specific 429 response into
+/// this value so feature repositories can bound retries without depending on
+/// Dio or HTTP response types.
+final class MattermostRateLimitException implements Exception {
+  const MattermostRateLimitException({this.retryAfter});
+
+  /// The server-provided delay, when one was available.
+  final Duration? retryAfter;
+}
+
 enum PostThreadDirection { up, down }
 
 /// Boundary of the Mattermost REST API.

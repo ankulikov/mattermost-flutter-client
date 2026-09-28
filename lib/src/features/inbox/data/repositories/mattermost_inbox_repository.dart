@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
-import 'package:mattermost_flutter/src/data/mappers/dialog_display_name_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
 import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
@@ -15,16 +14,21 @@ import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
+import 'package:mattermost_flutter/src/features/inbox/data/inbox_context_loader.dart';
+import 'package:mattermost_flutter/src/features/inbox/data/inbox_snapshot_sources.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_completeness.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_notification_settings.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
-import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
-import 'package:mattermost_flutter/src/features/inbox/domain/policies/canonicalize_inbox_candidates.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_settings.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_source_result.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/policies/assemble_inbox_projection.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/classify_inbox_attention.dart';
-import 'package:mattermost_flutter/src/features/inbox/domain/policies/group_direct_messages.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/notification_eligibility.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/reconcile_queues.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_settings_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 
 /// Network-first Inbox snapshot builder and realtime event mapper.
@@ -36,13 +40,21 @@ final class MattermostInboxRepository extends InboxRepository {
     required MattermostApi api,
     required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
     required PostponedRepository postponed,
+    InboxSettingsRepository? settings,
     WebSocketGateway? webSocketGateway,
     CredentialStore? credentialStore,
     SessionRealtimeService? realtime,
     DateTime Function()? now,
   }) : _api = api,
        _messageMapper = messageMapper,
-       _postponed = postponed,
+       _contextLoader = InboxContextLoader(api: api),
+       _snapshotSources = <InboxSnapshotSource>[
+         InboxFollowedThreadsSource(api: api),
+         InboxUnreadChannelPostsSource(api: api),
+         InboxPostponedSource(api: api, postponed: postponed),
+       ],
+       _postponedSource = InboxPostponedSource(api: api, postponed: postponed),
+       _settings = settings,
        _realtime =
            realtime ??
            (webSocketGateway != null && credentialStore != null
@@ -53,15 +65,19 @@ final class MattermostInboxRepository extends InboxRepository {
                : null),
        _now = now ?? DateTime.now;
 
-  static const int _authorBatchSize = 100;
-  static const int _maxUnreadConcurrency = 4;
-
   final MattermostApi _api;
   final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
-  final PostponedRepository _postponed;
+  final InboxContextLoader _contextLoader;
+  final List<InboxSnapshotSource> _snapshotSources;
+  final InboxProjectionAssembler _projectionAssembler =
+      const InboxProjectionAssembler();
+  final InboxPostponedSource _postponedSource;
+  final InboxSettingsRepository? _settings;
   final SessionRealtimeService? _realtime;
   final DateTime Function() _now;
   _InboxRealtimeScope? _realtimeScope;
+  InboxSnapshotContext? _snapshotContext;
+  final Set<_InboxRealtimeWatch> _realtimeWatches = <_InboxRealtimeWatch>{};
 
   static const Set<String> _realtimeEventNames = <String>{
     'posted',
@@ -80,221 +96,242 @@ final class MattermostInboxRepository extends InboxRepository {
     'preferences_changed',
     'preferences_deleted',
   };
+  static const String _postponedPreferenceCategory = 'postponed_messages';
+  static const int _maxEmbeddedRealtimeJsonCharacters = 64 * 1024;
 
   @override
-  Future<InboxSnapshot> load({required AuthSession session}) async {
+  Future<InboxSnapshot> load({required AuthSession session}) =>
+      _retryRateLimited(() => _loadSnapshot(session: session));
+
+  Future<InboxSnapshot> _loadSnapshot({required AuthSession session}) async {
     final DateTime builtAt = _now();
+    final Future<InboxSettings> settings = _loadSettings(session);
     _rawUsersAreBots.clear();
-    final MattermostUserDto currentUser = await _api.getCurrentUser();
-    final List<MattermostTeamDto> teams = await _api.getTeamsForCurrentUser();
-    final List<_TeamChannels> teamChannels = await Future.wait(
-      teams.map(
-        (MattermostTeamDto team) async => _TeamChannels(
-          channels: await _api.getChannelsForUser(
-            userId: session.userId,
-            teamId: team.id,
-          ),
-          members: await _api.getChannelMembersForUser(
-            userId: session.userId,
-            teamId: team.id,
-          ),
-        ),
-      ),
-    );
-    final PostponedReferencesSnapshot postponed = await _postponed.load(
+    final InboxSnapshotContext context = await _contextLoader.load(
       session: session,
     );
-    final Map<String, MattermostChannelDto> channels =
-        <String, MattermostChannelDto>{};
-    final Map<String, MattermostChannelMemberDto> members =
-        <String, MattermostChannelMemberDto>{};
-    for (final _TeamChannels snapshot in teamChannels) {
-      for (final MattermostChannelDto channel in snapshot.channels) {
-        channels.putIfAbsent(channel.id, () => channel);
-      }
-      for (final MattermostChannelMemberDto member in snapshot.members) {
-        members.putIfAbsent(member.channelId, () => member);
-      }
-    }
-    final Map<String, SidebarChannel> knownChannels =
-        await _resolveKnownChannels(
-          rawChannels: channels,
-          currentUserId: session.userId,
-        );
-
-    final List<_TeamThreads> unreadThreadPages = await Future.wait(
-      teams.map(
-        (MattermostTeamDto team) async => _TeamThreads(
-          team.id,
-          await _loadUnreadThreads(userId: session.userId, teamId: team.id),
-        ),
-      ),
+    _snapshotContext = context;
+    // The controller opens its SessionRealtimeService subscription before the
+    // REST request. Once the shared context is ready, buffered transport
+    // events can be mapped while the remaining snapshot sources are loading.
+    final _InboxRealtimeScope realtimeScope = _InboxRealtimeScope(
+      currentUser: context.currentUser,
+      channels: context.channels,
+      members: context.members,
+      authors: <String, UserSummary>{},
     );
-    final Map<String, _ThreadSource> rawThreads = <String, _ThreadSource>{};
-    for (final _TeamThreads page in unreadThreadPages) {
-      for (final MattermostUserThreadDto thread in page.threads) {
-        if (thread.post == null ||
-            thread.deleteAt != 0 ||
-            thread.unreadReplies <= 0) {
-          continue;
-        }
-        rawThreads.putIfAbsent(
-          thread.id,
-          () => _ThreadSource(teamId: page.teamId, raw: thread),
-        );
-      }
+    _realtimeScope = realtimeScope;
+    for (final _InboxRealtimeWatch watch in _realtimeWatches) {
+      watch.flushScopeBuffer();
     }
-
-    final List<_UnreadChannelPosts> unread = await _loadUnreadPosts(
-      channels: channels,
-      members: members,
-      currentUser: currentUser,
+    final InboxSourceMapper mapper = InboxSourceMapper(
+      api: _api,
+      messageMapper: _messageMapper,
     );
-    final Set<String> postponedIds = postponed.references
-        .map((PostponedReference reference) => reference.postId)
-        .toSet();
-    final Map<String, MattermostPostDto> rawPosts = <String, MattermostPostDto>{
-      for (final _UnreadChannelPosts entry in unread)
-        for (final MattermostPostDto post in entry.posts) post.id: post,
-      for (final _ThreadSource source in rawThreads.values)
-        if (source.raw.post != null) source.raw.post!.id: source.raw.post!,
-    };
-    for (final List<String> batch in _batches(postponedIds.toList())) {
-      final List<MattermostPostDto> hydrated = await _api.getPostsByIds(batch);
-      for (final MattermostPostDto post in hydrated) {
-        rawPosts[post.id] = post;
-      }
-    }
-    final Map<String, UserSummary> authors = await _loadAuthors(
-      rawPosts.values,
-    );
-    final Map<String, ChannelPost> mappedById = <String, ChannelPost>{
-      for (final ChannelPost post in _messageMapper.map(
-        posts: rawPosts.values,
-        users: authors.values,
-        currentUserId: session.userId,
-        includeDeleted: true,
-      ))
-        post.id: post,
-    };
-
-    final List<InboxThreadCandidate> threadCandidates = rawThreads.values
-        .map(
-          (_ThreadSource source) => _mapThread(
-            source,
-            mappedById,
-            knownChannels,
-            members,
-            currentUser,
+    final List<InboxSourceResult> sources = <InboxSourceResult>[];
+    for (final InboxSnapshotSource source in _snapshotSources) {
+      try {
+        sources.add(
+          await _retryRateLimited(
+            () =>
+                source.load(session: session, context: context, mapper: mapper),
           ),
-        )
-        .whereType<InboxThreadCandidate>()
-        .toList(growable: false);
-    final List<InboxPostCandidate> newCandidates = <InboxPostCandidate>[];
-    var incompleteMentions = false;
-    for (final _UnreadChannelPosts entry in unread) {
-      final SidebarChannel? channel = knownChannels[entry.channelId];
-      final MattermostChannelMemberDto? member = members[entry.channelId];
-      if (channel == null || member == null) continue;
-      var reconstructedMentions = 0;
-      for (final MattermostPostDto raw in entry.posts) {
-        final ChannelPost? mapped = mappedById[raw.id];
-        if (mapped == null || raw.userId == session.userId) continue;
-        final InboxAttentionReason? reason = channel.isDialog
-            ? InboxAttentionReason.allMessagesSubscription
-            : _classify(raw, currentUser, member);
-        if (reason == null) continue;
-        if (reason != InboxAttentionReason.allMessagesSubscription) {
-          reconstructedMentions++;
+        );
+      } on RequestCancelledException {
+        rethrow;
+      } on Object {
+        if (RequestCancellation.current
+            case final RequestCancellation cancellation
+            when cancellation.isCancelled) {
+          throw RequestCancelledException(cancellation.reason);
         }
-        newCandidates.add(
-          InboxPostCandidate(
-            post: mapped,
-            channel: channel,
-            reason: reason,
-            isSystem: raw.type.startsWith('system_'),
-            isSilentNotification: _isTrue(
-              raw.props?.values['silent_notification'],
-            ),
-            isFromBot:
-                authors[raw.userId]?.id.isNotEmpty == true &&
-                _rawUsersAreBots[raw.userId] == true,
-            isFromWebhook: _isTrue(raw.props?.values['from_webhook']),
-            isFromPlugin: _isTrue(raw.props?.values['from_plugin']),
+        sources.add(
+          InboxSourceResult(
+            candidates: InboxSourceSnapshot(),
+            completeness: InboxCompleteness.truncated,
+            diagnosticsCodes: const <InboxSourceDiagnosticCode>[
+              InboxSourceDiagnosticCode.sourceRequestFailed,
+            ],
+            sourceFailures: <InboxSourceFailure>[
+              InboxSourceFailure(scope: source.scope),
+            ],
           ),
         );
       }
-      if (!channel.isDialog &&
-          reconstructedMentions < member.mentionCountRoot) {
-        incompleteMentions = true;
-      }
     }
-
-    final List<InboxItem> postponedItems = _postponedItems(
-      references: postponed.references,
-      rawPosts: rawPosts,
-      mappedById: mappedById,
-      channels: knownChannels,
-      authors: authors,
-    );
-    // TODO(inbox): API v4 counters cannot identify all historical mentions;
-    // group mentions and @here require server-side delivery context.
-    final List<InboxItem> newItems = groupDirectMessages(
-      canonicalizeInboxCandidates(
-        InboxSourceSnapshot(threads: threadCandidates, posts: newCandidates),
-      ),
-    );
-    final InboxSnapshot result = reconcileQueues(
-      newItems: newItems,
-      postponedItems: postponedItems,
+    _rawUsersAreBots.addAll(mapper.rawUsersAreBots);
+    realtimeScope.authors.addAll(mapper.authors);
+    final InboxSnapshot result = _projectionAssembler.assemble(
+      sources: sources,
       builtAt: builtAt,
-      hasIncompleteMentionReconstruction: incompleteMentions,
-    );
-    _realtimeScope = _InboxRealtimeScope(
-      currentUser: currentUser,
-      channels: knownChannels,
-      members: Map<String, MattermostChannelMemberDto>.of(members),
-      authors: Map<String, UserSummary>.of(authors),
+      directGrouping: (await settings).directGrouping,
     );
     return result;
+  }
+
+  Future<InboxSettings> _loadSettings(AuthSession session) async {
+    final InboxSettingsRepository? settings = _settings;
+    if (settings == null) return InboxSettings.defaults;
+    try {
+      return (await settings.load(session: session)).settings;
+    } on Object {
+      // Client settings must never make the server-backed Inbox unavailable.
+      // Defaults retain the desktop-authoritative projection without logging
+      // any preference payload.
+      return InboxSettings.defaults;
+    }
+  }
+
+  @override
+  Future<InboxSnapshot> reloadPostponed({
+    required AuthSession session,
+    required InboxSnapshot current,
+  }) async {
+    final InboxSnapshotContext? context = _snapshotContext;
+    if (context == null) return load(session: session);
+    final InboxSourceMapper mapper = InboxSourceMapper(
+      api: _api,
+      messageMapper: _messageMapper,
+    );
+    late final InboxSourceResult source;
+    try {
+      source = await _retryRateLimited(
+        () => _postponedSource.load(
+          session: session,
+          context: context,
+          mapper: mapper,
+        ),
+      );
+    } on RequestCancelledException {
+      rethrow;
+    } on Object {
+      source = InboxSourceResult(
+        candidates: InboxSourceSnapshot(),
+        completeness: InboxCompleteness.truncated,
+        diagnosticsCodes: const <InboxSourceDiagnosticCode>[
+          InboxSourceDiagnosticCode.sourceRequestFailed,
+        ],
+        sourceFailures: const <InboxSourceFailure>[
+          InboxSourceFailure(scope: InboxSourceScope.postponed),
+        ],
+      );
+    }
+    return _mergePostponedSource(current: current, source: source);
+  }
+
+  InboxSnapshot _mergePostponedSource({
+    required InboxSnapshot current,
+    required InboxSourceResult source,
+  }) {
+    final bool failed = source.sourceFailures.any(
+      (InboxSourceFailure failure) =>
+          failure.scope == InboxSourceScope.postponed,
+    );
+    final bool hasOtherSourceFailure = current.sourceFailures.any(
+      (InboxSourceFailure failure) =>
+          failure.scope != InboxSourceScope.postponed,
+    );
+    final InboxSnapshot queues = reconcileQueues(
+      newItems: current.newItems,
+      postponedItems: failed ? current.postponedItems : source.postponedItems,
+      builtAt: current.builtAt,
+    );
+    return InboxSnapshot(
+      newItems: queues.newItems,
+      postponedItems: queues.postponedItems,
+      builtAt: current.builtAt,
+      completeness: InboxCompleteness.mostLimited(<InboxCompleteness>[
+        current.completeness,
+        source.completeness,
+      ]),
+      diagnosticsCodes: <InboxSourceDiagnosticCode>{
+        ...current.diagnosticsCodes.where(
+          (InboxSourceDiagnosticCode code) =>
+              code != InboxSourceDiagnosticCode.postponedHydrationUnavailable &&
+              (code != InboxSourceDiagnosticCode.sourceRequestFailed ||
+                  hasOtherSourceFailure),
+        ),
+        ...source.diagnosticsCodes,
+      },
+      sourceFailures: <InboxSourceFailure>{
+        ...current.sourceFailures.where(
+          (InboxSourceFailure failure) =>
+              failure.scope != InboxSourceScope.postponed,
+        ),
+        ...source.sourceFailures,
+      },
+    );
+  }
+
+  /// Retries one server rate limit at a time. The retry budget is deliberately
+  /// small: a foreground snapshot remains cancelable and never becomes an
+  /// unbounded background sync loop.
+  Future<T> _retryRateLimited<T>(Future<T> Function() request) async {
+    const int maxRateLimitRetries = 1;
+    for (var attempt = 0; ; attempt++) {
+      _throwIfCancelled();
+      try {
+        return await request();
+      } on MattermostRateLimitException catch (error) {
+        if (attempt >= maxRateLimitRetries) rethrow;
+        await _waitForRateLimit(error.retryAfter, attempt: attempt);
+      }
+    }
+  }
+
+  Future<void> _waitForRateLimit(Duration? retryAfter, {required int attempt}) {
+    final Duration delay =
+        retryAfter ?? Duration(milliseconds: 250 * (1 << attempt));
+    final RequestCancellation? cancellation = RequestCancellation.current;
+    if (cancellation == null) return Future<void>.delayed(delay);
+    if (cancellation.isCancelled) {
+      return Future<void>.error(RequestCancelledException(cancellation.reason));
+    }
+    final Completer<void> completed = Completer<void>();
+    Timer? timer;
+    final void Function() detach = cancellation.addListener((Object? reason) {
+      timer?.cancel();
+      if (!completed.isCompleted) {
+        completed.completeError(RequestCancelledException(reason));
+      }
+    });
+    timer = Timer(delay, () {
+      detach();
+      if (!completed.isCompleted) completed.complete();
+    });
+    if (completed.isCompleted) timer.cancel();
+    return completed.future;
+  }
+
+  void _throwIfCancelled() {
+    final RequestCancellation? cancellation = RequestCancellation.current;
+    if (cancellation?.isCancelled == true) {
+      throw RequestCancelledException(cancellation!.reason);
+    }
   }
 
   @override
   Stream<InboxRealtimeEvent> watch({required AuthSession session}) {
     final SessionRealtimeService? realtime = _realtime;
     if (realtime == null) return const Stream<InboxRealtimeEvent>.empty();
-    return realtime
-        .watch(
-          session: session,
-          eventNames: _realtimeEventNames,
-          acceptsChannel: (String channelId) =>
-              _realtimeScope?.channels.containsKey(channelId) == true,
-        )
-        .asyncMap((SessionRealtimeSignal signal) async {
-          switch (signal) {
-            case SessionRealtimeConnectionChanged(:final status):
-              return <InboxRealtimeEvent>[
-                InboxConnectionChanged(_mapConnectionStatus(status)),
-              ];
-            case SessionRealtimeRecoveryRequired():
-              return const <InboxRealtimeEvent>[InboxRefreshRequired()];
-            case SessionRealtimeEventReceived(:final event):
-              try {
-                final InboxRealtimeEvent? mapped = await _mapRealtimeEvent(
-                  session,
-                  event,
-                );
-                return mapped == null
-                    ? const <InboxRealtimeEvent>[]
-                    : <InboxRealtimeEvent>[mapped];
-              } on Object {
-                // Isolate malformed/unsupported events. Only reconnects and
-                // sequence gaps require an authoritative reload.
-                return const <InboxRealtimeEvent>[];
-              }
-          }
-        })
-        .expand((List<InboxRealtimeEvent> events) => events);
+    late final _InboxRealtimeWatch watch;
+    watch = _InboxRealtimeWatch(
+      signals: realtime.watch(
+        session: session,
+        eventNames: _realtimeEventNames,
+        // A known event for a channel absent from the current context needs a
+        // bounded recovery. Filtering it out here would silently lose the
+        // only signal that a DM/GM or membership scope changed.
+        acceptsChannel: (_) => true,
+      ),
+      isScopeReady: () => _realtimeScope != null,
+      mapConnectionStatus: _mapConnectionStatus,
+      mapEvent: (MattermostWebSocketEvent event) =>
+          _mapRealtimeEvent(session, event),
+      onClosed: () => _realtimeWatches.remove(watch),
+    );
+    _realtimeWatches.add(watch);
+    return watch.stream;
   }
 
   @override
@@ -317,46 +354,514 @@ final class MattermostInboxRepository extends InboxRepository {
   ) async {
     switch (event.name) {
       case 'posted':
-      case 'post_edited':
+        if (!_isBoundedEmbeddedJson(event.data['post'])) {
+          return InboxRefreshRequired(sequence: event.sequence);
+        }
         final MattermostPostDto? raw = _postFromEvent(event.data);
         if (raw == null || raw.id.isEmpty) return null;
-        // A matching thread_updated event carries the aggregate needed to
-        // project replies. The reply itself must not trigger a REST reload.
-        if (raw.rootId.isNotEmpty) return null;
+        if (raw.rootId.isNotEmpty) {
+          if (raw.userId == session.userId || _isExcludedRealtimePost(raw)) {
+            return null;
+          }
+          return _threadReplyFromEvent(session, event, raw);
+        }
         if (raw.userId == session.userId) return null;
-        return InboxPostChanged(
-          postId: raw.id,
-          candidate: await _mapRealtimePost(session, raw),
+        if (_isExcludedRealtimePost(raw)) return null;
+        if (!_hasRealtimeChannelScope(raw.channelId)) {
+          // We cannot decide eligibility or construct a safe channel identity
+          // locally. In particular, this must not become `candidate: null`,
+          // which is a typed delete delta.
+          return InboxRefreshRequired(sequence: event.sequence);
+        }
+        final InboxPostCandidate? created = await _mapRealtimePost(
+          session,
+          raw,
+          serverMentions: _mentionsFromEvent(event.data),
+          enforceEligibility: true,
         );
-      case 'post_deleted':
+        return created == null
+            ? null
+            : InboxPostChanged(
+                postId: raw.id,
+                candidate: created,
+                kind: InboxPostChangeKind.created,
+                sequence: event.sequence,
+                mentions: _stringList(event.data['mentions']),
+                followers: _stringList(event.data['followers']),
+                channelType: _optionalString(event.data['channel_type']),
+              );
+      case 'post_edited':
+        if (!_isBoundedEmbeddedJson(event.data['post'])) {
+          return InboxRefreshRequired(sequence: event.sequence);
+        }
         final MattermostPostDto? raw = _postFromEvent(event.data);
-        final Object? idValue = event.data['post_id'];
-        final String postId = raw?.id ?? (idValue is String ? idValue : '');
+        if (raw == null || raw.id.isEmpty || raw.rootId.isNotEmpty) return null;
+        if (!_hasRealtimeChannelScope(raw.channelId)) {
+          return InboxRefreshRequired(sequence: event.sequence);
+        }
+        final InboxPostCandidate? preview = await _mapRealtimePost(
+          session,
+          raw,
+          enforceEligibility: false,
+        );
+        return preview == null
+            ? null
+            : InboxPostChanged(
+                postId: raw.id,
+                candidate: preview,
+                kind: InboxPostChangeKind.edited,
+                sequence: event.sequence,
+                mentions: _stringList(event.data['mentions']),
+                followers: _stringList(event.data['followers']),
+                channelType: _optionalString(event.data['channel_type']),
+              );
+      case 'post_deleted':
+        if (!_isBoundedEmbeddedJson(event.data['post'])) {
+          return InboxRefreshRequired(sequence: event.sequence);
+        }
+        final MattermostPostDto? raw = _postFromEvent(event.data);
+        final String postId =
+            raw?.id ?? _optionalString(event.data['post_id']) ?? '';
         return postId.isEmpty
             ? null
-            : InboxPostChanged(postId: postId, candidate: null);
+            : InboxPostChanged(
+                postId: postId,
+                candidate: null,
+                kind: InboxPostChangeKind.deleted,
+                sequence: event.sequence,
+              );
+      case 'thread_updated':
+        return _threadUpdatedFromEvent(session, event);
+      case 'thread_follow_changed':
+        return _threadFollowChangedFromEvent(session, event);
+      case 'thread_read_changed':
+        return _threadReadChangedFromEvent(event);
+      case 'channel_member_updated':
+        return _channelMembershipChangedFromEvent(session, event);
+      case 'direct_added':
+      case 'group_added':
+        return _directOrGroupAddedFromEvent(event);
+      case 'user_updated':
+        return _currentUserChangedFromEvent(session, event);
       case 'preference_changed':
       case 'preferences_changed':
       case 'preferences_deleted':
-        return null;
+        final List<InboxPreferenceChange> changes = _preferenceChanges(
+          event.data,
+        );
+        if (changes.isEmpty) return null;
+        return _preferenceEvent(event: event, changes: changes);
       default:
         return null;
     }
   }
 
+  InboxRealtimeEvent? _channelMembershipChangedFromEvent(
+    AuthSession session,
+    MattermostWebSocketEvent event,
+  ) {
+    final Map<String, Object?> member = _eventMap(
+      event.data['channel_member'] ?? event.data['member'],
+    );
+    final String? userId =
+        _optionalString(member['user_id']) ??
+        _optionalString(event.data['user_id']);
+    final String? channelId =
+        _optionalString(member['channel_id']) ??
+        _optionalString(event.data['channel_id']) ??
+        _optionalString(event.broadcast['channel_id']);
+    if (userId != session.userId || channelId == null) return null;
+    return InboxEligibilityContextChanged(
+      sequence: event.sequence,
+      kind: InboxEligibilityContextChangeKind.channelMembership,
+    );
+  }
+
+  InboxRealtimeEvent? _directOrGroupAddedFromEvent(
+    MattermostWebSocketEvent event,
+  ) {
+    final String? channelId =
+        _optionalString(event.data['channel_id']) ??
+        _optionalString(event.broadcast['channel_id']);
+    if (channelId == null) return null;
+    return InboxEligibilityContextChanged(
+      sequence: event.sequence,
+      kind: InboxEligibilityContextChangeKind.directOrGroupAdded,
+    );
+  }
+
+  InboxRealtimeEvent? _currentUserChangedFromEvent(
+    AuthSession session,
+    MattermostWebSocketEvent event,
+  ) {
+    final Map<String, Object?> user = _eventMap(event.data['user']);
+    final String? userId =
+        _optionalString(user['id']) ?? _optionalString(event.data['user_id']);
+    if (userId != session.userId) return null;
+    return InboxEligibilityContextChanged(
+      sequence: event.sequence,
+      kind: InboxEligibilityContextChangeKind.currentUser,
+    );
+  }
+
+  InboxRealtimeEvent? _preferenceEvent({
+    required MattermostWebSocketEvent event,
+    required List<InboxPreferenceChange> changes,
+  }) {
+    final bool deletion = event.name == 'preferences_deleted';
+    final bool affectsDesktop = changes.any(
+      (InboxPreferenceChange change) =>
+          change.category == 'notifications' &&
+          (change.name == 'desktop' || change.name == 'desktop_threads') &&
+          (deletion || _isKnownDesktopPreferenceValue(change.value)),
+    );
+    if (affectsDesktop) {
+      return InboxEligibilityContextChanged(
+        sequence: event.sequence,
+        kind: InboxEligibilityContextChangeKind.desktopNotifications,
+      );
+    }
+    final List<InboxPreferenceChange> postponed = changes
+        .where(
+          (InboxPreferenceChange change) =>
+              change.category == _postponedPreferenceCategory &&
+              (deletion || _isValidPostponedPreference(change)),
+        )
+        .toList(growable: false);
+    if (postponed.isEmpty) return null;
+    return InboxRefreshRequired(
+      sequence: event.sequence,
+      scope: InboxRefreshScope.postponed,
+    );
+  }
+
+  static bool _isKnownDesktopPreferenceValue(String? value) => switch (value) {
+    'all' || 'mention' || 'none' || 'default' => true,
+    _ => false,
+  };
+
+  static bool _isValidPostponedPreference(InboxPreferenceChange change) {
+    final Object? decoded = _decodedJson(change.value);
+    if (decoded is! Map<Object?, Object?>) return false;
+    final Object? postId = decoded['post_id'];
+    final Object? kind = decoded['kind'];
+    final int? addedAt = _optionalInt(decoded['added_at']);
+    return postId is String &&
+        postId == change.name &&
+        (kind == 'post' || kind == 'thread') &&
+        addedAt != null &&
+        addedAt >= 0;
+  }
+
+  Future<InboxThreadUpdated?> _threadUpdatedFromEvent(
+    AuthSession session,
+    MattermostWebSocketEvent event,
+  ) async {
+    final Map<String, Object?> thread = _eventMap(
+      event.data['thread'] ?? event.data['user_thread'],
+    );
+    final String rootPostId =
+        _optionalString(thread['id']) ??
+        _optionalString(thread['thread_id']) ??
+        _optionalString(thread['root_id']) ??
+        _optionalString(event.data['thread_id']) ??
+        _optionalString(event.data['root_id']) ??
+        '';
+    if (rootPostId.isEmpty) return null;
+    final String? channelId =
+        _optionalString(thread['channel_id']) ??
+        _optionalString(event.data['channel_id']);
+    final bool? isFollowing =
+        _optionalBool(thread['is_following']) ??
+        _optionalBool(event.data['is_following']);
+    final int? unreadReplies = _optionalInt(thread['unread_replies']);
+    final int? unreadMentions = _optionalInt(thread['unread_mentions']);
+    if (isFollowing == false) {
+      return InboxThreadUpdated(
+        sequence: event.sequence,
+        rootPostId: rootPostId,
+        channelId: channelId,
+        unreadReplies: unreadReplies,
+        unreadMentions: unreadMentions,
+        isFollowing: false,
+        isInboxEligible: false,
+      );
+    }
+    final bool? isEligible = _threadEligibility(
+      channelId: channelId,
+      unreadReplies: unreadReplies,
+      unreadMentions: unreadMentions,
+    );
+    final InboxThreadCandidate? candidate = isEligible == true
+        ? await _hydrateRealtimeThread(
+            session: session,
+            rootPostId: rootPostId,
+            channelId: channelId,
+          )
+        : null;
+    return InboxThreadUpdated(
+      sequence: event.sequence,
+      rootPostId: rootPostId,
+      channelId: channelId,
+      unreadReplies: unreadReplies,
+      unreadMentions: unreadMentions,
+      isFollowing: isFollowing,
+      isInboxEligible: isEligible,
+      candidate: candidate,
+      recoveryRequired:
+          isEligible == null || (isEligible == true && candidate == null),
+    );
+  }
+
+  Future<InboxThreadFollowChanged?> _threadFollowChangedFromEvent(
+    AuthSession session,
+    MattermostWebSocketEvent event,
+  ) async {
+    final String rootPostId =
+        _optionalString(event.data['thread_id']) ??
+        _optionalString(event.data['root_id']) ??
+        _optionalString(event.data['post_id']) ??
+        '';
+    if (rootPostId.isEmpty) return null;
+    final bool? isFollowing =
+        _optionalBool(event.data['is_following']) ??
+        _optionalBool(event.data['following']);
+    if (isFollowing == false) {
+      return InboxThreadFollowChanged(
+        sequence: event.sequence,
+        rootPostId: rootPostId,
+        isFollowing: false,
+      );
+    }
+    final String? channelId = _optionalString(event.data['channel_id']);
+    final InboxThreadCandidate? candidate = isFollowing == true
+        ? await _hydrateRealtimeThread(
+            session: session,
+            rootPostId: rootPostId,
+            channelId: channelId,
+          )
+        : null;
+    return InboxThreadFollowChanged(
+      sequence: event.sequence,
+      rootPostId: rootPostId,
+      isFollowing: isFollowing,
+      candidate: candidate,
+      recoveryRequired: isFollowing != false && candidate == null,
+    );
+  }
+
+  Future<InboxThreadUpdated?> _threadReplyFromEvent(
+    AuthSession session,
+    MattermostWebSocketEvent event,
+    MattermostPostDto reply,
+  ) async {
+    final InboxThreadCandidate? hydrated = await _hydrateRealtimeThread(
+      session: session,
+      rootPostId: reply.rootId,
+      channelId: reply.channelId,
+    );
+    final _InboxRealtimeScope? scope = _realtimeScope;
+    final List<String>? mentions = _mentionsFromEvent(event.data);
+    final bool explicitMention =
+        mentions?.any(
+          (String mention) =>
+              mention == session.userId ||
+              mention == scope?.currentUser.username,
+        ) ??
+        false;
+    final InboxThreadCandidate? candidate = hydrated == null
+        ? null
+        : InboxThreadCandidate(
+            thread: hydrated.thread,
+            channel: hydrated.channel,
+            teamId: hydrated.teamId,
+            rootAttentionReason: hydrated.rootAttentionReason,
+            hasNewExplicitMention: explicitMention,
+          );
+    return InboxThreadUpdated(
+      sequence: event.sequence,
+      rootPostId: reply.rootId,
+      channelId: reply.channelId,
+      candidate: candidate,
+      recoveryRequired: candidate == null,
+    );
+  }
+
+  /// Hydrates only the CRT aggregate implicated by one known websocket event.
+  /// It never falls back to guessed root or channel content.
+  Future<InboxThreadCandidate?> _hydrateRealtimeThread({
+    required AuthSession session,
+    required String rootPostId,
+    required String? channelId,
+  }) async {
+    final _InboxRealtimeScope? scope = _realtimeScope;
+    final SidebarChannel? channel = channelId == null
+        ? null
+        : scope?.channels[channelId];
+    final MattermostChannelMemberDto? member = channelId == null
+        ? null
+        : scope?.members[channelId];
+    if (scope == null || channel == null || member == null) return null;
+    try {
+      final MattermostUserThreadDto? raw = await _api.getUserThread(
+        userId: session.userId,
+        teamId: channel.teamId,
+        threadId: rootPostId,
+      );
+      if (raw == null ||
+          raw.id != rootPostId ||
+          raw.deleteAt != 0 ||
+          raw.post == null ||
+          raw.post!.deleteAt != 0 ||
+          raw.post!.channelId != channel.id ||
+          !_isRealtimeThreadEligible(raw, scope)) {
+        return null;
+      }
+      final ChannelPost? root = await _mapRealtimeThreadRoot(
+        session: session,
+        raw: raw.post!,
+        scope: scope,
+      );
+      if (root == null) return null;
+      final InboxAttentionReason? rootReason = channel.isDialog
+          ? InboxAttentionReason.allMessagesSubscription
+          : _classifyRealtime(
+              session: session,
+              post: raw.post!,
+              channel: channel,
+              user: scope.currentUser,
+              member: member,
+              serverMentions: null,
+            );
+      return InboxThreadCandidate(
+        channel: channel,
+        teamId: channel.teamId,
+        rootAttentionReason: rootReason,
+        thread: FollowedThread(
+          root: root.withThreadSummary(
+            replyCount: raw.replyCount,
+            lastReplyAt: raw.lastReplyAt == 0
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(raw.lastReplyAt),
+          ),
+          replyCount: raw.replyCount,
+          lastReplyAt: raw.lastReplyAt == 0
+              ? root.sentAt
+              : DateTime.fromMillisecondsSinceEpoch(raw.lastReplyAt),
+          lastViewedAt: DateTime.fromMillisecondsSinceEpoch(raw.lastViewedAt),
+          unreadReplies: raw.unreadReplies,
+          unreadMentions: raw.unreadMentions,
+          participants: raw.participants
+              .map(mapUserSummary)
+              .map(
+                (UserSummary user) => PostAuthor(
+                  id: user.id,
+                  displayName: user.fullName,
+                  profileImageUpdatedAt: user.profileImageUpdatedAt,
+                ),
+              )
+              .toList(growable: false),
+        ),
+      );
+    } on RequestCancelledException {
+      rethrow;
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<ChannelPost?> _mapRealtimeThreadRoot({
+    required AuthSession session,
+    required MattermostPostDto raw,
+    required _InboxRealtimeScope scope,
+  }) async {
+    UserSummary? author = scope.authors[raw.userId];
+    if (author == null && raw.userId.isNotEmpty) {
+      final List<MattermostUserDto> users = await _api.getUsersByIds(<String>[
+        raw.userId,
+      ]);
+      if (users.isNotEmpty) {
+        final MattermostUserDto user = users.first;
+        author = mapUserSummary(user);
+        scope.authors[user.id] = author;
+        _rawUsersAreBots[user.id] = user.isBot;
+      }
+    }
+    final List<ChannelPost> mapped = _messageMapper.map(
+      posts: <MattermostPostDto>[raw],
+      users: author == null ? const <UserSummary>[] : <UserSummary>[author],
+      currentUserId: session.userId,
+      includeDeleted: true,
+    );
+    return mapped.isEmpty ? null : mapped.single;
+  }
+
+  bool? _threadEligibility({
+    required String? channelId,
+    required int? unreadReplies,
+    required int? unreadMentions,
+  }) {
+    final _InboxRealtimeScope? scope = _realtimeScope;
+    if (scope == null ||
+        channelId == null ||
+        unreadReplies == null ||
+        unreadMentions == null) {
+      return null;
+    }
+    final MattermostChannelMemberDto? member = scope.members[channelId];
+    if (member == null) return null;
+    return isFollowedThreadInboxEligible(
+      channel: _channelNotificationSettings(member),
+      user: _userNotificationSettings(scope.currentUser),
+      unreadReplies: unreadReplies,
+      unreadMentions: unreadMentions,
+    );
+  }
+
+  bool _isRealtimeThreadEligible(
+    MattermostUserThreadDto thread,
+    _InboxRealtimeScope scope,
+  ) {
+    final MattermostPostDto? root = thread.post;
+    final MattermostChannelMemberDto? member = root == null
+        ? null
+        : scope.members[root.channelId];
+    return root != null &&
+        member != null &&
+        isFollowedThreadInboxEligible(
+          channel: _channelNotificationSettings(member),
+          user: _userNotificationSettings(scope.currentUser),
+          unreadReplies: thread.unreadReplies,
+          unreadMentions: thread.unreadMentions,
+        );
+  }
+
+  InboxThreadReadChanged? _threadReadChangedFromEvent(
+    MattermostWebSocketEvent event,
+  ) {
+    final String rootPostId =
+        _optionalString(event.data['thread_id']) ??
+        _optionalString(event.data['root_id']) ??
+        _optionalString(event.data['post_id']) ??
+        '';
+    return rootPostId.isEmpty
+        ? null
+        : InboxThreadReadChanged(
+            sequence: event.sequence,
+            rootPostId: rootPostId,
+          );
+  }
+
   Future<InboxPostCandidate?> _mapRealtimePost(
     AuthSession session,
-    MattermostPostDto raw,
-  ) async {
+    MattermostPostDto raw, {
+    List<String>? serverMentions,
+    required bool enforceEligibility,
+  }) async {
     final _InboxRealtimeScope? scope = _realtimeScope;
     final SidebarChannel? channel = scope?.channels[raw.channelId];
     final MattermostChannelMemberDto? member = scope?.members[raw.channelId];
     if (scope == null || channel == null || member == null) return null;
-    if (raw.type.startsWith('system_') ||
-        raw.deleteAt != 0 ||
-        _isTrue(raw.props?.values['silent_notification'])) {
-      return null;
-    }
 
     UserSummary? author = scope.authors[raw.userId];
     if (author == null && raw.userId.isNotEmpty) {
@@ -377,9 +882,18 @@ final class MattermostInboxRepository extends InboxRepository {
       includeDeleted: true,
     );
     if (mapped.isEmpty) return null;
-    final InboxAttentionReason? reason = channel.isDialog
-        ? InboxAttentionReason.allMessagesSubscription
-        : _classifyRealtime(raw, scope.currentUser, member);
+    final InboxAttentionReason? reason = enforceEligibility
+        ? _classifyRealtime(
+            session: session,
+            post: raw,
+            channel: channel,
+            user: scope.currentUser,
+            member: member,
+            serverMentions: serverMentions,
+          )
+        // The domain edit reducer intentionally retains the existing reason.
+        // This placeholder value is never allowed to decide membership.
+        : InboxAttentionReason.allMessagesSubscription;
     if (reason == null) return null;
     return InboxPostCandidate(
       post: mapped.single,
@@ -395,32 +909,71 @@ final class MattermostInboxRepository extends InboxRepository {
     );
   }
 
-  InboxAttentionReason? _classifyRealtime(
-    MattermostPostDto post,
-    MattermostUserDto user,
-    MattermostChannelMemberDto member,
-  ) {
-    final MattermostChannelNotifyPropsDto notify =
-        member.notifyProps ?? const MattermostChannelNotifyPropsDto();
-    final UserNotifyPropsDto userNotify =
-        user.notifyProps ?? const UserNotifyPropsDto();
+  InboxAttentionReason? _classifyRealtime({
+    required AuthSession session,
+    required MattermostPostDto post,
+    required SidebarChannel channel,
+    required MattermostUserDto user,
+    required MattermostChannelMemberDto member,
+    required List<String>? serverMentions,
+  }) {
+    final InboxDesktopNotificationLevel desktop =
+        resolveInboxDesktopNotificationLevel(
+          channel: _channelNotificationSettings(member).desktop,
+          user: _userNotificationSettings(user).desktop,
+        );
+    if (desktop == InboxDesktopNotificationLevel.none) return null;
+    if (channel.isDialog) return InboxAttentionReason.allMessagesSubscription;
+
+    final bool exactServerMention =
+        serverMentions?.any(
+          (String value) => value == session.userId || value == user.username,
+        ) ??
+        false;
+    if (exactServerMention) return InboxAttentionReason.directMention;
+
+    final InboxChannelNotificationSettings channelSettings =
+        _channelNotificationSettings(member);
+    final InboxUserNotificationSettings userSettings =
+        _userNotificationSettings(user);
+    if (serverMentions != null) {
+      // When the server gave an authoritative recipient list, textual @name
+      // matches are merely display text. Do not turn them into an Inbox reason.
+      return resolvesToAllMessagesSubscription(
+            channel: channelSettings,
+            user: userSettings,
+          )
+          ? InboxAttentionReason.allMessagesSubscription
+          : null;
+    }
     return classifyInboxAttention(
       message: post.message,
       username: user.username,
-      firstName: '',
-      mentionKeys: '',
-      firstNameEnabled: false,
-      channelMentionsEnabled: false,
-      ignoreChannelMentions: true,
+      firstName: user.firstName,
+      mentionKeys: user.notifyProps?.mentionKeys ?? '',
+      firstNameEnabled: _isEnabled(user.notifyProps?.firstName),
+      channelMentionsEnabled: _isEnabled(user.notifyProps?.channel),
+      ignoreChannelMentions: _isEnabled(
+        member.notifyProps?.ignoreChannelMentions,
+      ),
       allMessagesSubscription: resolvesToAllMessagesSubscription(
-        memberMarkUnread: notify.markUnread,
-        memberDesktop: notify.desktop,
-        memberPush: notify.push,
-        userDesktop: userNotify.desktop,
-        userPush: userNotify.push,
+        channel: channelSettings,
+        user: userSettings,
       ),
     );
   }
+
+  bool _hasRealtimeChannelScope(String channelId) {
+    final _InboxRealtimeScope? scope = _realtimeScope;
+    return scope != null &&
+        scope.channels.containsKey(channelId) &&
+        scope.members.containsKey(channelId);
+  }
+
+  bool _isExcludedRealtimePost(MattermostPostDto raw) =>
+      raw.type.startsWith('system_') ||
+      raw.deleteAt != 0 ||
+      _isTrue(raw.props?.values['silent_notification']);
 
   MattermostPostDto? _postFromEvent(Map<String, Object?> data) {
     final Object? rawPost = data['post'];
@@ -441,271 +994,126 @@ final class MattermostInboxRepository extends InboxRepository {
     );
   }
 
+  static String? _optionalString(Object? value) => switch (value) {
+    final String value when value.isNotEmpty => value,
+    _ => null,
+  };
+
+  static int? _optionalInt(Object? value) => switch (value) {
+    final int value => value,
+    final num value => value.toInt(),
+    final String value => int.tryParse(value),
+    _ => null,
+  };
+
+  static bool? _optionalBool(Object? value) => switch (value) {
+    final bool value => value,
+    'true' => true,
+    'false' => false,
+    _ => null,
+  };
+
+  static Object? _decodedJson(Object? value) {
+    if (value is! String) return value;
+    if (value.length > _maxEmbeddedRealtimeJsonCharacters) return null;
+    try {
+      return jsonDecode(value);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static bool _isBoundedEmbeddedJson(Object? value) =>
+      value is! String || value.length <= _maxEmbeddedRealtimeJsonCharacters;
+
+  static Map<String, Object?> _eventMap(Object? value) {
+    final Object? decoded = _decodedJson(value);
+    if (decoded is! Map<Object?, Object?>) return const <String, Object?>{};
+    return decoded.map(
+      (Object? key, Object? item) =>
+          MapEntry<String, Object?>(key is String ? key : key.toString(), item),
+    );
+  }
+
+  static List<String> _stringList(Object? value) {
+    final Object? decoded = _decodedJson(value);
+    if (decoded is! Iterable<Object?>) return const <String>[];
+    return decoded
+        .whereType<String>()
+        .where((String id) => id.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static List<String>? _mentionsFromEvent(Map<String, Object?> data) =>
+      data.containsKey('mentions') ? _stringList(data['mentions']) : null;
+
+  static bool _isEnabled(String? value) => value == 'true' || value == 'on';
+
+  static List<InboxPreferenceChange> _preferenceChanges(
+    Map<String, Object?> data,
+  ) {
+    final Object? raw = _decodedJson(data['preferences'] ?? data['preference']);
+    final Iterable<Object?> records = switch (raw) {
+      final Iterable<Object?> values => values,
+      final Map<Object?, Object?> value => <Object?>[value],
+      _ => <Object?>[data],
+    };
+    final List<InboxPreferenceChange> changes = <InboxPreferenceChange>[];
+    for (final Object? record in records) {
+      final Map<String, Object?> preference = _eventMap(record);
+      final String? category = _optionalString(preference['category']);
+      final String? name = _optionalString(preference['name']);
+      if (category == null || name == null) continue;
+      changes.add(
+        InboxPreferenceChange(
+          category: category,
+          name: name,
+          value: _optionalString(preference['value']),
+        ),
+      );
+    }
+    return List<InboxPreferenceChange>.unmodifiable(changes);
+  }
+
   // Captures bot flags alongside the mapper's deliberately bot-neutral summary.
   final Map<String, bool> _rawUsersAreBots = <String, bool>{};
 
-  Future<Map<String, UserSummary>> _loadAuthors(
-    Iterable<MattermostPostDto> posts,
-  ) async {
-    final Set<String> ids = posts
-        .map((MattermostPostDto post) => post.userId)
-        .where((String id) => id.isNotEmpty)
-        .toSet();
-    final Map<String, UserSummary> result = <String, UserSummary>{};
-    for (final List<String> batch in _batches(ids.toList())) {
-      final List<MattermostUserDto> users = await _api.getUsersByIds(batch);
-      for (final MattermostUserDto user in users) {
-        result[user.id] = mapUserSummary(user);
-        _rawUsersAreBots[user.id] = user.isBot;
-      }
-    }
-    return result;
-  }
-
-  Future<List<MattermostUserThreadDto>> _loadUnreadThreads({
-    required String userId,
-    required String teamId,
-  }) async {
-    final List<MattermostUserThreadDto> result = <MattermostUserThreadDto>[];
-    String? before;
-    final Set<String> cursors = <String>{};
-    while (true) {
-      final MattermostUserThreadsDto page = await _api.getUserThreads(
-        userId: userId,
-        teamId: teamId,
-        before: before,
-        unread: true,
-      );
-      result.addAll(page.threads);
-      if (page.threads.length < 60) return result;
-      final String next = page.threads.last.id;
-      if (!cursors.add(next)) return result;
-      before = next;
-    }
-  }
-
-  Future<List<_UnreadChannelPosts>> _loadUnreadPosts({
-    required Map<String, MattermostChannelDto> channels,
-    required Map<String, MattermostChannelMemberDto> members,
-    required MattermostUserDto currentUser,
-  }) async {
-    final List<String> ids = channels.keys
-        .where((String id) {
-          final MattermostChannelDto channel = channels[id]!;
-          final MattermostChannelMemberDto? member = members[id];
-          if (member == null) return false;
-          return _shouldLoadUnreadPosts(channel, member, currentUser);
-        })
-        .toList(growable: false);
-    final List<_UnreadChannelPosts> result = <_UnreadChannelPosts>[];
-    for (var start = 0; start < ids.length; start += _maxUnreadConcurrency) {
-      final List<String> group = ids.sublist(
-        start,
-        start + _maxUnreadConcurrency > ids.length
-            ? ids.length
-            : start + _maxUnreadConcurrency,
-      );
-      result.addAll(
-        await Future.wait(
-          group.map((String channelId) async {
-            final MattermostPostListDto response = await _api
-                .getUnreadPostsForChannel(
-                  userId: members[channelId]!.userId,
-                  channelId: channelId,
-                );
-            final int viewedAt = members[channelId]!.lastViewedAt;
-            return _UnreadChannelPosts(
-              channelId,
-              response.posts.values
-                  .where((MattermostPostDto post) => post.createAt > viewedAt)
-                  .toList(growable: false),
-            );
-          }),
-        ),
-      );
-    }
-    return result;
-  }
-
-  bool _shouldLoadUnreadPosts(
-    MattermostChannelDto channel,
-    MattermostChannelMemberDto member,
-    MattermostUserDto currentUser,
-  ) {
-    final bool dialog = channel.type == 'D' || channel.type == 'G';
-    if (dialog) return channel.totalMessageCount > member.msgCount;
-
-    final bool hasUnreadRoots =
-        channel.totalMessageCountRoot > member.msgCountRoot;
-    if (!hasUnreadRoots) return false;
-    if (member.mentionCountRoot > 0) return true;
-
-    final MattermostChannelNotifyPropsDto notify =
-        member.notifyProps ?? const MattermostChannelNotifyPropsDto();
-    final UserNotifyPropsDto userNotify =
-        currentUser.notifyProps ?? const UserNotifyPropsDto();
-    return resolvesToAllMessagesSubscription(
-      memberMarkUnread: notify.markUnread,
-      memberDesktop: notify.desktop,
-      memberPush: notify.push,
-      userDesktop: userNotify.desktop,
-      userPush: userNotify.push,
-    );
-  }
-
-  InboxAttentionReason? _classify(
-    MattermostPostDto post,
+  InboxUserNotificationSettings _userNotificationSettings(
     MattermostUserDto user,
+  ) {
+    final UserNotifyPropsDto notify =
+        user.notifyProps ?? const UserNotifyPropsDto();
+    return InboxUserNotificationSettings(
+      desktop: _desktopNotificationLevel(notify.desktop),
+      desktopThreads: _desktopNotificationLevel(notify.desktopThreads),
+    );
+  }
+
+  InboxChannelNotificationSettings _channelNotificationSettings(
     MattermostChannelMemberDto member,
   ) {
     final MattermostChannelNotifyPropsDto notify =
         member.notifyProps ?? const MattermostChannelNotifyPropsDto();
-    final UserNotifyPropsDto userNotify =
-        user.notifyProps ?? const UserNotifyPropsDto();
-    return classifyInboxAttention(
-      message: post.message,
-      username: user.username,
-      firstName: user.firstName,
-      mentionKeys: userNotify.mentionKeys,
-      firstNameEnabled: userNotify.firstName == 'true',
-      channelMentionsEnabled: userNotify.channel == 'true',
-      ignoreChannelMentions: notify.ignoreChannelMentions == 'on',
-      allMessagesSubscription: resolvesToAllMessagesSubscription(
-        memberMarkUnread: notify.markUnread,
-        memberDesktop: notify.desktop,
-        memberPush: notify.push,
-        userDesktop: userNotify.desktop,
-        userPush: userNotify.push,
-      ),
+    return InboxChannelNotificationSettings(
+      desktop: _desktopNotificationLevel(notify.desktop),
+      markUnread: _markUnread(notify.markUnread),
     );
   }
 
-  InboxThreadCandidate? _mapThread(
-    _ThreadSource source,
-    Map<String, ChannelPost> mappedById,
-    Map<String, SidebarChannel> channels,
-    Map<String, MattermostChannelMemberDto> members,
-    MattermostUserDto currentUser,
-  ) {
-    final MattermostUserThreadDto raw = source.raw;
-    final ChannelPost? root = raw.post == null
-        ? null
-        : mappedById[raw.post!.id];
-    final SidebarChannel? channel = root == null
-        ? null
-        : channels[root.channelId];
-    if (root == null || channel == null) return null;
-    final MattermostChannelMemberDto? member = members[root.channelId];
-    final InboxAttentionReason? rootReason = channel.isDialog
-        ? InboxAttentionReason.allMessagesSubscription
-        : member == null || raw.post == null
-        ? null
-        : _classify(raw.post!, currentUser, member);
-    return InboxThreadCandidate(
-      channel: channel,
-      teamId: source.teamId,
-      rootAttentionReason: rootReason,
-      thread: FollowedThread(
-        root: root.withThreadSummary(
-          replyCount: raw.replyCount,
-          lastReplyAt: raw.lastReplyAt == 0
-              ? null
-              : DateTime.fromMillisecondsSinceEpoch(raw.lastReplyAt),
-        ),
-        replyCount: raw.replyCount,
-        lastReplyAt: DateTime.fromMillisecondsSinceEpoch(raw.lastReplyAt),
-        lastViewedAt: DateTime.fromMillisecondsSinceEpoch(raw.lastViewedAt),
-        unreadReplies: raw.unreadReplies,
-        unreadMentions: raw.unreadMentions,
-        participants: raw.participants
-            .map(mapUserSummary)
-            .map(
-              (UserSummary user) => PostAuthor(
-                id: user.id,
-                displayName: user.fullName,
-                profileImageUpdatedAt: user.profileImageUpdatedAt,
-              ),
-            )
-            .toList(growable: false),
-      ),
-    );
-  }
+  InboxDesktopNotificationLevel _desktopNotificationLevel(String value) =>
+      switch (value) {
+        'all' => InboxDesktopNotificationLevel.all,
+        'mention' => InboxDesktopNotificationLevel.mention,
+        'none' => InboxDesktopNotificationLevel.none,
+        'default' || '' => InboxDesktopNotificationLevel.inherit,
+        _ => InboxDesktopNotificationLevel.unknown,
+      };
 
-  List<InboxItem> _postponedItems({
-    required List<PostponedReference> references,
-    required Map<String, MattermostPostDto> rawPosts,
-    required Map<String, ChannelPost> mappedById,
-    required Map<String, SidebarChannel> channels,
-    required Map<String, UserSummary> authors,
-  }) {
-    final List<InboxPostCandidate> posts = <InboxPostCandidate>[];
-    final List<InboxItem> threads = <InboxItem>[];
-    for (final PostponedReference reference in references) {
-      final MattermostPostDto? raw = rawPosts[reference.postId];
-      final ChannelPost? post = mappedById[reference.postId];
-      final SidebarChannel? channel = raw == null
-          ? null
-          : channels[raw.channelId];
-      if (raw == null || post == null || channel == null) {
-        // TODO(inbox): Domain has no unavailable-post placeholder yet; retain
-        // the preference remotely and surface it when a placeholder is added.
-        continue;
-      }
-      if (reference.kind == PostponedReferenceKind.thread) {
-        threads.add(
-          ThreadInboxItem(
-            channel: channel,
-            teamId: channel.teamId,
-            thread: FollowedThread(
-              root: post,
-              replyCount: post.replyCount,
-              lastReplyAt: post.lastReplyAt ?? post.sentAt,
-              lastViewedAt: post.sentAt,
-              unreadReplies: 0,
-              unreadMentions: 0,
-            ),
-            postponedAt: reference.addedAt,
-          ),
-        );
-      } else {
-        posts.add(
-          InboxPostCandidate(
-            post: post,
-            channel: channel,
-            reason: InboxAttentionReason.allMessagesSubscription,
-            isFromBot: _rawUsersAreBots[raw.userId] == true,
-            isFromWebhook: _isTrue(raw.props?.values['from_webhook']),
-            isFromPlugin: _isTrue(raw.props?.values['from_plugin']),
-          ),
-        );
-      }
-    }
-    final List<InboxItem> grouped = groupDirectMessages(
-      canonicalizeInboxCandidates(InboxSourceSnapshot(posts: posts)),
-    ).map((InboxItem item) => _withPostponedAt(item, references)).toList();
-    return <InboxItem>[...threads, ...grouped];
-  }
-
-  InboxItem _withPostponedAt(InboxItem item, List<PostponedReference> refs) {
-    final DateTime addedAt = refs
-        .where((PostponedReference ref) => item.postIds.contains(ref.postId))
-        .map((PostponedReference ref) => ref.addedAt)
-        .reduce((DateTime a, DateTime b) => a.isAfter(b) ? a : b);
-    return switch (item) {
-      ChannelPostInboxItem() => ChannelPostInboxItem(
-        candidate: item.candidate,
-        postponedAt: addedAt,
-      ),
-      DirectMessageBundleInboxItem() => DirectMessageBundleInboxItem(
-        channelId: item.channelId,
-        authorId: item.authorId,
-        automationClass: item.automationClass,
-        messages: item.messages,
-        postponedAt: addedAt,
-      ),
-      ThreadInboxItem() => item,
-    };
-  }
+  InboxMarkUnread _markUnread(String value) => switch (value) {
+    'all' => InboxMarkUnread.all,
+    'mention' => InboxMarkUnread.mention,
+    _ => InboxMarkUnread.unknown,
+  };
 
   @override
   Future<void> markRead({
@@ -726,123 +1134,14 @@ final class MattermostInboxRepository extends InboxRepository {
       userId: session.userId,
       channelId: channelId,
     ),
+    UnavailablePostponedInboxItem() => Future<void>.value(),
   };
-
-  Future<Map<String, SidebarChannel>> _resolveKnownChannels({
-    required Map<String, MattermostChannelDto> rawChannels,
-    required String currentUserId,
-  }) async {
-    final List<SidebarChannel> channels = rawChannels.values
-        .map(_mapKnownChannel)
-        .whereType<SidebarChannel>()
-        .toList(growable: false);
-    final Set<String> directParticipantIds = channels
-        .where(
-          (SidebarChannel channel) => channel.kind == ChannelKind.directMessage,
-        )
-        .map(
-          (SidebarChannel channel) => directParticipantId(
-            channelName: channel.name,
-            currentUserId: currentUserId,
-          ),
-        )
-        .whereType<String>()
-        .toSet();
-    final List<SidebarChannel> groupChannels = channels
-        .where(
-          (SidebarChannel channel) => channel.kind == ChannelKind.groupMessage,
-        )
-        .toList(growable: false);
-    try {
-      final List<MattermostUserDto> directUsers = directParticipantIds.isEmpty
-          ? const <MattermostUserDto>[]
-          : await _api.getUsersByIds(directParticipantIds.toList());
-      final MattermostGroupChannelUsersDto groupUsers = groupChannels.isEmpty
-          ? const MattermostGroupChannelUsersDto(
-              usersByChannelId: <String, List<MattermostUserDto>>{},
-            )
-          : await _api.getUsersForGroupChannels(
-              groupChannels
-                  .map((SidebarChannel channel) => channel.id)
-                  .toList(growable: false),
-            );
-      final List<SidebarChannel> resolved = resolveDialogDisplayNames(
-        channels: channels,
-        currentUserId: currentUserId,
-        directUsersById: <String, UserSummary>{
-          for (final MattermostUserDto user in directUsers)
-            if (user.id.isNotEmpty) user.id: mapUserSummary(user),
-        },
-        groupUsersByChannelId: groupUsers.usersByChannelId.map(
-          (String channelId, List<MattermostUserDto> users) =>
-              MapEntry<String, List<UserSummary>>(
-                channelId,
-                users.map(mapUserSummary).toList(growable: false),
-              ),
-        ),
-      );
-      return <String, SidebarChannel>{
-        for (final SidebarChannel channel in resolved) channel.id: channel,
-      };
-    } on Object {
-      return <String, SidebarChannel>{
-        for (final SidebarChannel channel in channels) channel.id: channel,
-      };
-    }
-  }
-
-  SidebarChannel? _mapKnownChannel(MattermostChannelDto channel) {
-    try {
-      return mapChannel(channel);
-    } on FormatException {
-      return null;
-    }
-  }
 
   static bool _isTrue(JsonValueDto? value) => switch (value) {
     JsonBooleanDto(:final value) => value,
     JsonStringDto(:final value) => value == 'true',
     _ => false,
   };
-
-  static Iterable<List<String>> _batches(List<String> values) sync* {
-    for (var start = 0; start < values.length; start += _authorBatchSize) {
-      yield values.sublist(
-        start,
-        start + _authorBatchSize > values.length
-            ? values.length
-            : start + _authorBatchSize,
-      );
-    }
-  }
-}
-
-final class _TeamThreads {
-  const _TeamThreads(this.teamId, this.threads);
-
-  final String teamId;
-  final List<MattermostUserThreadDto> threads;
-}
-
-final class _ThreadSource {
-  const _ThreadSource({required this.teamId, required this.raw});
-
-  final String teamId;
-  final MattermostUserThreadDto raw;
-}
-
-final class _TeamChannels {
-  const _TeamChannels({required this.channels, required this.members});
-
-  final List<MattermostChannelDto> channels;
-  final List<MattermostChannelMemberDto> members;
-}
-
-final class _UnreadChannelPosts {
-  const _UnreadChannelPosts(this.channelId, this.posts);
-
-  final String channelId;
-  final List<MattermostPostDto> posts;
 }
 
 final class _InboxRealtimeScope {
@@ -857,4 +1156,127 @@ final class _InboxRealtimeScope {
   final Map<String, SidebarChannel> channels;
   final Map<String, MattermostChannelMemberDto> members;
   final Map<String, UserSummary> authors;
+}
+
+/// Converts session transport signals into Inbox domain events without losing
+/// the interval before the REST context establishes a channel scope.
+final class _InboxRealtimeWatch {
+  _InboxRealtimeWatch({
+    required Stream<SessionRealtimeSignal> signals,
+    required bool Function() isScopeReady,
+    required InboxConnectionStatus Function(WebSocketConnectionStatus)
+    mapConnectionStatus,
+    required Future<InboxRealtimeEvent?> Function(MattermostWebSocketEvent)
+    mapEvent,
+    required void Function() onClosed,
+  }) : _signals = signals,
+       _isScopeReady = isScopeReady,
+       _mapConnectionStatus = mapConnectionStatus,
+       _mapEvent = mapEvent,
+       _onClosed = onClosed;
+
+  static const int _maxBufferedEvents = 128;
+
+  final Stream<SessionRealtimeSignal> _signals;
+  final bool Function() _isScopeReady;
+  final InboxConnectionStatus Function(WebSocketConnectionStatus)
+  _mapConnectionStatus;
+  final Future<InboxRealtimeEvent?> Function(MattermostWebSocketEvent)
+  _mapEvent;
+  final void Function() _onClosed;
+  final List<SessionRealtimeEventReceived> _scopeBuffer =
+      <SessionRealtimeEventReceived>[];
+  Future<void> _mappingTail = Future<void>.value();
+  StreamSubscription<SessionRealtimeSignal>? _subscription;
+  late final StreamController<InboxRealtimeEvent> _controller;
+  bool _scopeBufferOverflowed = false;
+  bool _closed = false;
+
+  Stream<InboxRealtimeEvent> get stream {
+    _controller = StreamController<InboxRealtimeEvent>(
+      onListen: () {
+        _subscription = _signals.listen(
+          _onSignal,
+          onError: (Object error, StackTrace stackTrace) {
+            _enqueue(
+              const SessionRealtimeConnectionChanged(
+                WebSocketConnectionStatus.disconnected,
+              ),
+            );
+          },
+          onDone: _close,
+        );
+      },
+      onCancel: _close,
+    );
+    return _controller.stream;
+  }
+
+  void _onSignal(SessionRealtimeSignal signal) {
+    if (_closed) return;
+    if (signal case SessionRealtimeEventReceived() when !_isScopeReady()) {
+      if (_scopeBufferOverflowed) return;
+      if (_scopeBuffer.length == _maxBufferedEvents) {
+        _scopeBuffer.clear();
+        _scopeBufferOverflowed = true;
+        return;
+      }
+      _scopeBuffer.add(signal);
+      return;
+    }
+    _enqueue(signal);
+  }
+
+  /// Called by the repository immediately after the REST context becomes
+  /// available. The queue stays bounded and is mapped serially in `seq` order.
+  void flushScopeBuffer() {
+    if (_closed || !_isScopeReady()) return;
+    if (_scopeBufferOverflowed) {
+      _scopeBufferOverflowed = false;
+      _scopeBuffer.clear();
+      _enqueue(const SessionRealtimeRecoveryRequired());
+      return;
+    }
+    _scopeBuffer.sort(
+      (SessionRealtimeEventReceived left, SessionRealtimeEventReceived right) =>
+          left.event.sequence.compareTo(right.event.sequence),
+    );
+    for (final SessionRealtimeEventReceived signal in _scopeBuffer) {
+      _enqueue(signal);
+    }
+    _scopeBuffer.clear();
+  }
+
+  void _enqueue(SessionRealtimeSignal signal) {
+    _mappingTail = _mappingTail.then((_) async {
+      if (_closed) return;
+      switch (signal) {
+        case SessionRealtimeConnectionChanged(:final status):
+          _add(InboxConnectionChanged(_mapConnectionStatus(status)));
+        case SessionRealtimeRecoveryRequired():
+          _add(const InboxRefreshRequired());
+        case SessionRealtimeEventReceived(:final event):
+          try {
+            final InboxRealtimeEvent? mapped = await _mapEvent(event);
+            if (mapped != null) _add(mapped);
+          } on Object {
+            // A malformed payload remains isolated to its event. Transport
+            // sequence gaps and reconnects still request authoritative repair.
+          }
+      }
+    });
+  }
+
+  void _add(InboxRealtimeEvent event) {
+    if (!_closed && !_controller.isClosed) _controller.add(event);
+  }
+
+  Future<void> _close() async {
+    if (_closed) return;
+    _closed = true;
+    _scopeBuffer.clear();
+    await _subscription?.cancel();
+    _onClosed();
+    if (!_controller.isClosed) await _controller.close();
+  }
 }

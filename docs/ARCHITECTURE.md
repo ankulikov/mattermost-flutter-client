@@ -342,37 +342,69 @@ fallback с инициалами.
 Channels, Inbox заменяет его панелью шириной 380 пикселей. Открытый из Inbox
 тред занимает соседнюю рабочую область, не закрывая сам Inbox.
 
-Inbox отображает сообщения в секциях Mentions, Bots & integrations, Direct
-Messages и Threads. Новые личные сообщения одного автора в одном диалоге
-объединяются: одиночная запись показывает текст и открывает тред, а пачка из
-двух и более сообщений показывает счетчик и открывает диалог внутри контекста
-Inbox. На широком layout Inbox остается слева, диалог занимает рабочую область,
-а открытый из него тред может стать третьей панелью. На compact layout диалог
-открывается поверх Inbox, поэтому Back возвращает в Inbox, а не в Channels.
-Read продвигает
-границу просмотра всего канала, а postpone переносит только последнее сообщение
-пачки по его post ID. Postponed остается отдельной очередью конкретных post ID,
-поэтому один диалог может одновременно присутствовать в New и Postponed.
-Упоминание в новом reply имеет приоритет Threads; без него тред сохраняет
-источник root-поста — Mentions или Direct Messages. Для CRT-треда read обновляет
-thread read timestamp в команде, из которой этот тред был загружен.
+### Inbox
 
-После успешного REST snapshot Inbox асинхронно открывает WebSocket и показывает
-в заголовке зеленый/красный индикатор состояния. Realtime mention в первой
-версии определяется только по `@username` текущего пользователя; DM/GM
-доставляются целиком, а обычные каналы дополнительно учитывают effective
-all-messages notification policy. Первый connect только обновляет индикатор;
-reconnect и пропуск `seq` запускают атомарную сверку с REST.
+Inbox — client-side network-first проекция, а не отдельная серверная лента.
+`InboxSessionController` живёт в authenticated shell и владеет только текущей
+in-memory проекцией, badge и подпиской на realtime. Она сбрасывается при logout
+или смене account/server и никогда не записывается в Drift. Состояние вкладки
+(`New`/`Postponed`, scroll, focus и локальные действия) принадлежит
+auto-disposed `InboxPageController`, поэтому закрытие Inbox не сохраняет UI
+состояние и не останавливает session-level attention projection.
 
-Inbox controller живет на уровне авторизованной оболочки, а не открытой вкладки:
-переходы между Channels, Inbox и тредами не закрывают его realtime-подписку.
-Возврат приложения в `resumed` принудительно заменяет потенциально полуоткрытый
-WebSocket и запускает REST-сверку; появление доступной сети также прерывает
-текущий reconnect/backoff и создает новое соединение. Новая подходящая realtime
-коммуникация атомарно обновляет Inbox и его навигационный индикатор, а оболочка
-показывает foreground SnackBar. Initial snapshot, reconnect-сверка, edit/delete
-и повторная доставка одного post id не создают in-app уведомление. Системные
-push-уведомления остаются отдельной ответственностью.
+Presentation обращается только к domain-контрактам `InboxRepository`,
+`InboxSettingsRepository` и `PostponedRepository`. В data-слое
+`InboxContextLoader` один раз получает shared current-user/team/channel/member
+context, а независимые `InboxSnapshotSource` адаптеры строят candidates для
+followed CRT threads, DM/GM, mentions, desktop all-activity и Postponed. Каждый
+source возвращает candidates, typed completeness и content-free diagnostics;
+`InboxProjectionAssembler` канонизирует, группирует, reconciles queues и
+сортирует результат. Новый source добавляется adapter-ом и domain precedence,
+а не HTTP-вызовом из controller или widget.
+
+Eligibility определяется только effective Mattermost desktop notification
+settings пользователя, канала и треда. `push`, `push_threads`, `email` и
+`email_threads` не участвуют в Inbox policy. Client Inbox settings могут только
+сузить уже допустимую desktop-проекцию; они не могут включить `desktop=none` или
+превратить `desktop=mention` в `all`. Realtime exact mention берётся из
+server-provided `mentions`; historical reconstruction остаётся best effort.
+Поэтому `InboxCompleteness.exact`, `approximateMentions` и `truncated` видимы
+пользователю, а failure конкретного source даёт scoped retry, сохраняя полезные
+уже показанные items.
+
+Inbox отображает `All activity`, `Mentions`, `Bots & integrations`, `Direct
+Messages` и `Threads` в очередях `New` и `Postponed`. Группировка DM/GM
+детерминирована и ограничена выбранной policy (по умолчанию — соседние сообщения
+одного автора в 120-секундном окне). `Postponed` хранится на сервере только как
+content-free preference reference на post/root ID; недоступная ссылка остаётся
+placeholder-ом с явным Remove, а не удаляется молча. Один post/root не может
+одновременно быть в `New` и `Postponed`; explicit mention может реактивировать
+postponed CRT thread только при включённой соответствующей настройке.
+
+Клиентские Inbox settings хранятся одной versioned, non-secret записью Mattermost
+preferences `mattermost_flutter_inbox/settings`. Parser ограничивает размер,
+проверяет версию и известные значения, сохраняет unknown fields для совместимого
+round trip и при malformed/unsupported документе использует безопасные defaults.
+В эту запись не попадают текст сообщений, usernames, channel names, tokens или
+desktop settings. Категория `postponed_messages` остаётся отдельным набором
+references и не мигрируется в этот JSON-документ.
+
+`InboxRepository` начинает session realtime subscription до REST snapshot и
+буферизует bounded typed events, пока собирается context и snapshot. После
+атомарной сборки события проигрываются по sequence; reconnect, sequence gap,
+resume или переполнение buffer запускают один coalesced network-first recovery с
+backoff и jitter, не очищая прежнюю проекцию до успеха. Здоровые transport events
+применяются локальными idempotent deltas: edit меняет только существующий preview,
+delete удаляет item/bundle, а неизвестный для безопасного применения scope ведёт
+к bounded scoped reload. Системные push-уведомления остаются отдельной
+ответственностью.
+
+Foreground Inbox notification — отдельный non-replaying stream одноразовых
+events, а не поле `InboxSessionViewState`. Shell потребляет событие один раз;
+initial/refresh snapshot, edit, delete и повторная доставка post ID не могут
+показать stale SnackBar. Его author/channel metadata не требуют preview текста.
+Текст сервера включается только при явном opt-in
+`in_app_notification.show_message_preview`; безопасный default — `false`.
 
 ## Профили и аватары пользователей
 

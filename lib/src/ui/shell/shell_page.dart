@@ -35,24 +35,19 @@ class BootstrapPage extends ConsumerStatefulWidget {
 class _BootstrapPageState extends ConsumerState<BootstrapPage>
     with WidgetsBindingObserver {
   bool _showCompactChannel = false;
-  late final ProviderSubscription<InboxInAppNotification?>
-  _notificationSubscription;
+  StreamSubscription<InboxInAppNotification>? _inboxNotificationEvents;
   late final ProviderSubscription<bool> _channelPresentationSubscription;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _notificationSubscription = ref.listenManual<InboxInAppNotification?>(
-      inboxProvider.select(
-        (AsyncValue<InboxViewState> value) => value.value?.inAppNotification,
-      ),
-      (InboxInAppNotification? previous, InboxInAppNotification? next) {
-        if (next != null && previous?.id != next.id) {
-          _showInboxNotification(next);
-        }
-      },
-    );
+    _inboxNotificationEvents = ref
+        .read(inboxInAppNotificationEventsProvider)
+        .stream
+        .listen((InboxInAppNotification event) {
+          if (mounted) _showInboxNotification(event);
+        });
     _channelPresentationSubscription = ref.listenManual<bool>(
       channelPresentationProvider,
       (bool? previous, bool next) {
@@ -70,7 +65,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _notificationSubscription.close();
+    unawaited(_inboxNotificationEvents?.cancel());
     _channelPresentationSubscription.close();
     super.dispose();
   }
@@ -79,7 +74,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed &&
         ref.read(authControllerProvider).phase == AuthPhase.signedIn) {
-      ref.read(inboxProvider.notifier).handleAppResumed();
+      ref.read(inboxSessionProvider.notifier).handleAppResumed();
     }
   }
 
@@ -105,7 +100,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       );
     }
     final bool inboxHasNewItems = ref.watch(
-      inboxProvider.select(
+      inboxSessionProvider.select(
         (value) => value.value?.snapshot.hasNewItems ?? false,
       ),
     );
@@ -399,9 +394,9 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           key: const ValueKey<String>('inbox-in-app-notification'),
           content: Text(
             ShellStrings.inboxNotification(
-              author: notification.candidate.post.author.displayName,
-              channel: notification.candidate.channel.displayName,
-              message: notification.candidate.post.message,
+              author: notification.author,
+              channel: notification.channel,
+              messagePreview: notification.messagePreview,
             ),
           ),
           action: SnackBarAction(

@@ -6,6 +6,7 @@ import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
+import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
@@ -15,6 +16,7 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candid
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_channel_route.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_thread_host.dart';
+import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
 import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -37,18 +39,18 @@ void main() {
   );
 
   group('InboxThreadTarget', () {
-    test('opens a channel reply at its root thread', () {
-      final InboxThreadTarget target = InboxThreadTarget.fromItem(
-        ChannelPostInboxItem(
-          candidate: _candidate(
-            _post(id: 'reply', channelId: publicChannel.id, rootId: 'root'),
-            publicChannel,
+    test('rejects channel posts so they use permalink navigation', () {
+      expect(
+        () => InboxThreadTarget.fromItem(
+          ChannelPostInboxItem(
+            candidate: _candidate(
+              _post(id: 'reply', channelId: publicChannel.id, rootId: 'root'),
+              publicChannel,
+            ),
           ),
         ),
+        throwsArgumentError,
       );
-
-      expect(target.rootPostId, 'root');
-      expect(target.channel, same(publicChannel));
     });
 
     test('opens a single direct message at its root thread', () {
@@ -117,7 +119,7 @@ void main() {
     });
   });
 
-  testWidgets('opens a thread beside Inbox when width allows two panes', (
+  testWidgets('opens a channel root beside Inbox through its permalink', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 700));
@@ -133,6 +135,16 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(_NoopAuthRepository()),
+          authSessionProvider.overrideWithValue(_session),
+          postRepositoryProvider.overrideWithValue(
+            _PostRepository(
+              navigationTarget: const PostNavigationTarget(
+                linkedPostId: 'channel-root',
+                channelPostId: 'channel-root',
+                channel: publicChannel,
+              ),
+            ),
+          ),
         ],
         child: MaterialApp(
           home: InboxThreadHost(
@@ -148,86 +160,180 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Inbox message'), findsOneWidget);
     expect(find.text('Current workspace'), findsOneWidget);
 
     await tester.tap(find.text('Inbox message'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Inbox message'), findsOneWidget);
+    expect(find.byType(ChannelPostsPane), findsOneWidget);
+    expect(find.byType(ThreadPane), findsNothing);
     expect(
-      find.byKey(const ValueKey<String>('inbox-thread-channel-root')),
+      find.byKey(const ValueKey<String>('inbox-linked-post-channel-root')),
       findsOneWidget,
     );
     expect(find.text('Current workspace'), findsNothing);
 
-    await tester.tap(find.byTooltip('Close thread'));
-    await tester.pump();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
 
     expect(find.text('Inbox message'), findsOneWidget);
     expect(find.text('Current workspace'), findsOneWidget);
   });
 
-  testWidgets('pushes a thread on narrow width and Back restores Inbox', (
-    WidgetTester tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 700));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final InboxItem item = ChannelPostInboxItem(
-      candidate: _candidate(
-        _post(id: 'channel-message', channelId: publicChannel.id),
-        publicChannel,
-      ),
-    );
-    late final GoRouter router;
-    router = GoRouter(
-      routes: <RouteBase>[
-        GoRoute(
-          path: '/',
-          builder: (_, _) => InboxThreadHost(
-            showAdjacentWorkspace: false,
-            background: const Text('Current workspace'),
-            inboxBuilder: (_, ValueChanged<InboxItem> onOpenItem) => Center(
-              child: FilledButton(
-                onPressed: () => onOpenItem(item),
-                child: const Text('Direct message'),
+  testWidgets(
+    'opens a compact permalink and Back restores Inbox focus and scroll',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final InboxItem item = ChannelPostInboxItem(
+        candidate: _candidate(
+          _post(id: 'channel-message', channelId: publicChannel.id),
+          publicChannel,
+        ),
+      );
+      final FocusNode inboxFocus = FocusNode();
+      final ScrollController inboxScroll = ScrollController();
+      addTearDown(() {
+        inboxFocus.dispose();
+        inboxScroll.dispose();
+      });
+      late final GoRouter router;
+      router = GoRouter(
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/',
+            builder: (_, _) => InboxThreadHost(
+              showAdjacentWorkspace: false,
+              background: const Text('Current workspace'),
+              inboxBuilder: (_, ValueChanged<InboxItem> onOpenItem) => ListView(
+                controller: inboxScroll,
+                children: <Widget>[
+                  const SizedBox(height: 360),
+                  Focus(
+                    focusNode: inboxFocus,
+                    child: FilledButton(
+                      onPressed: () => onOpenItem(item),
+                      child: const Text('Inbox channel root'),
+                    ),
+                  ),
+                  const SizedBox(height: 720),
+                ],
+              ),
+            ),
+          ),
+          GoRoute(
+            path: PostPermalinkRoute.path,
+            builder: (_, GoRouterState state) => PostPermalinkRoute(
+              postId: state.pathParameters['postId']!,
+              stateScopeId: 'compact-inbox-permalink',
+            ),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_NoopAuthRepository()),
+            authSessionProvider.overrideWithValue(_session),
+            postRepositoryProvider.overrideWithValue(
+              _PostRepository(
+                navigationTarget: const PostNavigationTarget(
+                  linkedPostId: 'channel-message',
+                  channelPostId: 'channel-message',
+                  channel: publicChannel,
+                ),
+              ),
+            ),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      inboxScroll.jumpTo(240);
+      await tester.pump();
+      inboxFocus.requestFocus();
+      await tester.pump();
+      expect(inboxFocus.hasPrimaryFocus, isTrue);
+      final double scrollOffset = inboxScroll.offset;
+
+      await tester.tap(find.text('Inbox channel root'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChannelPostsPane), findsOneWidget);
+      expect(find.text('Inbox channel root'), findsNothing);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inbox channel root'), findsOneWidget);
+      expect(inboxScroll.offset, closeTo(scrollOffset, 0.1));
+      expect(inboxFocus.hasPrimaryFocus, isTrue);
+    },
+  );
+
+  testWidgets(
+    'opens a channel reply at its authoritative root thread on wide width',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final InboxItem item = ChannelPostInboxItem(
+        candidate: _candidate(
+          _post(id: 'reply', channelId: publicChannel.id, rootId: 'root'),
+          publicChannel,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_NoopAuthRepository()),
+            authSessionProvider.overrideWithValue(_session),
+            postRepositoryProvider.overrideWithValue(
+              _PostRepository(
+                navigationTarget: const PostNavigationTarget(
+                  linkedPostId: 'reply',
+                  channelPostId: 'root',
+                  channel: publicChannel,
+                  threadRootPostId: 'root',
+                  threadHighlightedPostId: 'reply',
+                ),
+              ),
+            ),
+            threadRepositoryProvider.overrideWithValue(_ThreadRepository()),
+          ],
+          child: MaterialApp(
+            home: InboxThreadHost(
+              showAdjacentWorkspace: true,
+              background: const Text('Current workspace'),
+              inboxBuilder: (_, ValueChanged<InboxItem> onOpenItem) => Center(
+                child: FilledButton(
+                  onPressed: () => onOpenItem(item),
+                  child: const Text('Inbox reply'),
+                ),
               ),
             ),
           ),
         ),
-        GoRoute(
-          path: ThreadRoute.path,
-          builder: (_, GoRouterState state) =>
-              Text('Route thread ${state.pathParameters['rootPostId']}'),
-        ),
-      ],
-    );
-    addTearDown(router.dispose);
+      );
+      await tester.tap(find.text('Inbox reply'));
+      await tester.pumpAndSettle();
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(_NoopAuthRepository()),
-        ],
-        child: MaterialApp.router(routerConfig: router),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Direct message'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Route thread channel-message'), findsOneWidget);
-    expect(find.text('Direct message'), findsNothing);
-
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-
-    expect(find.text('Direct message'), findsOneWidget);
-    expect(find.text('Route thread channel-message'), findsNothing);
-  });
+      expect(find.text('Inbox reply'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('linked-post-thread-root')),
+        findsOneWidget,
+      );
+      expect(find.byType(ChannelPostsPane), findsNothing);
+      expect(find.text('Current workspace'), findsNothing);
+    },
+  );
 
   testWidgets('opens a multi-message bundle beside Inbox as a chat', (
     WidgetTester tester,
@@ -478,6 +584,24 @@ final AuthSession _session = AuthSession(
 );
 
 final class _PostRepository extends PostRepository {
+  _PostRepository({this.navigationTarget});
+
+  final PostNavigationTarget? navigationTarget;
+
+  @override
+  Future<PostNavigationTarget> resolveNavigationTarget({
+    required AuthSession session,
+    required String postId,
+  }) {
+    final PostNavigationTarget? target = navigationTarget;
+    if (target == null) {
+      return Future<PostNavigationTarget>.error(
+        StateError('No navigation target for $postId'),
+      );
+    }
+    return Future<PostNavigationTarget>.value(target);
+  }
+
   @override
   Future<ChannelPostPage> loadLatest({
     required AuthSession session,
@@ -502,6 +626,24 @@ final class _PostRepository extends PostRepository {
     required String channelId,
     required String beforePostId,
   }) async => const ChannelPostPage();
+
+  @override
+  Future<ChannelPostPage> loadAround({
+    required AuthSession session,
+    required String channelId,
+    required String postId,
+  }) async => ChannelPostPage(
+    posts: <ChannelPost>[
+      ChannelPost(
+        id: postId,
+        channelId: channelId,
+        author: const PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
+        sentAt: DateTime.utc(2026, 9, 4, 12),
+        message: 'Focused message',
+      ),
+    ],
+    hasOlder: false,
+  );
 }
 
 final class _ThreadRepository extends ThreadRepository {

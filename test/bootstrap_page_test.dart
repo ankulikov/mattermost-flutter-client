@@ -523,31 +523,29 @@ void main() {
     inbox.addPost('realtime', 'A realtime Inbox message');
     await tester.pumpAndSettle();
 
-    final ProviderContainer container = ProviderScope.containerOf(
-      tester.element(find.byType(BootstrapPage)),
-    );
-    expect(
-      container.read(inboxProvider).value?.inAppNotification?.id,
-      'realtime',
-    );
-
     expect(
       find.byKey(const ValueKey<String>('inbox-in-app-notification')),
       findsOneWidget,
     );
-    expect(
-      find.text('Ada Lovelace · Town Square\nA realtime Inbox message'),
-      findsOneWidget,
-    );
+    expect(find.text('Ada Lovelace · Town Square'), findsOneWidget);
+    expect(find.text('A realtime Inbox message'), findsNothing);
     expect(
       find.byKey(const ValueKey<String>('inbox-navigation-indicator')),
       findsOneWidget,
     );
     expect(find.text('Town Square'), findsOneWidget);
 
+    inbox.addPost('realtime', 'Edited after notification');
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('inbox-in-app-notification')),
+      findsOneWidget,
+    );
+    expect(find.text('Edited after notification'), findsNothing);
+
     await tester.tap(find.text('Open Inbox'));
     await tester.pumpAndSettle();
-    expect(find.text('A realtime Inbox message'), findsOneWidget);
+    expect(find.text('Edited after notification'), findsOneWidget);
     expect(inbox.watchCalls, 1);
   });
 

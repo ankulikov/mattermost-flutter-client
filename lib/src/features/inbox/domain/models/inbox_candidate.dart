@@ -56,6 +56,22 @@ final class InboxPostCandidate {
       : InboxAutomationClass.person;
 
   bool get isDirect => channel.isDialog;
+
+  /// Replaces displayable post content while retaining the original Inbox
+  /// membership decision. This is used for `post_edited`: an edit must not
+  /// change the historic attention reason, channel identity, or automation
+  /// classification that admitted the item to Inbox.
+  InboxPostCandidate withPost(Post value) => InboxPostCandidate(
+    post: value,
+    channel: channel,
+    reason: reason,
+    isIncoming: isIncoming,
+    isSystem: isSystem,
+    isSilentNotification: isSilentNotification,
+    isFromBot: isFromBot,
+    isFromWebhook: isFromWebhook,
+    isFromPlugin: isFromPlugin,
+  );
 }
 
 /// A followed CRT thread included in the Inbox source snapshot.
@@ -82,7 +98,7 @@ final class InboxThreadCandidate {
   /// that mention reactivate an otherwise postponed thread.
   final bool hasNewExplicitMention;
 
-  bool get isEligible => thread.unreadReplies > 0;
+  bool get isEligible => thread.unreadReplies > 0 || thread.unreadMentions > 0;
 }
 
 /// The raw, network-first inputs needed to construct an Inbox snapshot.

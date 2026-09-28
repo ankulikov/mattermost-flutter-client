@@ -1,6 +1,12 @@
 # Inbox и Postponed
 
-Статус: realtime implemented
+> Документ сохранён как исторический design draft. Актуальный контракт,
+> аудит текущего кода и план доработок находятся в
+> [`INBOX_IMPLEMENTATION_PLAN.md`](INBOX_IMPLEMENTATION_PLAN.md). Новый план отменяет
+> предположение о server-side Inbox endpoint и исключает push/email из
+> расчёта принадлежности к Inbox.
+
+Статус: superseded historical draft
 Дата исследования: 2026-09-03
 Область: замена верхнеуровневого пункта Threads агрегированным Inbox
 

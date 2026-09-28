@@ -20,7 +20,8 @@ InboxAttentionReason? classifyInboxAttention({
   if (_containsMention(lowerMessage, username.toLowerCase(), prefix: '@')) {
     return InboxAttentionReason.directMention;
   }
-  if (firstNameEnabled && firstName.isNotEmpty && message.contains(firstName)) {
+  if (firstNameEnabled &&
+      _containsToken(lowerMessage, firstName.toLowerCase())) {
     return InboxAttentionReason.directMention;
   }
   for (final String key in mentionKeys.split(',')) {

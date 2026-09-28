@@ -13,9 +13,12 @@ abstract final class ShellStrings {
   static String inboxNotification({
     required String author,
     required String channel,
-    required String message,
+    String? messagePreview,
   }) {
-    final String normalized = message.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (messagePreview == null) return '$author · $channel';
+    final String normalized = messagePreview
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
     final String preview = normalized.isEmpty
         ? newInboxMessage
         : normalized.length <= 140
