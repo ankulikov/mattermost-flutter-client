@@ -238,6 +238,24 @@ void main() {
     expect(groups.single.name, 'backend');
   });
 
+  test('loads the current user group memberships', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"id":"group-1","name":"backend",'
+          '"display_name":"Backend Team","allow_reference":true}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostGroupDto> groups = await DioMattermostApi(
+      dio: dio,
+    ).getGroupsForUser('user id');
+
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/users/user%20id/groups');
+    expect(groups.single.name, 'backend');
+  });
+
   test('loads a fresh complete user profile by id', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:

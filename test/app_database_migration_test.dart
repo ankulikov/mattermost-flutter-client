@@ -179,4 +179,42 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test(
+    'creates user group membership cache when upgrading schema 11',
+    () async {
+      final Directory directory = await Directory.systemTemp.createTemp(
+        'mattermost-user-groups-',
+      );
+      final File file = File('${directory.path}/cache.sqlite');
+      sqlite.sqlite3.open(file.path)
+        ..execute('PRAGMA user_version = 11')
+        ..close();
+
+      final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+      try {
+        final List<String> tables = await database
+            .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+            .map((row) => row.read<String>('name'))
+            .get();
+        expect(tables, contains('cached_user_groups'));
+        final List<String> columns = await database
+            .customSelect('PRAGMA table_info(cached_user_groups)')
+            .map((row) => row.read<String>('name'))
+            .get();
+        expect(
+          columns,
+          containsAll(<String>['account_id', 'group_id', 'name', 'expires_at']),
+        );
+        final List<String> indexes = await database
+            .customSelect("SELECT name FROM sqlite_master WHERE type = 'index'")
+            .map((row) => row.read<String>('name'))
+            .get();
+        expect(indexes, contains('cached_user_groups_account_name_idx'));
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }

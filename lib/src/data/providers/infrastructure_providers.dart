@@ -6,6 +6,7 @@ import 'package:mattermost_flutter/src/data/cache/avatar_cache.dart';
 import 'package:mattermost_flutter/src/data/cache/custom_emoji_cache.dart';
 import 'package:mattermost_flutter/src/data/database/database_provider.dart';
 import 'package:mattermost_flutter/src/data/database/recent_emoji_cache.dart';
+import 'package:mattermost_flutter/src/data/database/user_group_membership_cache.dart';
 import 'package:mattermost_flutter/src/data/database/user_profile_cache_dao.dart';
 import 'package:mattermost_flutter/src/data/platform/system_attachment_file_saver.dart';
 import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
@@ -63,6 +64,12 @@ final Provider<CustomEmojiCache> customEmojiCacheProvider =
 final Provider<RecentEmojiCache> recentEmojiCacheProvider =
     Provider<RecentEmojiCache>(
       (Ref ref) => DriftRecentEmojiCache(ref.watch(appDatabaseProvider)),
+    );
+
+final Provider<UserGroupMembershipCache> userGroupMembershipCacheProvider =
+    Provider<UserGroupMembershipCache>(
+      (Ref ref) =>
+          DriftUserGroupMembershipCache(ref.watch(appDatabaseProvider)),
     );
 
 final Provider<AttachmentFileSaver> attachmentFileSaverProvider =

@@ -58,4 +58,21 @@ void main() {
       InboxAttentionReason.keywordMention,
     );
   });
+
+  test('classifies a mention of a current user group', () {
+    expect(
+      classifyInboxAttention(
+        message: 'Please review this, @Backend-Team.',
+        username: 'me',
+        firstName: '',
+        mentionKeys: '',
+        firstNameEnabled: false,
+        channelMentionsEnabled: false,
+        ignoreChannelMentions: false,
+        allMessagesSubscription: false,
+        groupMentionNames: const <String>['backend-team'],
+      ),
+      InboxAttentionReason.groupMention,
+    );
+  });
 }

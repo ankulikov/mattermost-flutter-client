@@ -3,9 +3,9 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candid
 /// Classifies the subset of historical mentions that can be reconstructed from
 /// a post body and current notification settings.
 ///
-/// The server remains authoritative for mention counters. Group mentions and
-/// presence-dependent `@here` cannot be faithfully reconstructed after a cold
-/// start with API v4 alone.
+/// The server remains authoritative for mention counters. Current group
+/// membership makes group mentions reconstructable, while presence-dependent
+/// `@here` still cannot be faithfully reconstructed after a cold start.
 InboxAttentionReason? classifyInboxAttention({
   required String message,
   required String username,
@@ -15,6 +15,7 @@ InboxAttentionReason? classifyInboxAttention({
   required bool channelMentionsEnabled,
   required bool ignoreChannelMentions,
   required bool allMessagesSubscription,
+  Iterable<String> groupMentionNames = const <String>[],
 }) {
   final String lowerMessage = message.toLowerCase();
   if (_containsMention(lowerMessage, username.toLowerCase(), prefix: '@')) {
@@ -29,14 +30,21 @@ InboxAttentionReason? classifyInboxAttention({
       return InboxAttentionReason.keywordMention;
     }
   }
+  for (final String name in groupMentionNames) {
+    final String normalized = name.trim().toLowerCase();
+    if (normalized.isNotEmpty &&
+        _containsMention(lowerMessage, normalized, prefix: '@')) {
+      return InboxAttentionReason.groupMention;
+    }
+  }
   if (channelMentionsEnabled &&
       !ignoreChannelMentions &&
       (_containsMention(lowerMessage, 'channel', prefix: '@') ||
           _containsMention(lowerMessage, 'all', prefix: '@'))) {
     return InboxAttentionReason.channelMention;
   }
-  // TODO(inbox): Current group membership and send-time presence are absent
-  // from REST snapshots, so group mentions and @here are intentionally omitted.
+  // Send-time presence is absent from REST snapshots, so @here remains
+  // intentionally omitted.
   return allMessagesSubscription
       ? InboxAttentionReason.allMessagesSubscription
       : null;
@@ -46,14 +54,19 @@ bool _containsMention(String message, String value, {required String prefix}) =>
     value.isNotEmpty && _containsToken(message, '$prefix$value');
 
 bool _containsToken(String text, String token) {
-  final int index = text.indexOf(token);
-  if (index < 0) return false;
-  final int before = index - 1;
-  final int after = index + token.length;
-  final bool validBefore = before < 0 || !_isWord(text.codeUnitAt(before));
-  final bool validAfter =
-      after >= text.length || !_isWord(text.codeUnitAt(after));
-  return validBefore && validAfter;
+  var start = 0;
+  while (start < text.length) {
+    final int index = text.indexOf(token, start);
+    if (index < 0) return false;
+    final int before = index - 1;
+    final int after = index + token.length;
+    final bool validBefore = before < 0 || !_isWord(text.codeUnitAt(before));
+    final bool validAfter =
+        after >= text.length || !_isWord(text.codeUnitAt(after));
+    if (validBefore && validAfter) return true;
+    start = index + token.length;
+  }
+  return false;
 }
 
 bool _isWord(int codeUnit) =>

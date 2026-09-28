@@ -477,6 +477,7 @@ void main() {
     expect(find.text('Inbox'), findsWidgets);
     expect(find.text('New'), findsOneWidget);
     expect(find.text('Postponed'), findsOneWidget);
+    expect(find.text('Group mention'), findsOneWidget);
     expect(find.text('Inbox message'), findsOneWidget);
     expect(find.byTooltip('Postpone'), findsOneWidget);
 
@@ -2177,7 +2178,7 @@ final class _InboxTestRepository extends InboxRepository {
         message: 'Inbox message',
       ),
       channel: channel,
-      reason: InboxAttentionReason.directMention,
+      reason: InboxAttentionReason.groupMention,
     );
     return InboxSnapshot(
       newItems: <InboxItem>[ChannelPostInboxItem(candidate: candidate)],

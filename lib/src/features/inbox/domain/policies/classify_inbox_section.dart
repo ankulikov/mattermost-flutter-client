@@ -1,7 +1,13 @@
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 
-enum InboxSection { mentions, botsAndIntegrations, directMessages, threads }
+enum InboxSection {
+  mentions,
+  groupMentions,
+  botsAndIntegrations,
+  directMessages,
+  threads,
+}
 
 /// Assigns one Inbox item to its single presentation section.
 ///
@@ -18,6 +24,8 @@ InboxSection classifyInboxSection(InboxItem item) => switch (item) {
         ? InboxSection.threads
         : channel.isDialog
         ? InboxSection.directMessages
+        : reason == InboxAttentionReason.groupMention
+        ? InboxSection.groupMentions
         : _isMention(reason)
         ? InboxSection.mentions
         : InboxSection.threads,
@@ -32,13 +40,18 @@ InboxSection classifyInboxSection(InboxItem item) => switch (item) {
     ),
   ) =>
     InboxSection.botsAndIntegrations,
+  ChannelPostInboxItem(
+    candidate: InboxPostCandidate(reason: InboxAttentionReason.groupMention),
+  ) =>
+    InboxSection.groupMentions,
   ChannelPostInboxItem() => InboxSection.mentions,
 };
 
 bool _isMention(InboxAttentionReason? reason) => switch (reason) {
   InboxAttentionReason.directMention ||
   InboxAttentionReason.keywordMention ||
-  InboxAttentionReason.groupMention ||
   InboxAttentionReason.channelMention => true,
-  InboxAttentionReason.allMessagesSubscription || null => false,
+  InboxAttentionReason.groupMention ||
+  InboxAttentionReason.allMessagesSubscription ||
+  null => false,
 };

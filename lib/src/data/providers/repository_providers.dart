@@ -197,6 +197,7 @@ final Provider<InboxRepository> inboxRepositoryProvider =
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         postponed: ref.watch(postponedRepositoryProvider),
+        userGroupCache: ref.watch(userGroupMembershipCacheProvider),
         realtime: ref.watch(sessionRealtimeServiceProvider),
       ),
     );
