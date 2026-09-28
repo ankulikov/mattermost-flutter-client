@@ -1,10 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.dart';
+import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
 import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
 
 void main() {
   final AuthSession session = AuthSession(
@@ -26,12 +30,19 @@ void main() {
       final List<SessionRealtimeSignal> actions = <SessionRealtimeSignal>[];
       final subscriptions = <StreamSubscription<SessionRealtimeSignal>>[
         service
-            .watch(session: session, eventNames: const <String>{'posted'})
+            .watch(
+              session: session,
+              subscription: const SessionRealtimeSubscription(
+                eventNames: <String>{'posted'},
+              ),
+            )
             .listen(inbox.add),
         service
             .watch(
               session: session,
-              eventNames: const <String>{'ephemeral_message'},
+              subscription: const SessionRealtimeSubscription(
+                eventNames: <String>{'ephemeral_message'},
+              ),
             )
             .listen(actions.add),
       ];
@@ -73,7 +84,12 @@ void main() {
       addTearDown(service.dispose);
       final List<SessionRealtimeSignal> values = <SessionRealtimeSignal>[];
       final StreamSubscription<SessionRealtimeSignal> subscription = service
-          .watch(session: session, eventNames: const <String>{})
+          .watch(
+            session: session,
+            subscription: const SessionRealtimeSubscription(
+              eventNames: <String>{},
+            ),
+          )
           .listen(values.add);
       addTearDown(subscription.cancel);
       await _waitUntil(() => gateway.watchCalls == 1);
@@ -90,6 +106,61 @@ void main() {
       );
     },
   );
+
+  test('starts from the active session without a feature subscriber', () async {
+    final _Gateway gateway = _Gateway();
+    final SessionRealtimeService service = SessionRealtimeService(
+      gateway: gateway,
+      credentialStore: const _Credentials(),
+    );
+    addTearDown(service.dispose);
+
+    await service.setSession(session);
+
+    expect(gateway.watchCalls, 1);
+  });
+
+  test('provider starts realtime when an account becomes active', () async {
+    final _Gateway gateway = _Gateway();
+    final ProviderContainer container = ProviderContainer(
+      overrides: [
+        webSocketGatewayProvider.overrideWithValue(gateway),
+        credentialStoreProvider.overrideWithValue(const _Credentials()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final SessionRealtimeService service = container.read(
+      sessionRealtimeServiceProvider,
+    );
+
+    container.read(activeAccountSessionProvider.notifier).set(session);
+    await _waitUntil(() => gateway.watchCalls == 1);
+
+    expect(service.connectionStatus, RealtimeConnectionStatus.connecting);
+  });
+
+  test('replays the current connection status to late subscribers', () async {
+    final _Gateway gateway = _Gateway();
+    final SessionRealtimeService service = SessionRealtimeService(
+      gateway: gateway,
+      credentialStore: const _Credentials(),
+    );
+    addTearDown(service.dispose);
+    await service.setSession(session);
+    gateway.add(
+      const WebSocketConnectionSignal(
+        status: WebSocketConnectionStatus.connected,
+      ),
+    );
+    await _waitUntil(
+      () => service.connectionStatus == RealtimeConnectionStatus.connected,
+    );
+
+    expect(
+      await service.connectionStatuses.first,
+      RealtimeConnectionStatus.connected,
+    );
+  });
 }
 
 WebSocketEventSignal _event(String name, int sequence) => WebSocketEventSignal(

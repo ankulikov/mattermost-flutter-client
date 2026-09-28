@@ -164,7 +164,6 @@ class _ConnectionIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool connected = status == InboxConnectionStatus.connected;
     final String label = switch (status) {
       InboxConnectionStatus.connecting => InboxStrings.connecting,
       InboxConnectionStatus.connected => InboxStrings.connected,
@@ -179,7 +178,11 @@ class _ConnectionIndicator extends StatelessWidget {
           width: 10,
           height: 10,
           decoration: BoxDecoration(
-            color: connected ? Colors.green : Colors.red,
+            color: switch (status) {
+              InboxConnectionStatus.connecting => Colors.amber,
+              InboxConnectionStatus.connected => Colors.green,
+              InboxConnectionStatus.disconnected => Colors.red,
+            },
             shape: BoxShape.circle,
           ),
         ),

@@ -266,9 +266,11 @@ final class MattermostInboxRepository extends InboxRepository {
     return realtime
         .watch(
           session: session,
-          eventNames: _realtimeEventNames,
-          acceptsChannel: (String channelId) =>
-              _realtimeScope?.channels.containsKey(channelId) == true,
+          subscription: SessionRealtimeSubscription(
+            eventNames: _realtimeEventNames,
+            acceptsChannel: (String channelId) =>
+                _realtimeScope?.channels.containsKey(channelId) == true,
+          ),
         )
         .asyncMap((SessionRealtimeSignal signal) async {
           switch (signal) {

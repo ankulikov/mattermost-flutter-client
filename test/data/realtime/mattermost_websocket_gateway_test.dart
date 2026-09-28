@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/realtime/mattermost_websocket_gateway.dart';
+import 'package:mattermost_flutter/src/data/realtime/network_availability_monitor.dart';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 
 void main() {
@@ -151,6 +152,64 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'waits offline, closes on network loss and reconnects when restored',
+    () async {
+      final _NetworkMonitor network = _NetworkMonitor(
+        NetworkAvailability.unavailable,
+      );
+      final List<_Connection> connections = <_Connection>[
+        _Connection(),
+        _Connection(),
+      ];
+      var nextConnection = 0;
+      final MattermostWebSocketGateway gateway = MattermostWebSocketGateway(
+        connector: (_) => connections[nextConnection++],
+        retryDelay: (_) => Duration.zero,
+        networkMonitor: network,
+      );
+      final List<WebSocketGatewaySignal> signals = <WebSocketGatewaySignal>[];
+      final StreamSubscription<WebSocketGatewaySignal> subscription = gateway
+          .watch(
+            serverUrl: Uri.parse('https://chat.example'),
+            token: 'token',
+            acceptsEvent: (_) => false,
+            acceptsChannel: (_) => false,
+          )
+          .listen(signals.add);
+      addTearDown(subscription.cancel);
+
+      await _flushEvents();
+      expect(nextConnection, 0);
+      expect(
+        signals.whereType<WebSocketConnectionSignal>().last.status,
+        WebSocketConnectionStatus.disconnected,
+      );
+
+      network.set(NetworkAvailability.available);
+      await _waitUntil(() => connections.first.sent.isNotEmpty);
+      connections.first.add(<String, Object?>{'status': 'OK', 'seq_reply': 1});
+      await _waitUntil(
+        () =>
+            signals.whereType<WebSocketConnectionSignal>().last.status ==
+            WebSocketConnectionStatus.connected,
+      );
+
+      network.set(NetworkAvailability.unavailable);
+      await _waitUntil(() => connections.first.closeCalls == 1);
+      await _flushEvents();
+      expect(nextConnection, 1);
+      expect(
+        signals.whereType<WebSocketConnectionSignal>().last.status,
+        WebSocketConnectionStatus.disconnected,
+      );
+
+      network.set(NetworkAvailability.available);
+      await _waitUntil(() => connections.last.sent.isNotEmpty);
+      expect(nextConnection, 2);
+    },
+  );
 }
 
 Map<String, Object?> _event(
@@ -175,9 +234,16 @@ Future<void> _waitUntil(bool Function() condition) async {
   fail('Condition was not reached');
 }
 
+Future<void> _flushEvents() async {
+  for (var index = 0; index < 10; index++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
 final class _Connection implements WebSocketConnection {
   final StreamController<Object?> _messages = StreamController<Object?>();
   final List<Object?> sent = <Object?>[];
+  int closeCalls = 0;
 
   @override
   Future<void> get ready => Future<void>.value();
@@ -193,5 +259,26 @@ final class _Connection implements WebSocketConnection {
   Future<void> finish() => _messages.close();
 
   @override
-  Future<void> close() async {}
+  Future<void> close() async {
+    closeCalls += 1;
+  }
+}
+
+final class _NetworkMonitor implements NetworkAvailabilityMonitor {
+  _NetworkMonitor(this._current);
+
+  final StreamController<NetworkAvailability> _changes =
+      StreamController<NetworkAvailability>.broadcast();
+  NetworkAvailability _current;
+
+  @override
+  Stream<NetworkAvailability> get changes => _changes.stream;
+
+  @override
+  Future<NetworkAvailability> get current async => _current;
+
+  void set(NetworkAvailability value) {
+    _current = value;
+    _changes.add(value);
+  }
 }

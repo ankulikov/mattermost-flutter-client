@@ -79,12 +79,14 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed &&
         ref.read(authControllerProvider).phase == AuthPhase.signedIn) {
+      ref.read(realtimeConnectionServiceProvider).reconnect();
       ref.read(inboxProvider.notifier).handleAppResumed();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(realtimeConnectionStatusProvider);
     final AuthState auth = ref.watch(authControllerProvider);
     final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
     final ShellDestination destination = ref.watch(shellDestinationProvider);

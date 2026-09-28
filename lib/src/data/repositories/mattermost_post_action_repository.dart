@@ -74,7 +74,9 @@ final class MattermostPostActionRepository implements PostActionRepository {
     return realtime
         .watch(
           session: session,
-          eventNames: const <String>{'post_edited', 'ephemeral_message'},
+          subscription: const SessionRealtimeSubscription(
+            eventNames: <String>{'post_edited', 'ephemeral_message'},
+          ),
         )
         .asyncMap((SessionRealtimeSignal signal) async {
           if (signal case SessionRealtimeEventReceived(:final event)) {

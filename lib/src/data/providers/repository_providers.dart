@@ -26,6 +26,7 @@ import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart'
 import 'package:mattermost_flutter/src/domain/repositories/rich_attachment_option_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
+import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_postponed_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
@@ -38,6 +39,11 @@ import 'package:mattermost_flutter/src/features/search/data/repositories/matterm
 import 'package:mattermost_flutter/src/features/search/data/repositories/mattermost_message_search_timezone_repository.dart';
 import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_repository.dart';
 import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_timezone_repository.dart';
+
+final Provider<RealtimeConnectionService> realtimeConnectionServiceProvider =
+    Provider<RealtimeConnectionService>(
+      (Ref ref) => ref.watch(sessionRealtimeServiceProvider),
+    );
 
 final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
     Provider<MattermostAuthRepository>((Ref ref) {
