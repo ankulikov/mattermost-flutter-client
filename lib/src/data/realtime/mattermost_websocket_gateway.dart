@@ -77,19 +77,36 @@ final class MattermostWebSocketGateway
       );
     }
 
-    Future<void> closeActive() async {
+    Future<void> ignoreCleanupError(Future<void> cleanup) async {
       try {
-        await activeSubscription?.cancel();
+        await cleanup;
       } on Object {
         // Closing is best-effort; reconnect/cancellation must still finish.
       }
-      activeSubscription = null;
-      try {
-        await activeConnection?.close();
-      } on Object {
-        // The peer may already have closed the socket.
-      }
+    }
+
+    void closeActive() {
+      // A timed-out handshake can also leave cancel/close pending forever.
+      // Detach first so best-effort cleanup cannot block the retry loop.
+      final WebSocketConnection? connection = activeConnection;
       activeConnection = null;
+      try {
+        final Future<void>? cancellation = activeSubscription?.cancel();
+        activeSubscription = null;
+        if (cancellation != null) {
+          unawaited(ignoreCleanupError(cancellation));
+        }
+      } on Object {
+        activeSubscription = null;
+        // Some platform streams may throw before returning their future.
+      }
+      try {
+        if (connection != null) {
+          unawaited(ignoreCleanupError(connection.close()));
+        }
+      } on Object {
+        // Some platform sockets may throw before returning their future.
+      }
     }
 
     Future<void> stop() async {
@@ -100,7 +117,7 @@ final class MattermostWebSocketGateway
       } on Object {
         // A platform connectivity stream may already be unavailable.
       }
-      await closeActive();
+      closeActive();
     }
 
     Future<void> run() async {
@@ -117,6 +134,7 @@ final class MattermostWebSocketGateway
         emitConnectionStatus(WebSocketConnectionStatus.connecting);
         final Completer<void> authenticated = Completer<void>();
         final Completer<void> disconnected = Completer<void>();
+        var attemptActive = true;
         var lastSequence = -1;
         try {
           final WebSocketConnection connection = _connector(
@@ -134,6 +152,7 @@ final class MattermostWebSocketGateway
           }
           activeSubscription = connection.messages.listen(
             (Object? raw) {
+              if (!attemptActive) return;
               try {
                 final Map<String, Object?> envelope = _decodeEnvelope(raw);
                 if (_isAuthenticationResponse(envelope)) {
@@ -217,7 +236,8 @@ final class MattermostWebSocketGateway
           // Connection/authentication failures use the same bounded reconnect
           // path. No token, payload or personal data is logged here.
         } finally {
-          await closeActive();
+          attemptActive = false;
+          closeActive();
         }
         if (stopped.isCompleted) break;
         if (networkAvailable && reconnect.isCompleted) continue;

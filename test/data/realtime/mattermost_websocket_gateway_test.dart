@@ -153,6 +153,47 @@ void main() {
     );
   });
 
+  test('retries when a timed-out connection cannot finish closing', () async {
+    final _HangingConnection hangingConnection = _HangingConnection();
+    final _Connection retryConnection = _Connection();
+    var nextConnection = 0;
+    final MattermostWebSocketGateway gateway = MattermostWebSocketGateway(
+      connector: (_) {
+        nextConnection += 1;
+        return nextConnection == 1 ? hangingConnection : retryConnection;
+      },
+      retryDelay: (_) => Duration.zero,
+      connectionTimeout: const Duration(milliseconds: 10),
+    );
+    final List<WebSocketGatewaySignal> signals = <WebSocketGatewaySignal>[];
+    final StreamSubscription<WebSocketGatewaySignal> subscription = gateway
+        .watch(
+          serverUrl: Uri.parse('https://chat.example'),
+          token: 'token',
+          acceptsEvent: (_) => false,
+          acceptsChannel: (_) => false,
+        )
+        .listen(signals.add);
+    addTearDown(() async {
+      hangingConnection.finishClosing();
+      await subscription.cancel();
+    });
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _waitUntil(() => retryConnection.sent.isNotEmpty);
+
+    expect(nextConnection, 2);
+    expect(hangingConnection.closeCalls, 1);
+    expect(
+      signals.whereType<WebSocketConnectionSignal>().map((it) => it.status),
+      containsAllInOrder(<WebSocketConnectionStatus>[
+        WebSocketConnectionStatus.connecting,
+        WebSocketConnectionStatus.disconnected,
+        WebSocketConnectionStatus.connecting,
+      ]),
+    );
+  });
+
   test(
     'waits offline, closes on network loss and reconnects when restored',
     () async {
@@ -261,6 +302,31 @@ final class _Connection implements WebSocketConnection {
   @override
   Future<void> close() async {
     closeCalls += 1;
+  }
+}
+
+final class _HangingConnection implements WebSocketConnection {
+  final Completer<void> _ready = Completer<void>();
+  final Completer<void> _closed = Completer<void>();
+  int closeCalls = 0;
+
+  @override
+  Future<void> get ready => _ready.future;
+
+  @override
+  Stream<Object?> get messages => const Stream<Object?>.empty();
+
+  @override
+  void send(Object? message) {}
+
+  @override
+  Future<void> close() {
+    closeCalls += 1;
+    return _closed.future;
+  }
+
+  void finishClosing() {
+    if (!_closed.isCompleted) _closed.complete();
   }
 }
 
