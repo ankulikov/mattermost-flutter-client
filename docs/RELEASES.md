@@ -34,10 +34,10 @@ as long as the corresponding binary can produce crash reports.
 The Android release job fails unless these repository or environment secrets are
 present:
 
-- `ANDROID_KEYSTORE_BASE64` — base64-encoded JKS or PKCS#12 release keystore;
-- `ANDROID_KEY_ALIAS` — alias of the release key;
-- `ANDROID_KEY_PASSWORD` — password for that key;
-- `ANDROID_KEYSTORE_PASSWORD` — password for the keystore.
+- `ANDROID_KEYSTORE_BASE64`: base64-encoded JKS or PKCS#12 release keystore;
+- `ANDROID_KEY_ALIAS`: alias of the release key;
+- `ANDROID_KEY_PASSWORD`: password for that key;
+- `ANDROID_KEYSTORE_PASSWORD`: password for the keystore.
 
 The job reconstructs the key only on the ephemeral runner, verifies the APK
 signature, and removes the temporary files before it exits. Install the APK that
@@ -77,3 +77,55 @@ CocoaPods cache. Gradle uses its own cache and wrapper validation.
 The workflow pins Flutter to `3.47.2` and pins every third-party action to a full
 commit SHA. Update the CI and release workflow version together when upgrading
 Flutter.
+
+## Local Android release signing
+
+`flutter run --release` and `flutter build apk --release` require a signed APK.
+The release Gradle configuration reads `android/key.properties`; Git ignores
+that file and the keystore. Keep a secure backup of both the keystore and its
+passwords. Android updates must use the same signing certificate as the
+installed application.
+
+Create a keystore once:
+
+```sh
+keytool -genkeypair -v \
+  -keystore mm-flutter-key.jks \
+  -alias mattermost-release \
+  -keyalg RSA \
+  -keysize 4096 \
+  -validity 10000
+```
+
+Create `android/key.properties` with the selected passwords:
+
+```properties
+storePassword=your-keystore-password
+keyPassword=your-key-password
+keyAlias=mattermost-release
+storeFile=../mm-flutter-key.jks
+```
+
+`storeFile` is resolved relative to `android/app`. The example places the
+keystore in `android`; an absolute path also works.
+
+Build and verify the APK:
+
+```sh
+flutter clean
+flutter pub get
+flutter build apk --release
+apksigner verify --verbose --print-certs \
+  build/app/outputs/flutter-apk/app-release.apk
+```
+
+The verifier must confirm the APK signature schemes and print the signing
+certificate. If `apksigner` is absent from `PATH`, use the executable from the
+Android SDK's `build-tools/<version>/` directory.
+
+## iOS launch assets
+
+Replace the images in `ios/Runner/Assets.xcassets/LaunchImage.imageset/` to
+customize the launch screen. The same assets can be changed in Xcode by opening
+`ios/Runner.xcworkspace`, selecting `Runner/Assets.xcassets` in the Project
+Navigator, and dropping in the replacement images.

@@ -1,101 +1,82 @@
 # Mattermost Flutter
 
-Cross-platform, network-first Mattermost client for Android, iOS, Web, macOS,
-and Windows. Channel navigation, posts, threads, and paging state are kept in
-memory so opening a channel always starts with current server data.
+A cross-platform Mattermost client for Android, iOS, Web, macOS, and Windows.
+It keeps the interface responsive while server data loads, adapts the workspace
+to the available width, and gives message-heavy teams a faster way to handle
+their day.
 
-The repository contains the application skeleton and architecture baseline. The
-host environment used to create it did not contain Flutter SDK, so generated
-platform runners are intentionally produced locally rather than committed as
-handwritten approximations.
+## What sets it apart
 
-## Bootstrap
+### One Inbox for work that needs attention
 
-Install a stable Flutter SDK with Dart 3.8 or newer, then run from the repository
-root:
+The official Mattermost client does not provide this Inbox. It collects
+mentions, direct messages, integration messages, and unread followed threads in
+one place. New items stay separate from messages you have postponed, so the
+Inbox works as a lightweight communication queue rather than another unread
+badge.
 
-```sh
-flutter config --enable-web --enable-macos-desktop --enable-windows-desktop
-flutter create \
-  --project-name mattermost_flutter \
-  --org com.example.mattermost \
-  --platforms android,ios,web,macos,windows \
-  .
-flutter pub get
-flutter pub run build_runner build
-dart run tool/generate_mattermost_system_emojis.dart
-flutter analyze
-flutter test
-```
+### A responsive interface from the first frame
 
-Replace `com.example.mattermost` with the final reverse-DNS application id before
-shipping. Windows builds require Windows, iOS/macOS builds require macOS and
-Xcode.
+The client does not wait for every request before it becomes useful. Initial
+loads have clear retry states, while refresh and pagination keep existing
+content on screen. Layouts respond to the space they receive: compact windows
+use stacked screens, medium widths add a navigation rail, and expanded windows
+show channels, messages, and threads side by side.
 
-Drift remains available for future durable feature data such as user profiles.
-Its current schema intentionally has no feature tables. Web database artifacts,
-when needed, must match the resolved `sqlite3` and `drift` package versions.
+### Markdown that is comfortable to write
+
+The message composer includes formatting controls and a live Markdown preview.
+It styles completed Markdown while preserving the exact source text, selection,
+clipboard behavior, and IME composing range. Messages support the Mattermost
+dialect, including tables, task lists, code highlighting, LaTeX, channel links,
+mentions, and custom emoji.
+
+### Status changes without the settings hunt
+
+The profile page puts availability and custom status controls together. Common
+statuses such as "In a meeting", "Out for lunch", "Commuting", and "On
+vacation" take one tap, with expiration handled through the Mattermost API.
+
+## More of the client
+
+- Network-first channels, posts, threads, search, and sidebar data
+- Post permalinks that open the right channel or thread without losing the
+  source screen's scroll position or draft
+- Direct and group messages grouped by conversation and sender in the Inbox
+- Reactions, custom emoji search, recent emoji, and mention autocomplete
+- User cards, authenticated avatars, file previews, and legacy interactive
+  message attachments
+- Keyboard navigation, scalable text, semantics, touch and pointer workflows,
+  and light and dark themes
+- Secure token storage and redacted diagnostics
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Agent and contributor rules](AGENTS.md)
+- [Architecture and module index](docs/features/readme.md)
+- [Release builds](docs/RELEASES.md)
+- [Instructions for coding agents](AGENTS.md)
 
-## Useful commands
+## Run the project
 
-```sh
-flutter run -d chrome
-flutter run -d macos
-flutter test
-flutter analyze
-dart format --output=none --set-exit-if-changed lib test tool
-dart run tool/generate_mattermost_system_emojis.dart
-flutter pub run build_runner watch
-```
-
-## Android release signing for local builds
-
-`flutter run --release` and `flutter build apk --release` require a signed APK.
-The release Gradle configuration reads signing settings from
-`android/key.properties`; this file and the keystore are intentionally ignored
-by Git.
-
-Create a keystore once and keep a secure backup of it and its passwords. Do not
-replace it after distributing an APK: Android updates must be signed with the
-same certificate.
+Install a stable Flutter SDK compatible with the constraint in `pubspec.yaml`,
+then run:
 
 ```sh
-keytool -genkeypair -v \
-  -keystore mm-flutter-key.jks \
-  -alias mattermost-release \
-  -keyalg RSA \
-  -keysize 4096 \
-  -validity 10000
-```
-
-Create `android/key.properties` with the passwords chosen by `keytool`:
-
-```properties
-storePassword=your-keystore-password
-keyPassword=your-key-password
-keyAlias=mattermost-release
-storeFile=../mm-flutter-key.jks
-```
-
-`storeFile` is resolved relative to the `android/app` directory. The example
-assumes that `mm-flutter-key.jks` is in the `android` directory. An absolute path
-is also supported.
-
-Build and verify a local release APK:
-
-```sh
-flutter clean
 flutter pub get
-flutter build apk --release
-apksigner verify --verbose --print-certs \
-  build/app/outputs/flutter-apk/app-release.apk
+flutter pub run build_runner build
+dart run tool/generate_mattermost_system_emojis.dart
+flutter run
 ```
 
-The verification command must report that APK signature schemes are verified
-and print the signing certificate. If `apksigner` is not on `PATH`, run the
-copy from your Android SDK's `build-tools/<version>/` directory.
+Useful checks during development:
+
+```sh
+dart format --output=none --set-exit-if-changed lib test tool
+dart analyze
+flutter analyze
+flutter test
+```
+
+Platform toolchains still apply: iOS and macOS builds require macOS and Xcode,
+while Windows builds require Windows. Android release signing and CI release
+artifacts are covered in [the release guide](docs/RELEASES.md).
