@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/database/user_group_membership_cache.dart';
 import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/dialog_display_name_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
@@ -36,6 +37,7 @@ final class MattermostInboxRepository extends InboxRepository {
     required MattermostApi api,
     required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
     required PostponedRepository postponed,
+    required UserGroupMembershipCache userGroupCache,
     WebSocketGateway? webSocketGateway,
     CredentialStore? credentialStore,
     SessionRealtimeService? realtime,
@@ -43,6 +45,7 @@ final class MattermostInboxRepository extends InboxRepository {
   }) : _api = api,
        _messageMapper = messageMapper,
        _postponed = postponed,
+       _userGroupCache = userGroupCache,
        _realtime =
            realtime ??
            (webSocketGateway != null && credentialStore != null
@@ -55,10 +58,12 @@ final class MattermostInboxRepository extends InboxRepository {
 
   static const int _authorBatchSize = 100;
   static const int _maxUnreadConcurrency = 4;
+  static const Duration _groupMembershipTtl = Duration(days: 1);
 
   final MattermostApi _api;
   final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
   final PostponedRepository _postponed;
+  final UserGroupMembershipCache _userGroupCache;
   final SessionRealtimeService? _realtime;
   final DateTime Function() _now;
   _InboxRealtimeScope? _realtimeScope;
@@ -79,13 +84,20 @@ final class MattermostInboxRepository extends InboxRepository {
     'preference_changed',
     'preferences_changed',
     'preferences_deleted',
+    'group_member_add',
+    'group_member_delete',
   };
 
   @override
   Future<InboxSnapshot> load({required AuthSession session}) async {
     final DateTime builtAt = _now();
     _rawUsersAreBots.clear();
+    final Future<Set<String>> groupNamesRequest = _loadCurrentGroupNames(
+      session: session,
+      now: builtAt,
+    );
     final MattermostUserDto currentUser = await _api.getCurrentUser();
+    final Set<String> groupMentionNames = await groupNamesRequest;
     final List<MattermostTeamDto> teams = await _api.getTeamsForCurrentUser();
     final List<_TeamChannels> teamChannels = await Future.wait(
       teams.map(
@@ -186,6 +198,7 @@ final class MattermostInboxRepository extends InboxRepository {
             knownChannels,
             members,
             currentUser,
+            groupMentionNames,
           ),
         )
         .whereType<InboxThreadCandidate>()
@@ -202,7 +215,12 @@ final class MattermostInboxRepository extends InboxRepository {
         if (mapped == null || raw.userId == session.userId) continue;
         final InboxAttentionReason? reason = channel.isDialog
             ? InboxAttentionReason.allMessagesSubscription
-            : _classify(raw, currentUser, member);
+            : _classify(
+                raw,
+                currentUser,
+                member,
+                groupMentionNames: groupMentionNames,
+              );
         if (reason == null) continue;
         if (reason != InboxAttentionReason.allMessagesSubscription) {
           reconstructedMentions++;
@@ -238,7 +256,7 @@ final class MattermostInboxRepository extends InboxRepository {
       authors: authors,
     );
     // TODO(inbox): API v4 counters cannot identify all historical mentions;
-    // group mentions and @here require server-side delivery context.
+    // @here still requires send-time presence from server delivery context.
     final List<InboxItem> newItems = groupDirectMessages(
       canonicalizeInboxCandidates(
         InboxSourceSnapshot(threads: threadCandidates, posts: newCandidates),
@@ -255,6 +273,7 @@ final class MattermostInboxRepository extends InboxRepository {
       channels: knownChannels,
       members: Map<String, MattermostChannelMemberDto>.of(members),
       authors: Map<String, UserSummary>.of(authors),
+      groupMentionNames: groupMentionNames,
     );
     return result;
   }
@@ -328,7 +347,11 @@ final class MattermostInboxRepository extends InboxRepository {
         if (raw.userId == session.userId) return null;
         return InboxPostChanged(
           postId: raw.id,
-          candidate: await _mapRealtimePost(session, raw),
+          candidate: await _mapRealtimePost(
+            session,
+            raw,
+            serverMentioned: _eventMentionsUser(event.data, session.userId),
+          ),
         );
       case 'post_deleted':
         final MattermostPostDto? raw = _postFromEvent(event.data);
@@ -341,6 +364,11 @@ final class MattermostInboxRepository extends InboxRepository {
       case 'preferences_changed':
       case 'preferences_deleted':
         return null;
+      case 'group_member_add':
+      case 'group_member_delete':
+        return _eventTargetsUser(event, session.userId)
+            ? const InboxRefreshRequired()
+            : null;
       default:
         return null;
     }
@@ -348,8 +376,9 @@ final class MattermostInboxRepository extends InboxRepository {
 
   Future<InboxPostCandidate?> _mapRealtimePost(
     AuthSession session,
-    MattermostPostDto raw,
-  ) async {
+    MattermostPostDto raw, {
+    required bool? serverMentioned,
+  }) async {
     final _InboxRealtimeScope? scope = _realtimeScope;
     final SidebarChannel? channel = scope?.channels[raw.channelId];
     final MattermostChannelMemberDto? member = scope?.members[raw.channelId];
@@ -381,7 +410,13 @@ final class MattermostInboxRepository extends InboxRepository {
     if (mapped.isEmpty) return null;
     final InboxAttentionReason? reason = channel.isDialog
         ? InboxAttentionReason.allMessagesSubscription
-        : _classifyRealtime(raw, scope.currentUser, member);
+        : _classifyRealtime(
+            raw,
+            scope.currentUser,
+            member,
+            groupMentionNames: scope.groupMentionNames,
+            serverMentioned: serverMentioned,
+          );
     if (reason == null) return null;
     return InboxPostCandidate(
       post: mapped.single,
@@ -400,29 +435,129 @@ final class MattermostInboxRepository extends InboxRepository {
   InboxAttentionReason? _classifyRealtime(
     MattermostPostDto post,
     MattermostUserDto user,
-    MattermostChannelMemberDto member,
-  ) {
+    MattermostChannelMemberDto member, {
+    required Set<String> groupMentionNames,
+    required bool? serverMentioned,
+  }) {
     final MattermostChannelNotifyPropsDto notify =
         member.notifyProps ?? const MattermostChannelNotifyPropsDto();
     final UserNotifyPropsDto userNotify =
         user.notifyProps ?? const UserNotifyPropsDto();
-    return classifyInboxAttention(
+    final bool allMessagesSubscription = resolvesToAllMessagesSubscription(
+      memberMarkUnread: notify.markUnread,
+      memberDesktop: notify.desktop,
+      memberPush: notify.push,
+      userDesktop: userNotify.desktop,
+      userPush: userNotify.push,
+    );
+    final InboxAttentionReason? reconstructed = classifyInboxAttention(
       message: post.message,
       username: user.username,
-      firstName: '',
-      mentionKeys: '',
-      firstNameEnabled: false,
-      channelMentionsEnabled: false,
-      ignoreChannelMentions: true,
-      allMessagesSubscription: resolvesToAllMessagesSubscription(
-        memberMarkUnread: notify.markUnread,
-        memberDesktop: notify.desktop,
-        memberPush: notify.push,
-        userDesktop: userNotify.desktop,
-        userPush: userNotify.push,
-      ),
+      firstName: user.firstName,
+      mentionKeys: userNotify.mentionKeys,
+      firstNameEnabled: userNotify.firstName == 'true',
+      channelMentionsEnabled: userNotify.channel == 'true',
+      ignoreChannelMentions: notify.ignoreChannelMentions == 'on',
+      allMessagesSubscription: allMessagesSubscription,
+      groupMentionNames: groupMentionNames,
     );
+    if (serverMentioned == null) return reconstructed;
+    if (!serverMentioned) {
+      return allMessagesSubscription
+          ? InboxAttentionReason.allMessagesSubscription
+          : null;
+    }
+    return reconstructed == null ||
+            reconstructed == InboxAttentionReason.allMessagesSubscription
+        ? InboxAttentionReason.directMention
+        : reconstructed;
   }
+
+  bool? _eventMentionsUser(Map<String, Object?> data, String userId) {
+    final Object? rawMentions = data['mentions'];
+    if (rawMentions == null) return null;
+    final Object? decoded;
+    try {
+      decoded = rawMentions is String ? jsonDecode(rawMentions) : rawMentions;
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! List<Object?>) return null;
+    return decoded.whereType<String>().contains(userId);
+  }
+
+  bool _eventTargetsUser(MattermostWebSocketEvent event, String userId) {
+    final Object? broadcastUserId = event.broadcast['user_id'];
+    if (broadcastUserId == userId) return true;
+    final Object? rawMembership = event.data['group_member'];
+    final Object? decoded;
+    try {
+      decoded = rawMembership is String
+          ? jsonDecode(rawMembership)
+          : rawMembership;
+    } on FormatException {
+      return false;
+    }
+    return decoded is Map<Object?, Object?> && decoded['user_id'] == userId;
+  }
+
+  Future<Set<String>> _loadCurrentGroupNames({
+    required AuthSession session,
+    required DateTime now,
+  }) async {
+    try {
+      final List<MattermostGroupDto> groups = await _api.getGroupsForUser(
+        session.userId,
+      );
+      final DateTime expiresAt = now.add(_groupMembershipTtl);
+      final List<CachedUserGroup> cached = groups
+          .where(_isUsableMentionGroup)
+          .map(
+            (MattermostGroupDto group) => CachedUserGroup(
+              groupId: group.id,
+              name: group.name,
+              displayName: group.displayName,
+              allowReference: group.allowReference,
+              deleteAt: group.deleteAt,
+              expiresAt: expiresAt,
+            ),
+          )
+          .toList(growable: false);
+      try {
+        await _userGroupCache.replaceAll(
+          accountId: session.durableDataScopeId,
+          groups: cached,
+        );
+      } on Object {
+        // A durable-cache failure must not discard the fresh server result.
+      }
+      return cached.map((CachedUserGroup group) => group.name).toSet();
+    } on Object {
+      try {
+        final List<CachedUserGroup> cached = await _userGroupCache.getFresh(
+          accountId: session.durableDataScopeId,
+          now: now,
+        );
+        return cached
+            .where(
+              (CachedUserGroup group) =>
+                  group.deleteAt == 0 &&
+                  group.allowReference &&
+                  group.name.trim().isNotEmpty,
+            )
+            .map((CachedUserGroup group) => group.name)
+            .toSet();
+      } on Object {
+        return <String>{};
+      }
+    }
+  }
+
+  bool _isUsableMentionGroup(MattermostGroupDto group) =>
+      group.id.isNotEmpty &&
+      group.name.trim().isNotEmpty &&
+      group.deleteAt == 0 &&
+      group.allowReference;
 
   MattermostPostDto? _postFromEvent(Map<String, Object?> data) {
     final Object? rawPost = data['post'];
@@ -558,8 +693,9 @@ final class MattermostInboxRepository extends InboxRepository {
   InboxAttentionReason? _classify(
     MattermostPostDto post,
     MattermostUserDto user,
-    MattermostChannelMemberDto member,
-  ) {
+    MattermostChannelMemberDto member, {
+    required Set<String> groupMentionNames,
+  }) {
     final MattermostChannelNotifyPropsDto notify =
         member.notifyProps ?? const MattermostChannelNotifyPropsDto();
     final UserNotifyPropsDto userNotify =
@@ -572,6 +708,7 @@ final class MattermostInboxRepository extends InboxRepository {
       firstNameEnabled: userNotify.firstName == 'true',
       channelMentionsEnabled: userNotify.channel == 'true',
       ignoreChannelMentions: notify.ignoreChannelMentions == 'on',
+      groupMentionNames: groupMentionNames,
       allMessagesSubscription: resolvesToAllMessagesSubscription(
         memberMarkUnread: notify.markUnread,
         memberDesktop: notify.desktop,
@@ -588,6 +725,7 @@ final class MattermostInboxRepository extends InboxRepository {
     Map<String, SidebarChannel> channels,
     Map<String, MattermostChannelMemberDto> members,
     MattermostUserDto currentUser,
+    Set<String> groupMentionNames,
   ) {
     final MattermostUserThreadDto raw = source.raw;
     final ChannelPost? root = raw.post == null
@@ -602,7 +740,12 @@ final class MattermostInboxRepository extends InboxRepository {
         ? InboxAttentionReason.allMessagesSubscription
         : member == null || raw.post == null
         ? null
-        : _classify(raw.post!, currentUser, member);
+        : _classify(
+            raw.post!,
+            currentUser,
+            member,
+            groupMentionNames: groupMentionNames,
+          );
     return InboxThreadCandidate(
       channel: channel,
       teamId: source.teamId,
@@ -853,10 +996,12 @@ final class _InboxRealtimeScope {
     required this.channels,
     required this.members,
     required this.authors,
+    required this.groupMentionNames,
   });
 
   final MattermostUserDto currentUser;
   final Map<String, SidebarChannel> channels;
   final Map<String, MattermostChannelMemberDto> members;
   final Map<String, UserSummary> authors;
+  final Set<String> groupMentionNames;
 }

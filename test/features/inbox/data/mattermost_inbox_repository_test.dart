@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/database/user_group_membership_cache.dart';
 import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
 import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
@@ -248,6 +249,124 @@ void main() {
     expect(snapshot.hasIncompleteMentionReconstruction, isTrue);
   });
 
+  test('restores group mentions and caches current membership', () async {
+    final _InboxApi api = _InboxApi(
+      teams: const <MattermostTeamDto>[
+        MattermostTeamDto(id: 't', name: 't', displayName: 'T'),
+      ],
+      channels: const <MattermostChannelDto>[
+        MattermostChannelDto(
+          id: 'c',
+          teamId: 't',
+          type: 'O',
+          name: 'c',
+          displayName: 'C',
+          totalMessageCountRoot: 1,
+        ),
+      ],
+      members: const <MattermostChannelMemberDto>[
+        MattermostChannelMemberDto(
+          channelId: 'c',
+          userId: 'me',
+          mentionCountRoot: 1,
+        ),
+      ],
+      unread: const <MattermostPostDto>[
+        MattermostPostDto(
+          id: 'group-post',
+          userId: 'other',
+          channelId: 'c',
+          message: 'hello @backend',
+          createAt: 1,
+        ),
+      ],
+      groups: const <MattermostGroupDto>[
+        MattermostGroupDto(
+          id: 'group-1',
+          name: 'backend',
+          displayName: 'Backend',
+          allowReference: true,
+        ),
+      ],
+    );
+    final _GroupCache cache = _GroupCache();
+    final MattermostInboxRepository repository = MattermostInboxRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+      postponed: const _Postponed(),
+      userGroupCache: cache,
+      now: () => DateTime.utc(2026, 9, 28),
+    );
+
+    final InboxSnapshot snapshot = await repository.load(session: session);
+
+    final ChannelPostInboxItem item =
+        snapshot.newItems.single as ChannelPostInboxItem;
+    expect(item.candidate.reason, InboxAttentionReason.groupMention);
+    expect(snapshot.hasIncompleteMentionReconstruction, isFalse);
+    expect(cache.accountId, session.durableDataScopeId);
+    expect(cache.groups.single.name, 'backend');
+  });
+
+  test('uses a fresh group membership cache when the endpoint fails', () async {
+    final DateTime now = DateTime.utc(2026, 9, 28);
+    final _InboxApi api = _InboxApi(
+      teams: const <MattermostTeamDto>[
+        MattermostTeamDto(id: 't', name: 't', displayName: 'T'),
+      ],
+      channels: const <MattermostChannelDto>[
+        MattermostChannelDto(
+          id: 'c',
+          teamId: 't',
+          type: 'O',
+          name: 'c',
+          displayName: 'C',
+          totalMessageCountRoot: 1,
+        ),
+      ],
+      members: const <MattermostChannelMemberDto>[
+        MattermostChannelMemberDto(
+          channelId: 'c',
+          userId: 'me',
+          mentionCountRoot: 1,
+        ),
+      ],
+      unread: const <MattermostPostDto>[
+        MattermostPostDto(
+          id: 'cached-group-post',
+          userId: 'other',
+          channelId: 'c',
+          message: 'hello @backend',
+          createAt: 1,
+        ),
+      ],
+      groupLookupError: StateError('groups unavailable'),
+    );
+    final _GroupCache cache = _GroupCache(<CachedUserGroup>[
+      CachedUserGroup(
+        groupId: 'group-1',
+        name: 'backend',
+        displayName: 'Backend',
+        allowReference: true,
+        deleteAt: 0,
+        expiresAt: now.add(const Duration(hours: 1)),
+      ),
+    ]);
+    final MattermostInboxRepository repository = MattermostInboxRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+      postponed: const _Postponed(),
+      userGroupCache: cache,
+      now: () => now,
+    );
+
+    final InboxSnapshot snapshot = await repository.load(session: session);
+
+    final ChannelPostInboxItem item =
+        snapshot.newItems.single as ChannelPostInboxItem;
+    expect(item.candidate.reason, InboxAttentionReason.groupMention);
+  });
+
   test(
     'does not fetch ordinary unread channels without mentions or all policy',
     () async {
@@ -341,6 +460,7 @@ void main() {
       api: api,
       messageMapper: const MattermostMessageMapper(),
       postponed: const _Postponed(),
+      userGroupCache: _GroupCache(),
       now: () => now,
     );
     final ThreadInboxItem item = ThreadInboxItem(
@@ -357,7 +477,7 @@ void main() {
   });
 
   test(
-    'maps only current-username realtime mentions in known channels',
+    'uses server recipients to map username and group realtime mentions',
     () async {
       final _InboxApi api = _InboxApi(
         teams: const <MattermostTeamDto>[
@@ -376,6 +496,14 @@ void main() {
           MattermostChannelMemberDto(channelId: 'channel', userId: 'me'),
         ],
         unread: const <MattermostPostDto>[],
+        groups: const <MattermostGroupDto>[
+          MattermostGroupDto(
+            id: 'group-1',
+            name: 'backend',
+            displayName: 'Backend',
+            allowReference: true,
+          ),
+        ],
       );
       final _Gateway gateway = _Gateway();
       final SessionRealtimeService realtime = SessionRealtimeService(
@@ -386,6 +514,7 @@ void main() {
         api: api,
         messageMapper: const MattermostMessageMapper(),
         postponed: const _Postponed(),
+        userGroupCache: _GroupCache(),
         realtime: realtime,
       );
       await repository.load(session: session);
@@ -420,6 +549,7 @@ void main() {
                 'message': 'hello @me',
                 'create_at': 1,
               }),
+              'mentions': jsonEncode(<String>['me']),
             },
             broadcast: const <String, Object?>{'channel_id': 'channel'},
           ),
@@ -446,6 +576,7 @@ void main() {
                 'message': 'hello everyone',
                 'create_at': 2,
               }),
+              'mentions': jsonEncode(<String>[]),
             },
             broadcast: const <String, Object?>{'channel_id': 'channel'},
           ),
@@ -453,6 +584,45 @@ void main() {
       );
       await _waitUntil(() => events.whereType<InboxPostChanged>().length == 2);
       expect(events.whereType<InboxPostChanged>().last.candidate, isNull);
+
+      gateway.add(
+        WebSocketEventSignal(
+          MattermostWebSocketEvent(
+            name: 'posted',
+            sequence: 3,
+            data: <String, Object?>{
+              'post': jsonEncode(<String, Object?>{
+                'id': 'group-mention',
+                'user_id': 'other',
+                'channel_id': 'channel',
+                'message': 'hello @backend',
+                'create_at': 3,
+              }),
+              'mentions': jsonEncode(<String>['me']),
+            },
+            broadcast: const <String, Object?>{'channel_id': 'channel'},
+          ),
+        ),
+      );
+      await _waitUntil(() => events.whereType<InboxPostChanged>().length == 3);
+      expect(
+        events.whereType<InboxPostChanged>().last.candidate?.reason,
+        InboxAttentionReason.groupMention,
+      );
+
+      gateway.add(
+        const WebSocketEventSignal(
+          MattermostWebSocketEvent(
+            name: 'group_member_delete',
+            sequence: 4,
+            data: <String, Object?>{},
+            broadcast: <String, Object?>{'user_id': 'me'},
+          ),
+        ),
+      );
+      await _waitUntil(
+        () => events.whereType<InboxRefreshRequired>().isNotEmpty,
+      );
     },
   );
 
@@ -487,6 +657,7 @@ void main() {
         api: api,
         messageMapper: const MattermostMessageMapper(),
         postponed: const _Postponed(),
+        userGroupCache: _GroupCache(),
         realtime: realtime,
       );
       await repository.load(session: session);
@@ -637,6 +808,7 @@ MattermostInboxRepository _repository(
   api: api,
   messageMapper: const MattermostMessageMapper(),
   postponed: postponed ?? const _Postponed(),
+  userGroupCache: _GroupCache(),
 );
 
 final class _InboxApi extends Fake implements MattermostApi {
@@ -651,6 +823,8 @@ final class _InboxApi extends Fake implements MattermostApi {
     this.groupUsers = const MattermostGroupChannelUsersDto(
       usersByChannelId: <String, List<MattermostUserDto>>{},
     ),
+    this.groups = const <MattermostGroupDto>[],
+    this.groupLookupError,
     this.failUserLookup = false,
   });
   final List<MattermostTeamDto> teams;
@@ -659,6 +833,8 @@ final class _InboxApi extends Fake implements MattermostApi {
   final List<MattermostPostDto> unread;
   final List<MattermostUserDto> users;
   final MattermostGroupChannelUsersDto groupUsers;
+  final List<MattermostGroupDto> groups;
+  final Object? groupLookupError;
   final bool failUserLookup;
   final List<String> unreadChannelIds = <String>[];
   String? viewedChannelId;
@@ -733,6 +909,13 @@ final class _InboxApi extends Fake implements MattermostApi {
   ) async => groupUsers;
 
   @override
+  Future<List<MattermostGroupDto>> getGroupsForUser(String userId) async {
+    final Object? error = groupLookupError;
+    if (error != null) throw error;
+    return groups;
+  }
+
+  @override
   Future<void> viewChannel({
     required String userId,
     required String channelId,
@@ -772,6 +955,30 @@ final class _Postponed extends PostponedRepository {
     required AuthSession session,
     required List<PostponedReference> references,
   }) async {}
+}
+
+final class _GroupCache implements UserGroupMembershipCache {
+  _GroupCache([this.groups = const <CachedUserGroup>[]]);
+
+  List<CachedUserGroup> groups;
+  String? accountId;
+
+  @override
+  Future<List<CachedUserGroup>> getFresh({
+    required String accountId,
+    required DateTime now,
+  }) async => groups
+      .where((CachedUserGroup group) => group.expiresAt.isAfter(now))
+      .toList(growable: false);
+
+  @override
+  Future<void> replaceAll({
+    required String accountId,
+    required List<CachedUserGroup> groups,
+  }) async {
+    this.accountId = accountId;
+    this.groups = List<CachedUserGroup>.of(groups);
+  }
 }
 
 Future<void> _waitUntil(bool Function() condition) async {

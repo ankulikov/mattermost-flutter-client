@@ -87,6 +87,31 @@ void main() {
       );
     });
 
+    test('classifies group mentions into their own section', () {
+      expect(
+        classifyInboxSection(
+          ChannelPostInboxItem(
+            candidate: _postCandidate(
+              id: 'group-mention',
+              reason: InboxAttentionReason.groupMention,
+            ),
+          ),
+        ),
+        InboxSection.groupMentions,
+      );
+      expect(
+        classifyInboxSection(
+          ThreadInboxItem(
+            thread: _thread(rootId: 'group-root'),
+            channel: _channel(),
+            teamId: 'team',
+            rootAttentionReason: InboxAttentionReason.groupMention,
+          ),
+        ),
+        InboxSection.groupMentions,
+      );
+    });
+
     test('classifies person direct messages as Direct Messages', () {
       expect(
         classifyInboxSection(

@@ -20,6 +20,7 @@ abstract final class InboxStrings {
   static const String postponeFailed = 'Could not postpone this item.';
   static const String removeFailed = 'Could not remove this item.';
   static const String mentions = 'Mentions';
+  static const String groupMention = 'Group mention';
   static const String bots = 'Bots & integrations';
   static const String directMessages = 'Direct Messages';
   static const String threads = 'Threads';

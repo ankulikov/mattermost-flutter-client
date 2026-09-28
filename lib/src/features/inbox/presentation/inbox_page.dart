@@ -259,6 +259,7 @@ class _InboxList extends StatelessWidget {
 
   String _sectionLabel(InboxSection section) => switch (section) {
     InboxSection.mentions => InboxStrings.mentions,
+    InboxSection.groupMentions => InboxStrings.groupMention,
     InboxSection.botsAndIntegrations => InboxStrings.bots,
     InboxSection.directMessages => InboxStrings.directMessages,
     InboxSection.threads => InboxStrings.threads,

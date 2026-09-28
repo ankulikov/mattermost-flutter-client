@@ -77,6 +77,13 @@ abstract interface class MattermostApi {
   Future<List<MattermostGroupDto>> getGroupsByNames(List<String> names) =>
       throw UnimplementedError();
 
+  /// Returns every user group containing [userId].
+  ///
+  /// The server owns membership and mention delivery. Clients use this list to
+  /// reconstruct the reason for historical mention counters.
+  Future<List<MattermostGroupDto>> getGroupsForUser(String userId) =>
+      throw UnimplementedError();
+
   /// Returns a fresh user projection without the batch profile cache.
   Future<MattermostUserDto> getUserById(String userId);
 

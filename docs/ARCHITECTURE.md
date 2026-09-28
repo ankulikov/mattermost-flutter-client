@@ -345,8 +345,9 @@ fallback с инициалами.
 Channels, Inbox заменяет его панелью шириной 380 пикселей. Открытый из Inbox
 тред занимает соседнюю рабочую область, не закрывая сам Inbox.
 
-Inbox отображает сообщения в секциях Mentions, Bots & integrations, Direct
-Messages и Threads. Новые личные сообщения одного автора в одном диалоге
+Inbox отображает сообщения в секциях Mentions, Group mention,
+Bots & integrations, Direct Messages и Threads. Новые личные сообщения одного
+автора в одном диалоге
 объединяются: одиночная запись показывает текст и открывает тред, а пачка из
 двух и более сообщений показывает счетчик и открывает диалог внутри контекста
 Inbox. На широком layout Inbox остается слева, диалог занимает рабочую область,
@@ -363,9 +364,10 @@ thread read timestamp в команде, из которой этот тред �
 WebSocket открывается на уровне активной авторизованной сессии и не зависит от
 того, открыт ли Inbox. Inbox показывает в заголовке зеленый индикатор для
 connected, желтый для connecting и красный для disconnected. Realtime mention
-в первой версии определяется только по `@username` текущего пользователя; DM/GM
-доставляются целиком, а обычные каналы дополнительно учитывают effective
-all-messages notification policy. Первый connect только обновляет индикатор;
+подтверждается серверным списком `mentions` из события `posted`, а клиентский
+классификатор определяет direct/keyword/group/channel reason. DM/GM доставляются
+целиком, а обычные каналы дополнительно учитывают effective all-messages
+notification policy. Первый connect только обновляет индикатор;
 reconnect и пропуск `seq` запускают атомарную сверку с REST.
 
 Inbox controller живет на уровне авторизованной оболочки, а не открытой вкладки:
@@ -415,6 +417,14 @@ cache имя проверяется через `/users/usernames`. Только 
 одним запросом проверяются через `POST /groups/names`: существующая user group
 остаётся кликабельным `@group-handle` без замены на display name. Нажатие на неё
 пока не открывает карточку или список участников.
+
+Членство текущего пользователя в user groups загружается network-first через
+`GET /users/{user_id}/groups`. Активные referenceable groups заменяют
+account-scoped Drift snapshot целиком; при временной ошибке endpoint Inbox может
+использовать его не дольше 24 часов. Это нужно только для восстановления причины
+исторических mention по тексту: получателей, mention counters и realtime
+`mentions` вычисляет сервер. `group_member_add`/`group_member_delete` для
+текущего пользователя запускают authoritative Inbox refresh.
 
 User DTO сохраняет `last_picture_update`; для bot-аккаунта версия изображения
 берется из `bot_last_icon_update`. Message mapper переносит эту версию в автора

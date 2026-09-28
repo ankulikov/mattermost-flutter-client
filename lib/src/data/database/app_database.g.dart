@@ -889,12 +889,495 @@ class RecentEmojisCompanion extends UpdateCompanion<RecentEmoji> {
   }
 }
 
+class $CachedUserGroupsTable extends CachedUserGroups
+    with TableInfo<$CachedUserGroupsTable, CachedUserGroup> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CachedUserGroupsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<String> accountId = GeneratedColumn<String>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _groupIdMeta = const VerificationMeta(
+    'groupId',
+  );
+  @override
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _displayNameMeta = const VerificationMeta(
+    'displayName',
+  );
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _allowReferenceMeta = const VerificationMeta(
+    'allowReference',
+  );
+  @override
+  late final GeneratedColumn<bool> allowReference = GeneratedColumn<bool>(
+    'allow_reference',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("allow_reference" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _deleteAtMeta = const VerificationMeta(
+    'deleteAt',
+  );
+  @override
+  late final GeneratedColumn<int> deleteAt = GeneratedColumn<int>(
+    'delete_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _expiresAtMeta = const VerificationMeta(
+    'expiresAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> expiresAt = GeneratedColumn<DateTime>(
+    'expires_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountId,
+    groupId,
+    name,
+    displayName,
+    allowReference,
+    deleteAt,
+    expiresAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cached_user_groups';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CachedUserGroup> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('group_id')) {
+      context.handle(
+        _groupIdMeta,
+        groupId.isAcceptableOrUnknown(data['group_id']!, _groupIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_groupIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+        _displayNameMeta,
+        displayName.isAcceptableOrUnknown(
+          data['display_name']!,
+          _displayNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_displayNameMeta);
+    }
+    if (data.containsKey('allow_reference')) {
+      context.handle(
+        _allowReferenceMeta,
+        allowReference.isAcceptableOrUnknown(
+          data['allow_reference']!,
+          _allowReferenceMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_allowReferenceMeta);
+    }
+    if (data.containsKey('delete_at')) {
+      context.handle(
+        _deleteAtMeta,
+        deleteAt.isAcceptableOrUnknown(data['delete_at']!, _deleteAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deleteAtMeta);
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(
+        _expiresAtMeta,
+        expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_expiresAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountId, groupId};
+  @override
+  CachedUserGroup map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CachedUserGroup(
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_id'],
+      )!,
+      groupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      displayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}display_name'],
+      )!,
+      allowReference: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}allow_reference'],
+      )!,
+      deleteAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}delete_at'],
+      )!,
+      expiresAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}expires_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CachedUserGroupsTable createAlias(String alias) {
+    return $CachedUserGroupsTable(attachedDatabase, alias);
+  }
+}
+
+class CachedUserGroup extends DataClass implements Insertable<CachedUserGroup> {
+  final String accountId;
+  final String groupId;
+  final String name;
+  final String displayName;
+  final bool allowReference;
+  final int deleteAt;
+  final DateTime expiresAt;
+  const CachedUserGroup({
+    required this.accountId,
+    required this.groupId,
+    required this.name,
+    required this.displayName,
+    required this.allowReference,
+    required this.deleteAt,
+    required this.expiresAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_id'] = Variable<String>(accountId);
+    map['group_id'] = Variable<String>(groupId);
+    map['name'] = Variable<String>(name);
+    map['display_name'] = Variable<String>(displayName);
+    map['allow_reference'] = Variable<bool>(allowReference);
+    map['delete_at'] = Variable<int>(deleteAt);
+    map['expires_at'] = Variable<DateTime>(expiresAt);
+    return map;
+  }
+
+  CachedUserGroupsCompanion toCompanion(bool nullToAbsent) {
+    return CachedUserGroupsCompanion(
+      accountId: Value(accountId),
+      groupId: Value(groupId),
+      name: Value(name),
+      displayName: Value(displayName),
+      allowReference: Value(allowReference),
+      deleteAt: Value(deleteAt),
+      expiresAt: Value(expiresAt),
+    );
+  }
+
+  factory CachedUserGroup.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CachedUserGroup(
+      accountId: serializer.fromJson<String>(json['accountId']),
+      groupId: serializer.fromJson<String>(json['groupId']),
+      name: serializer.fromJson<String>(json['name']),
+      displayName: serializer.fromJson<String>(json['displayName']),
+      allowReference: serializer.fromJson<bool>(json['allowReference']),
+      deleteAt: serializer.fromJson<int>(json['deleteAt']),
+      expiresAt: serializer.fromJson<DateTime>(json['expiresAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountId': serializer.toJson<String>(accountId),
+      'groupId': serializer.toJson<String>(groupId),
+      'name': serializer.toJson<String>(name),
+      'displayName': serializer.toJson<String>(displayName),
+      'allowReference': serializer.toJson<bool>(allowReference),
+      'deleteAt': serializer.toJson<int>(deleteAt),
+      'expiresAt': serializer.toJson<DateTime>(expiresAt),
+    };
+  }
+
+  CachedUserGroup copyWith({
+    String? accountId,
+    String? groupId,
+    String? name,
+    String? displayName,
+    bool? allowReference,
+    int? deleteAt,
+    DateTime? expiresAt,
+  }) => CachedUserGroup(
+    accountId: accountId ?? this.accountId,
+    groupId: groupId ?? this.groupId,
+    name: name ?? this.name,
+    displayName: displayName ?? this.displayName,
+    allowReference: allowReference ?? this.allowReference,
+    deleteAt: deleteAt ?? this.deleteAt,
+    expiresAt: expiresAt ?? this.expiresAt,
+  );
+  CachedUserGroup copyWithCompanion(CachedUserGroupsCompanion data) {
+    return CachedUserGroup(
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      groupId: data.groupId.present ? data.groupId.value : this.groupId,
+      name: data.name.present ? data.name.value : this.name,
+      displayName: data.displayName.present
+          ? data.displayName.value
+          : this.displayName,
+      allowReference: data.allowReference.present
+          ? data.allowReference.value
+          : this.allowReference,
+      deleteAt: data.deleteAt.present ? data.deleteAt.value : this.deleteAt,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedUserGroup(')
+          ..write('accountId: $accountId, ')
+          ..write('groupId: $groupId, ')
+          ..write('name: $name, ')
+          ..write('displayName: $displayName, ')
+          ..write('allowReference: $allowReference, ')
+          ..write('deleteAt: $deleteAt, ')
+          ..write('expiresAt: $expiresAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    accountId,
+    groupId,
+    name,
+    displayName,
+    allowReference,
+    deleteAt,
+    expiresAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CachedUserGroup &&
+          other.accountId == this.accountId &&
+          other.groupId == this.groupId &&
+          other.name == this.name &&
+          other.displayName == this.displayName &&
+          other.allowReference == this.allowReference &&
+          other.deleteAt == this.deleteAt &&
+          other.expiresAt == this.expiresAt);
+}
+
+class CachedUserGroupsCompanion extends UpdateCompanion<CachedUserGroup> {
+  final Value<String> accountId;
+  final Value<String> groupId;
+  final Value<String> name;
+  final Value<String> displayName;
+  final Value<bool> allowReference;
+  final Value<int> deleteAt;
+  final Value<DateTime> expiresAt;
+  final Value<int> rowid;
+  const CachedUserGroupsCompanion({
+    this.accountId = const Value.absent(),
+    this.groupId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.allowReference = const Value.absent(),
+    this.deleteAt = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CachedUserGroupsCompanion.insert({
+    required String accountId,
+    required String groupId,
+    required String name,
+    required String displayName,
+    required bool allowReference,
+    required int deleteAt,
+    required DateTime expiresAt,
+    this.rowid = const Value.absent(),
+  }) : accountId = Value(accountId),
+       groupId = Value(groupId),
+       name = Value(name),
+       displayName = Value(displayName),
+       allowReference = Value(allowReference),
+       deleteAt = Value(deleteAt),
+       expiresAt = Value(expiresAt);
+  static Insertable<CachedUserGroup> custom({
+    Expression<String>? accountId,
+    Expression<String>? groupId,
+    Expression<String>? name,
+    Expression<String>? displayName,
+    Expression<bool>? allowReference,
+    Expression<int>? deleteAt,
+    Expression<DateTime>? expiresAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountId != null) 'account_id': accountId,
+      if (groupId != null) 'group_id': groupId,
+      if (name != null) 'name': name,
+      if (displayName != null) 'display_name': displayName,
+      if (allowReference != null) 'allow_reference': allowReference,
+      if (deleteAt != null) 'delete_at': deleteAt,
+      if (expiresAt != null) 'expires_at': expiresAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CachedUserGroupsCompanion copyWith({
+    Value<String>? accountId,
+    Value<String>? groupId,
+    Value<String>? name,
+    Value<String>? displayName,
+    Value<bool>? allowReference,
+    Value<int>? deleteAt,
+    Value<DateTime>? expiresAt,
+    Value<int>? rowid,
+  }) {
+    return CachedUserGroupsCompanion(
+      accountId: accountId ?? this.accountId,
+      groupId: groupId ?? this.groupId,
+      name: name ?? this.name,
+      displayName: displayName ?? this.displayName,
+      allowReference: allowReference ?? this.allowReference,
+      deleteAt: deleteAt ?? this.deleteAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountId.present) {
+      map['account_id'] = Variable<String>(accountId.value);
+    }
+    if (groupId.present) {
+      map['group_id'] = Variable<String>(groupId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (allowReference.present) {
+      map['allow_reference'] = Variable<bool>(allowReference.value);
+    }
+    if (deleteAt.present) {
+      map['delete_at'] = Variable<int>(deleteAt.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<DateTime>(expiresAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedUserGroupsCompanion(')
+          ..write('accountId: $accountId, ')
+          ..write('groupId: $groupId, ')
+          ..write('name: $name, ')
+          ..write('displayName: $displayName, ')
+          ..write('allowReference: $allowReference, ')
+          ..write('deleteAt: $deleteAt, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $CachedUserProfilesTable cachedUserProfiles =
       $CachedUserProfilesTable(this);
   late final $RecentEmojisTable recentEmojis = $RecentEmojisTable(this);
+  late final $CachedUserGroupsTable cachedUserGroups = $CachedUserGroupsTable(
+    this,
+  );
   late final Index cachedUserProfilesAccountUsernameIdx = Index(
     'cached_user_profiles_account_username_idx',
     'CREATE INDEX cached_user_profiles_account_username_idx ON cached_user_profiles (account_id, username COLLATE NOCASE)',
@@ -903,6 +1386,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'recent_emojis_account_last_used_at_idx',
     'CREATE INDEX recent_emojis_account_last_used_at_idx ON recent_emojis (account_id, last_used_at DESC)',
   );
+  late final Index cachedUserGroupsAccountNameIdx = Index(
+    'cached_user_groups_account_name_idx',
+    'CREATE INDEX cached_user_groups_account_name_idx ON cached_user_groups (account_id, name COLLATE NOCASE)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -910,8 +1397,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     cachedUserProfiles,
     recentEmojis,
+    cachedUserGroups,
     cachedUserProfilesAccountUsernameIdx,
     recentEmojisAccountLastUsedAtIdx,
+    cachedUserGroupsAccountNameIdx,
   ];
 }
 
@@ -1389,6 +1878,254 @@ typedef $$RecentEmojisTableProcessedTableManager =
       RecentEmoji,
       PrefetchHooks Function()
     >;
+typedef $$CachedUserGroupsTableCreateCompanionBuilder =
+    CachedUserGroupsCompanion Function({
+      required String accountId,
+      required String groupId,
+      required String name,
+      required String displayName,
+      required bool allowReference,
+      required int deleteAt,
+      required DateTime expiresAt,
+      Value<int> rowid,
+    });
+typedef $$CachedUserGroupsTableUpdateCompanionBuilder =
+    CachedUserGroupsCompanion Function({
+      Value<String> accountId,
+      Value<String> groupId,
+      Value<String> name,
+      Value<String> displayName,
+      Value<bool> allowReference,
+      Value<int> deleteAt,
+      Value<DateTime> expiresAt,
+      Value<int> rowid,
+    });
+
+class $$CachedUserGroupsTableFilterComposer
+    extends Composer<_$AppDatabase, $CachedUserGroupsTable> {
+  $$CachedUserGroupsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get groupId => $composableBuilder(
+    column: $table.groupId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get allowReference => $composableBuilder(
+    column: $table.allowReference,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get deleteAt => $composableBuilder(
+    column: $table.deleteAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CachedUserGroupsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CachedUserGroupsTable> {
+  $$CachedUserGroupsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get groupId => $composableBuilder(
+    column: $table.groupId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get allowReference => $composableBuilder(
+    column: $table.allowReference,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get deleteAt => $composableBuilder(
+    column: $table.deleteAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CachedUserGroupsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CachedUserGroupsTable> {
+  $$CachedUserGroupsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<String> get groupId =>
+      $composableBuilder(column: $table.groupId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get allowReference => $composableBuilder(
+    column: $table.allowReference,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get deleteAt =>
+      $composableBuilder(column: $table.deleteAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
+}
+
+class $$CachedUserGroupsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CachedUserGroupsTable,
+          CachedUserGroup,
+          $$CachedUserGroupsTableFilterComposer,
+          $$CachedUserGroupsTableOrderingComposer,
+          $$CachedUserGroupsTableAnnotationComposer,
+          $$CachedUserGroupsTableCreateCompanionBuilder,
+          $$CachedUserGroupsTableUpdateCompanionBuilder,
+          (
+            CachedUserGroup,
+            BaseReferences<
+              _$AppDatabase,
+              $CachedUserGroupsTable,
+              CachedUserGroup
+            >,
+          ),
+          CachedUserGroup,
+          PrefetchHooks Function()
+        > {
+  $$CachedUserGroupsTableTableManager(
+    _$AppDatabase db,
+    $CachedUserGroupsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CachedUserGroupsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CachedUserGroupsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CachedUserGroupsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> accountId = const Value.absent(),
+                Value<String> groupId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> displayName = const Value.absent(),
+                Value<bool> allowReference = const Value.absent(),
+                Value<int> deleteAt = const Value.absent(),
+                Value<DateTime> expiresAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CachedUserGroupsCompanion(
+                accountId: accountId,
+                groupId: groupId,
+                name: name,
+                displayName: displayName,
+                allowReference: allowReference,
+                deleteAt: deleteAt,
+                expiresAt: expiresAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountId,
+                required String groupId,
+                required String name,
+                required String displayName,
+                required bool allowReference,
+                required int deleteAt,
+                required DateTime expiresAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CachedUserGroupsCompanion.insert(
+                accountId: accountId,
+                groupId: groupId,
+                name: name,
+                displayName: displayName,
+                allowReference: allowReference,
+                deleteAt: deleteAt,
+                expiresAt: expiresAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CachedUserGroupsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CachedUserGroupsTable,
+      CachedUserGroup,
+      $$CachedUserGroupsTableFilterComposer,
+      $$CachedUserGroupsTableOrderingComposer,
+      $$CachedUserGroupsTableAnnotationComposer,
+      $$CachedUserGroupsTableCreateCompanionBuilder,
+      $$CachedUserGroupsTableUpdateCompanionBuilder,
+      (
+        CachedUserGroup,
+        BaseReferences<_$AppDatabase, $CachedUserGroupsTable, CachedUserGroup>,
+      ),
+      CachedUserGroup,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -1397,4 +2134,6 @@ class $AppDatabaseManager {
       $$CachedUserProfilesTableTableManager(_db, _db.cachedUserProfiles);
   $$RecentEmojisTableTableManager get recentEmojis =>
       $$RecentEmojisTableTableManager(_db, _db.recentEmojis);
+  $$CachedUserGroupsTableTableManager get cachedUserGroups =>
+      $$CachedUserGroupsTableTableManager(_db, _db.cachedUserGroups);
 }

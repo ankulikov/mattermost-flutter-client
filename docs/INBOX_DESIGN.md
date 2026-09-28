@@ -111,6 +111,8 @@ fallback на документированную page pagination с client-side 
 - `channel=true` включает `@channel`, `@all` и `@here`;
 - `@here` считается mention только для подходящего presence в момент отправки;
 - group mentions вычисляются сервером по членству пользователя в группе;
+  клиент загружает `GET /users/{user_id}/groups` и держит account-scoped
+  24-часовой fallback-cache только для классификации historical Inbox;
 - `comments=any|root|never` относится к reply notifications при выключенном
   CRT; при CRT источником служит thread following;
 - `channel_mention_auto_follow_threads` и channel-level
@@ -398,8 +400,9 @@ Mattermost не предоставляет server-side action для подпи�
 только для channel IDs из последнего REST snapshot. Первый connect обновляет
 только статус соединения. Полный HTTP recovery запускается исключительно после
 reconnect или пропуска `seq`; обычное событие и ошибка его локального mapping не
-делают здоровый stream недостоверным. Realtime mention MVP проверяет только
-`@username` текущего пользователя.
+делают здоровый stream недостоверным. Realtime mention подтверждается серверным
+`mentions`; cached membership нужен, чтобы отличить group reason от остальных
+причин. Изменение membership запускает REST reconciliation.
 
 `InboxRepository` строит атомарный REST snapshot, затем controller применяет
 события к этому snapshot:
@@ -531,7 +534,7 @@ Domain unit tests:
 
 - все комбинации user/channel notify props;
 - case-sensitive first name и case-insensitive username/custom keywords;
-- channel-wide/group mention exclusions;
+- channel-wide/group mention classification and exclusions;
 - source precedence и повторные события;
 - thread/post exclusivity;
 - DM gaps `119999`, `120000`, `120001` мс, transitive grouping и author breaks;

@@ -204,6 +204,15 @@ final class DioMattermostApi
   }
 
   @override
+  Future<List<MattermostGroupDto>> getGroupsForUser(String userId) async {
+    final String encodedUserId = Uri.encodeComponent(userId);
+    final Response<Object?> response = await _get(
+      '/users/$encodedUserId/groups',
+    );
+    return _dtoList(response.data, MattermostGroupDto.fromJson);
+  }
+
+  @override
   Future<MattermostUserDto> getUserById(String userId) async {
     final Response<Object?> response = await _get('/users/$userId');
     return MattermostUserDto.fromJson(_object(response.data));

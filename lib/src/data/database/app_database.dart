@@ -51,16 +51,46 @@ class RecentEmojis extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, emojiName};
 }
 
+/// The active user groups for one authenticated account.
+///
+/// Inbox refreshes this projection from the server before using it. The expiry
+/// only bounds how long a failed refresh may fall back to the last membership
+/// snapshot; it is not an offline source for messages.
+@TableIndex.sql(
+  'CREATE INDEX cached_user_groups_account_name_idx '
+  'ON cached_user_groups (account_id, name COLLATE NOCASE)',
+)
+class CachedUserGroups extends Table {
+  TextColumn get accountId => text()();
+
+  TextColumn get groupId => text()();
+
+  TextColumn get name => text()();
+
+  TextColumn get displayName => text()();
+
+  BoolColumn get allowReference => boolean()();
+
+  IntColumn get deleteAt => integer()();
+
+  DateTimeColumn get expiresAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, groupId};
+}
+
 /// Drift persists only explicitly owned durable data. Channel navigation,
 /// posts, threads, and paging state remain volatile.
-@DriftDatabase(tables: <Type>[CachedUserProfiles, RecentEmojis])
+@DriftDatabase(
+  tables: <Type>[CachedUserProfiles, RecentEmojis, CachedUserGroups],
+)
 final class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -98,6 +128,13 @@ final class AppDatabase extends _$AppDatabase {
       }
       if (from < 11) {
         await migrator.createTable(recentEmojis);
+      }
+      if (from < 12) {
+        await migrator.createTable(cachedUserGroups);
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS cached_user_groups_account_name_idx '
+          'ON cached_user_groups (account_id, name COLLATE NOCASE)',
+        );
       }
     },
   );
