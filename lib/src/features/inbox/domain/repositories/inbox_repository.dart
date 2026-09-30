@@ -22,4 +22,13 @@ abstract class InboxRepository {
     required AuthSession session,
     required InboxItem item,
   });
+
+  /// Dismisses only [item] without advancing the containing channel boundary.
+  ///
+  /// Implementations without individual-post persistence retain their previous
+  /// whole-channel behavior.
+  Future<void> markPostViewed({
+    required AuthSession session,
+    required ChannelPostInboxItem item,
+  }) => markRead(session: session, item: item);
 }

@@ -74,5 +74,19 @@ void main() {
       ),
       InboxAttentionReason.groupMention,
     );
+    expect(
+      classifyInboxAttentionMatch(
+        message: 'Please review this, @Backend-Team.',
+        username: 'me',
+        firstName: '',
+        mentionKeys: '',
+        firstNameEnabled: false,
+        channelMentionsEnabled: false,
+        ignoreChannelMentions: false,
+        allMessagesSubscription: false,
+        groupMentionNames: const <String>['backend-team'],
+      )?.groupMentionHandle,
+      '@backend-team',
+    );
   });
 }

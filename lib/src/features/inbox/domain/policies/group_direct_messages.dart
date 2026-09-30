@@ -6,7 +6,7 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.d
 ///
 /// A channel remains part of the identity because one sender can participate
 /// in more than one group-message conversation. Automation messages also stay
-/// separate so they keep their dedicated Inbox section.
+/// separate so human and automated messages never share one presentation item.
 List<InboxItem> groupDirectMessages(
   Iterable<CanonicalInboxCandidate> candidates,
 ) {
