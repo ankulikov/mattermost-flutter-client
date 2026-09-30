@@ -12,10 +12,12 @@ authenticated `MattermostApi` requests; widgets never receive a token or a raw
 HTTP client.
 
 A single image receives a large preview. Multiple files use compact cards, and
-the full-screen viewer pages through images from one post. Saving the original
-calls a platform file-saver through a domain contract. Sandboxed macOS builds
-write only to a user-selected location, and iOS exports saved documents to the
-Files app.
+the full-screen viewer pages through images from one post. Images support pinch
+zoom and panning up to 5x; page swiping pauses while an image is enlarged, and
+the transform resets when the page changes. Saving the original calls a
+platform file-saver through a domain contract. Sandboxed macOS builds write
+only to a user-selected location, and iOS exports saved documents to the Files
+app.
 
 ## Legacy rich attachments
 

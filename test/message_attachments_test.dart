@@ -119,6 +119,53 @@ void main() {
     expect(repository.downloaded, document);
     expect(find.text('File saved.'), findsOneWidget);
   });
+
+  testWidgets('pinch zooms an image and prevents paging while enlarged', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAttachmentRepository repository = _FakeAttachmentRepository();
+    await tester.binding.setSurfaceSize(const Size(400, 700));
+    await _pump(tester, repository, const <PostAttachment>[
+      firstImage,
+      secondImage,
+    ]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('first.png'));
+    await tester.pumpAndSettle();
+
+    final Finder zoomable = find.byKey(
+      const ValueKey<String>('zoomable-attachment-image-1'),
+    );
+    final Offset center = tester.getCenter(zoomable);
+    final TestGesture firstFinger = await tester.startGesture(
+      center - const Offset(30, 0),
+      pointer: 1,
+    );
+    final TestGesture secondFinger = await tester.startGesture(
+      center + const Offset(30, 0),
+      pointer: 2,
+    );
+    await firstFinger.moveTo(center - const Offset(90, 0));
+    await secondFinger.moveTo(center + const Offset(90, 0));
+    await tester.pump();
+
+    final InteractiveViewer viewer = tester.widget<InteractiveViewer>(zoomable);
+    expect(
+      viewer.transformationController!.value.getMaxScaleOnAxis(),
+      greaterThan(1),
+    );
+
+    await firstFinger.up();
+    await secondFinger.up();
+    await tester.drag(zoomable, const Offset(-300, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 of 2'), findsOneWidget);
+    expect(find.text('first.png'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.binding.setSurfaceSize(null);
+  });
 }
 
 Future<void> _pump(
