@@ -8,10 +8,10 @@ reproduce React Native implementation details.
 
 ## Required reading
 
-Before changing application code, read `docs/ARCHITECTURE.md` and the closest
-feature README if one exists. Treat the official Mattermost API v4 documentation
-as the protocol source of truth. The existing Mattermost mobile repository may
-be used to discover behavior, not as an API contract.
+Before changing application code, read `docs/features/readme.md` and the closest
+feature document linked from it. Treat the official Mattermost API v4
+documentation as the protocol source of truth. The existing Mattermost mobile
+repository may be used to discover behavior, not as an API contract.
 
 ## Architecture boundaries
 

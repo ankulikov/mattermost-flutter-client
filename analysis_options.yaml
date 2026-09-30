@@ -1,7 +1,7 @@
 include: package:flutter_lints/flutter.yaml
 
-# `import_rules` — Analyzer-плагин, поэтому он настраивается на верхнем уровне,
-# а не в `analyzer.plugins`. Для него нужны Dart 3.10+ / Flutter 3.38+.
+# `import_rules` is an analyzer plugin, so it is configured at the top level,
+# not in `analyzer.plugins`. It requires Dart 3.10+ / Flutter 3.38+.
 plugins:
   import_rules: ^0.0.8
   riverpod_lint: ^3.1.8
@@ -20,28 +20,28 @@ analyzer:
     discarded_futures: error
     unawaited_futures: error
 
-# Границы импортов из целевой архитектуры в docs/TARGET_ARCHITECTURE.md.
-# Правила сопоставляют физические пути, включая relative imports: изменить вид
-# импорта и обойти ограничение нельзя.
+# Import boundaries documented in docs/features/readme.md.
+# Rules match physical paths, including relative imports. Changing the import
+# form cannot bypass a restriction.
 import_rules:
-  # Нарушения архитектуры — ошибки и в IDE, и при `dart analyze`.
+  # Architecture violations are errors both in the IDE and in `dart analyze`.
   severity: error
   rules:
-    # Domain — чистый business code. Data реализует его контракты, UI их
-    # использует, а app собирает приложение; domain не зависит ни от одного
-    # из этих слоёв.
+    # Domain contains pure business code. Data implements its contracts, UI
+    # uses them, and app composes the application; domain depends on none of
+    # these layers.
     - target: lib/src/domain/**
       disallow:
         - lib/src/data/**
         - lib/src/ui/**
         - lib/src/app/**
       reason: >
-        Domain определяет сущности, policies, use cases и repository-контракты;
-        ему нельзя зависеть от implementations, presentation или composition root.
+        Domain defines entities, policies, use cases, and repository contracts;
+        it must not depend on implementations, presentation, or the composition root.
 
-    # Framework и infrastructure packages также запрещены в domain. Так
-    # entities, policies, use cases и repository-контракты остаются переносимыми
-    # и независимо тестируемыми.
+    # Framework and infrastructure packages are also forbidden in domain. This
+    # keeps entities, policies, use cases, and repository contracts portable
+    # and independently testable.
     - target: lib/src/domain/**
       disallow:
         - package:flutter/**
@@ -49,56 +49,56 @@ import_rules:
         - package:dio/**
         - package:drift/**
       reason: >
-        Domain не зависит от framework и infrastructure, поэтому его можно
-        использовать и тестировать без Flutter, Riverpod, HTTP и persistence.
+        Domain does not depend on framework or infrastructure, so it can be
+        used and tested without Flutter, Riverpod, HTTP, or persistence.
 
-    # Data — единственный владелец transport, persistence, cache и platform
-    # adapters. Зависимость от UI инвертирует поток данных и привязывает
-    # repository implementation к экрану или controller.
+    # Data is the sole owner of transport, persistence, cache, and platform
+    # adapters. Depending on UI reverses data flow and couples a repository
+    # implementation to a screen or controller.
     - target: lib/src/data/**
       disallow: lib/src/ui/**
       reason: >
-        Data владеет transport, persistence, cache и platform adapters; он не
-        зависит от UI controllers, widgets или view state.
+        Data owns transport, persistence, cache, and platform adapters; it does
+        not depend on UI controllers, widgets, or view state.
 
-    # MattermostApi — raw DTO transport boundary. Mapping в domain entities
-    # выполняют repositories/mappers уровнем выше, но не data/api.
+    # MattermostApi is the raw DTO transport boundary. Repositories and mappers
+    # at a higher level map DTOs to domain entities, not data/api.
     - target: lib/src/data/api/**
       disallow: lib/src/domain/**
       reason: >
-        Raw MattermostApi работает только с request/response DTO. Domain mapping
-        и data policies принадлежат repository implementations и mappers.
+        Raw MattermostApi works only with request and response DTOs. Domain
+        mapping and data policies belong to repository implementations and mappers.
 
-    # UI получает domain-typed repository contracts через публичные handles
-    # data providers, но не знает concrete implementations и infrastructure:
-    # API, DTO, database, cache, storage и platform code.
+    # UI receives domain-typed repository contracts through public data-provider
+    # handles, but does not know concrete implementations or infrastructure:
+    # API, DTOs, database, cache, storage, and platform code.
     - target: lib/src/ui/**
       disallow: lib/src/data/**
       exclude_disallow: lib/src/data/providers/**
       reason: >
-        UI использует только публичные domain-typed repository-provider handles;
-        ему нельзя импортировать concrete data implementations или infrastructure.
+        UI uses only public domain-typed repository-provider handles; it must
+        not import concrete data implementations or infrastructure.
 
-    # `ui/core` — generic design-system layer. В отличие от остальных UI
-    # сценариев, ему нельзя зависеть от domain data и даже разрешённого моста
-    # repository providers, иначе generic widgets получат Mattermost semantics.
+    # `ui/core` is a generic design-system layer. Unlike other UI flows, it
+    # cannot depend on domain data or even the allowed repository-provider
+    # bridge; otherwise, generic widgets would acquire Mattermost semantics.
     - target: lib/src/ui/core/**
       disallow:
         - lib/src/domain/**
         - lib/src/data/**
       reason: >
-        ui/core — generic design-system layer и не получает Mattermost domain
-        semantics или зависимость от repository providers.
+        ui/core is a generic design-system layer and must not acquire Mattermost
+        domain semantics or dependencies on repository providers.
 
-    # App — composition root: он может подключать public provider handles,
-    # маршрутизировать к UI и применять theme/localization. Но он не проникает
-    # в data internals: endpoints, repositories, caches и persistent storage.
+    # App is the composition root: it can wire public provider handles, route
+    # to UI, and apply theme and localization. It does not access data internals:
+    # endpoints, repositories, caches, or persistent storage.
     - target: lib/src/app/**
       disallow: lib/src/data/**
       exclude_disallow: lib/src/data/providers/**
       reason: >
-        App — composition root и может импортировать public provider wiring, но
-        endpoint, repository, cache, database и storage internals остаются data-owned.
+        App is the composition root and may import public provider wiring, but
+        endpoint, repository, cache, database, and storage internals remain data-owned.
 
 linter:
   rules:
