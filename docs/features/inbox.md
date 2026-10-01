@@ -173,9 +173,12 @@ Read evaluates the reconciled New snapshot for the selected root's channel:
   whole channel with the normal Mattermost endpoint and delete that channel's
   viewed-post preference. The channel view clears the server unread state; the
   preference deletion prevents stale selective-read IDs from accumulating.
-- Threads and dialog bundles do not participate in the root count. Thread Read
-  updates the thread read timestamp. Dialog Read views the dialog channel and
-  removes all New dialog items covered by that server-side view.
+- Dialog bundles do not participate in the ordinary channel-root count. Thread
+  Read updates the thread read timestamp and also marks its root read: it stores
+  the root ID in the viewed-post preference when other eligible channel roots
+  must be preserved, or views the channel when none remain. Dialog Read views
+  the dialog channel and removes all New dialog items covered by that
+  server-side view.
 
 The count is taken after eligibility, canonicalization, postponed suppression,
 and viewed-post suppression. Preference writes happen before optimistic removal

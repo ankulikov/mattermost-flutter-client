@@ -477,7 +477,8 @@ void main() {
     expect(find.text('Inbox'), findsWidgets);
     expect(find.text('New'), findsOneWidget);
     expect(find.text('Postponed'), findsOneWidget);
-    expect(find.text('@dev-team in Town Square'), findsOneWidget);
+    expect(find.text('@dev-team'), findsOneWidget);
+    expect(find.text('mentioned'), findsOneWidget);
     expect(find.text('Inbox message'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('postpone-post:inbox-post')),

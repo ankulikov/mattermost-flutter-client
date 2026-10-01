@@ -778,7 +778,7 @@ void main() {
     expect(viewed.values, isNot(contains('channel')));
   });
 
-  test('marks a thread read in its source team at the current time', () async {
+  test('marks a thread and its final root read at the current time', () async {
     final _InboxApi api = _emptyApi();
     final DateTime now = DateTime.utc(2026, 9, 4, 12);
     final MattermostInboxRepository repository = MattermostInboxRepository(
@@ -794,11 +794,45 @@ void main() {
       teamId: 'source-team',
     );
 
-    await repository.markRead(session: session, item: item);
+    await repository.markThreadRead(
+      session: session,
+      item: item,
+      preserveOtherChannelRoots: false,
+    );
 
     expect(api.readThreadId, 'root');
     expect(api.readTeamId, 'source-team');
     expect(api.readTimestamp, now.millisecondsSinceEpoch);
+    expect(api.viewedChannelId, 'channel');
+  });
+
+  test('marks a thread root selectively when other roots remain', () async {
+    final _InboxApi api = _emptyApi();
+    final _ViewedChannelPosts viewed = _ViewedChannelPosts(
+      <String, Set<String>>{},
+    );
+    final MattermostInboxRepository repository = MattermostInboxRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+      postponed: const _Postponed(),
+      viewedChannelPosts: viewed,
+      userGroupCache: _GroupCache(),
+    );
+    final ThreadInboxItem item = ThreadInboxItem(
+      thread: _thread(),
+      channel: _channel(),
+      teamId: 'source-team',
+    );
+
+    await repository.markThreadRead(
+      session: session,
+      item: item,
+      preserveOtherChannelRoots: true,
+    );
+
+    expect(api.readThreadId, 'root');
+    expect(api.viewedChannelId, isNull);
+    expect(viewed.values['channel'], <String>{'root'});
   });
 
   test(

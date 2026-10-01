@@ -1090,11 +1090,10 @@ final class MattermostInboxRepository extends InboxRepository {
     required AuthSession session,
     required InboxItem item,
   }) => switch (item) {
-    ThreadInboxItem(:final thread, :final teamId) => _api.updateThreadRead(
-      userId: session.userId,
-      teamId: teamId,
-      threadId: thread.id,
-      timestamp: _now().millisecondsSinceEpoch,
+    ThreadInboxItem() => markThreadRead(
+      session: session,
+      item: item,
+      preserveOtherChannelRoots: true,
     ),
     ChannelPostInboxItem(:final post) => _markChannelRead(
       session: session,
@@ -1107,18 +1106,51 @@ final class MattermostInboxRepository extends InboxRepository {
   };
 
   @override
+  Future<void> markThreadRead({
+    required AuthSession session,
+    required ThreadInboxItem item,
+    required bool preserveOtherChannelRoots,
+  }) async {
+    await _api.updateThreadRead(
+      userId: session.userId,
+      teamId: item.teamId,
+      threadId: item.thread.id,
+      timestamp: _now().millisecondsSinceEpoch,
+    );
+    if (preserveOtherChannelRoots) {
+      await _markPostViewed(
+        session: session,
+        channelId: item.thread.channelId,
+        postId: item.thread.root.id,
+      );
+      return;
+    }
+    await _markChannelRead(session: session, channelId: item.thread.channelId);
+  }
+
+  @override
   Future<void> markPostViewed({
     required AuthSession session,
     required ChannelPostInboxItem item,
+  }) => _markPostViewed(
+    session: session,
+    channelId: item.post.channelId,
+    postId: item.post.id,
+  );
+
+  Future<void> _markPostViewed({
+    required AuthSession session,
+    required String channelId,
+    required String postId,
   }) async {
     await _viewedChannelPosts.add(
       session: session,
-      channelId: item.post.channelId,
-      postId: item.post.id,
+      channelId: channelId,
+      postId: postId,
     );
     _realtimeScope?.viewedPostIdsByChannelId
-        .putIfAbsent(item.post.channelId, () => <String>{})
-        .add(item.post.id);
+        .putIfAbsent(channelId, () => <String>{})
+        .add(postId);
   }
 
   Future<void> _markChannelRead({
