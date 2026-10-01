@@ -45,6 +45,7 @@ List<InboxItem> groupDirectMessages(
             channel: candidate.channel,
             teamId: candidate.teamId,
             rootAttentionReason: candidate.rootAttentionReason,
+            unreadMentionDetails: candidate.unreadMentionDetails,
             reactivatesPostponed: candidate.hasNewExplicitMention,
           ),
         );

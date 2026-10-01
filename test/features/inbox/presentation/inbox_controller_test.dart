@@ -6,6 +6,7 @@ import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
@@ -346,6 +347,35 @@ void main() {
     },
   );
 
+  test(
+    'marking a thread read preserves other roots and suppresses its root',
+    () async {
+      final ThreadInboxItem thread = _threadItem();
+      final ChannelPostInboxItem otherRoot = ChannelPostInboxItem(
+        candidate: _candidate('other-root', direct: false),
+      );
+      final _InboxRepository repository = _InboxRepository(
+        <Future<InboxSnapshot> Function()>[
+          () async => InboxSnapshot(newItems: <InboxItem>[thread, otherRoot]),
+        ],
+      );
+      final provider = _provider(repository);
+      final ProviderContainer container = ProviderContainer()
+        ..listen(provider, (_, _) {});
+      addTearDown(container.dispose);
+      await container.read(provider.future);
+
+      expect(await container.read(provider.notifier).markRead(thread), isTrue);
+
+      expect(repository.markedThreadRead, same(thread));
+      expect(repository.preservedOtherChannelRoots, isTrue);
+      expect(
+        container.read(provider).requireValue.snapshot.newItems.single.key,
+        otherRoot.key,
+      );
+    },
+  );
+
   test('postponing a DM bundle moves only its latest message', () async {
     final InboxPostCandidate first = _candidate('first');
     final InboxPostCandidate second = _candidate('second');
@@ -395,6 +425,23 @@ InboxPostCandidate _candidate(String id, {bool direct = true}) =>
       reason: InboxAttentionReason.allMessagesSubscription,
     );
 
+ThreadInboxItem _threadItem() {
+  final InboxPostCandidate root = _candidate('thread-root', direct: false);
+  return ThreadInboxItem(
+    thread: FollowedThread(
+      root: root.post,
+      replyCount: 1,
+      lastReplyAt: DateTime.utc(2026, 1, 2),
+      lastViewedAt: DateTime.utc(2026),
+      unreadReplies: 1,
+      unreadMentions: 0,
+    ),
+    channel: root.channel,
+    teamId: 'team',
+    rootAttentionReason: InboxAttentionReason.directMention,
+  );
+}
+
 AsyncNotifierProvider<InboxController, InboxViewState> _provider(
   InboxRepository repository, {
   PostponedRepository postponed = const _PostponedRepository(),
@@ -427,6 +474,8 @@ final class _InboxRepository extends InboxRepository {
   var loadCalls = 0;
   var reconnectCalls = 0;
   InboxItem? markedRead;
+  ThreadInboxItem? markedThreadRead;
+  bool? preservedOtherChannelRoots;
   ChannelPostInboxItem? individuallyViewed;
   Completer<void>? markPostViewedGate;
 
@@ -448,6 +497,16 @@ final class _InboxRepository extends InboxRepository {
     required InboxItem item,
   }) async {
     markedRead = item;
+  }
+
+  @override
+  Future<void> markThreadRead({
+    required AuthSession session,
+    required ThreadInboxItem item,
+    required bool preserveOtherChannelRoots,
+  }) async {
+    markedThreadRead = item;
+    preservedOtherChannelRoots = preserveOtherChannelRoots;
   }
 
   @override

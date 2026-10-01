@@ -45,33 +45,62 @@ InboxAttentionMatch? classifyInboxAttentionMatch({
   required bool ignoreChannelMentions,
   required bool allMessagesSubscription,
   Iterable<String> groupMentionNames = const <String>[],
+}) => classifyInboxAttentionMatches(
+  message: message,
+  username: username,
+  firstName: firstName,
+  mentionKeys: mentionKeys,
+  firstNameEnabled: firstNameEnabled,
+  channelMentionsEnabled: channelMentionsEnabled,
+  ignoreChannelMentions: ignoreChannelMentions,
+  allMessagesSubscription: allMessagesSubscription,
+  groupMentionNames: groupMentionNames,
+).firstOrNull;
+
+/// Returns every reconstructable reason in one post.
+///
+/// The single-match classifier keeps precedence semantics for canonical Inbox
+/// items. Thread Updates use this complete form because one unread reply can
+/// mention both the current user and one or more of their groups.
+List<InboxAttentionMatch> classifyInboxAttentionMatches({
+  required String message,
+  required String username,
+  required String firstName,
+  required String mentionKeys,
+  required bool firstNameEnabled,
+  required bool channelMentionsEnabled,
+  required bool ignoreChannelMentions,
+  required bool allMessagesSubscription,
+  Iterable<String> groupMentionNames = const <String>[],
 }) {
   final String lowerMessage = message.toLowerCase();
-  if (_containsMention(lowerMessage, username.toLowerCase(), prefix: '@')) {
-    return const InboxAttentionMatch(
-      reason: InboxAttentionReason.directMention,
+  final List<InboxAttentionMatch> matches = <InboxAttentionMatch>[];
+  final bool directMention =
+      _containsMention(lowerMessage, username.toLowerCase(), prefix: '@') ||
+      (firstNameEnabled && firstName.isNotEmpty && message.contains(firstName));
+  if (directMention) {
+    matches.add(
+      const InboxAttentionMatch(reason: InboxAttentionReason.directMention),
     );
-  }
-  if (firstNameEnabled && firstName.isNotEmpty && message.contains(firstName)) {
-    return const InboxAttentionMatch(
-      reason: InboxAttentionReason.directMention,
-    );
-  }
-  for (final String key in mentionKeys.split(',')) {
+  } else if (mentionKeys.split(',').any((String key) {
     final String normalized = key.trim().toLowerCase();
-    if (normalized.isNotEmpty && _containsToken(lowerMessage, normalized)) {
-      return const InboxAttentionMatch(
-        reason: InboxAttentionReason.keywordMention,
-      );
-    }
+    return normalized.isNotEmpty && _containsToken(lowerMessage, normalized);
+  })) {
+    matches.add(
+      const InboxAttentionMatch(reason: InboxAttentionReason.keywordMention),
+    );
   }
+  final Set<String> matchedGroupNames = <String>{};
   for (final String name in groupMentionNames) {
     final String normalized = name.trim().toLowerCase();
     if (normalized.isNotEmpty &&
+        matchedGroupNames.add(normalized) &&
         _containsMention(lowerMessage, normalized, prefix: '@')) {
-      return InboxAttentionMatch(
-        reason: InboxAttentionReason.groupMention,
-        groupMentionHandle: '@${name.trim()}',
+      matches.add(
+        InboxAttentionMatch(
+          reason: InboxAttentionReason.groupMention,
+          groupMentionHandle: '@${name.trim()}',
+        ),
       );
     }
   }
@@ -79,17 +108,20 @@ InboxAttentionMatch? classifyInboxAttentionMatch({
       !ignoreChannelMentions &&
       (_containsMention(lowerMessage, 'channel', prefix: '@') ||
           _containsMention(lowerMessage, 'all', prefix: '@'))) {
-    return const InboxAttentionMatch(
-      reason: InboxAttentionReason.channelMention,
+    matches.add(
+      const InboxAttentionMatch(reason: InboxAttentionReason.channelMention),
     );
   }
   // Send-time presence is absent from REST snapshots, so @here remains
   // intentionally omitted.
-  return allMessagesSubscription
-      ? const InboxAttentionMatch(
-          reason: InboxAttentionReason.allMessagesSubscription,
-        )
-      : null;
+  if (matches.isEmpty && allMessagesSubscription) {
+    matches.add(
+      const InboxAttentionMatch(
+        reason: InboxAttentionReason.allMessagesSubscription,
+      ),
+    );
+  }
+  return List<InboxAttentionMatch>.unmodifiable(matches);
 }
 
 bool _containsMention(String message, String value, {required String prefix}) =>

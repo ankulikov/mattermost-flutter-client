@@ -97,7 +97,7 @@ void main() {
   });
 
   testWidgets(
-    'shows source headers, markdown, unread counts, and newest activity first',
+    'shows plain headers, update tags, markdown, and newest activity first',
     (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1000, 1800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -125,11 +125,39 @@ void main() {
       expect(find.text('Mentions'), findsNothing);
       expect(find.text('Direct Messages'), findsNothing);
       expect(find.text('Threads'), findsNothing);
-      expect(find.text('Thread in Town Square'), findsOneWidget);
-      expect(find.text('@dev-team in Town Square'), findsOneWidget);
-      expect(find.text('You mentioned in Town Square'), findsOneWidget);
+      expect(find.text('Thread in Town Square'), findsNothing);
+      expect(find.text('@dev-team in Town Square'), findsNothing);
+      expect(find.text('You mentioned in Town Square'), findsNothing);
       expect(find.text('Direct message'), findsOneWidget);
-      expect(find.text('Town Square'), findsOneWidget);
+      expect(find.text('Town Square'), findsNWidgets(4));
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey<String>('inbox-source-thread:root')),
+            )
+            .data,
+        'Town Square',
+      );
+      expect(find.text('new replies, last one at'), findsOneWidget);
+      expect(find.text('new messages, last one at'), findsOneWidget);
+      expect(find.text('mentioned'), findsNWidgets(3));
+      expect(find.text('You'), findsNWidgets(2));
+      expect(find.text('@dev-team'), findsNWidgets(2));
+      expect(find.text('New post in a channel'), findsOneWidget);
+      expect(
+        tester
+            .getTopLeft(
+              find.byKey(
+                const ValueKey<String>('inbox-update-tag-thread:root-0-0'),
+              ),
+            )
+            .dx,
+        tester
+            .getTopLeft(
+              find.byKey(const ValueKey<String>('inbox-source-thread:root')),
+            )
+            .dx,
+      );
       expect(find.byType(Card), findsNWidgets(5));
       expect(find.byType(MattermostMarkdown), findsNWidgets(5));
       expect(
@@ -139,16 +167,53 @@ void main() {
         contains('**latest DM**'),
       );
       expect(
-        find.byKey(const ValueKey<String>('unread-thread:root')),
+        find.byKey(const ValueKey<String>('inbox-update-tag-thread:root-0-0')),
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey<String>('unread-direct:dm:dm-1')),
+        find.byKey(
+          const ValueKey<String>('inbox-update-tag-direct:dm:dm-1-0-0'),
+        ),
         findsOneWidget,
+      );
+      final Finder threadCount = find.byKey(
+        const ValueKey<String>('inbox-update-tag-thread:root-0-0'),
+      );
+      final Finder threadTimestamp = find.byKey(
+        const ValueKey<String>('inbox-update-trailing-tag-thread:root-0-0'),
+      );
+      expect(
+        find
+            .ancestor(of: threadCount, matching: find.byType(Wrap))
+            .evaluate()
+            .single,
+        same(
+          find
+              .ancestor(of: threadTimestamp, matching: find.byType(Wrap))
+              .evaluate()
+              .single,
+        ),
       );
       expect(
         find.byKey(const ValueKey<String>('unread-post:mention')),
         findsNothing,
+      );
+      expect(
+        tester
+            .widget<DecoratedBox>(
+              find.descendant(
+                of: find.byKey(
+                  const ValueKey<String>('inbox-update-tag-thread:root-1-0'),
+                ),
+                matching: find.byType(DecoratedBox),
+              ),
+            )
+            .decoration,
+        isA<BoxDecoration>().having(
+          (BoxDecoration decoration) => decoration.color,
+          'tag background',
+          isNotNull,
+        ),
       );
       expect(find.text('3'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
@@ -276,6 +341,44 @@ void main() {
 
     expect(find.text('Town Square'), findsOneWidget);
     expect(find.text('You mentioned in Town Square'), findsNothing);
+  });
+
+  testWidgets('hides update details for a single direct message', (
+    WidgetTester tester,
+  ) async {
+    final InboxPostCandidate message = _candidate(
+      'single-dm',
+      'Only unread direct message',
+      direct: true,
+    );
+    final InboxItem item = DirectMessageBundleInboxItem(
+      channelId: 'dm',
+      authorId: 'other',
+      automationClass: InboxAutomationClass.person,
+      messages: <InboxPostCandidate>[message],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(
+            _InboxRepository(InboxSnapshot(newItems: <InboxItem>[item])),
+          ),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('inbox-updates-direct:dm:single-dm')),
+      findsNothing,
+    );
+    expect(find.text('new message, last one at'), findsNothing);
+    expect(find.text('Only unread direct message'), findsOneWidget);
   });
 
   testWidgets('compact and expanded layouts support large text', (
@@ -443,6 +546,10 @@ List<InboxItem> _items() {
       ),
       channel: _channel(),
       teamId: 'team',
+      unreadMentionDetails: InboxThreadMentionDetails(
+        mentionsCurrentUser: true,
+        groupMentionHandles: const <String>['@dev-team'],
+      ),
     ),
     ChannelPostInboxItem(candidate: group),
     DirectMessageBundleInboxItem(

@@ -310,13 +310,32 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     }
     _operation = _InboxOperation.markRead;
     try {
-      final bool individuallyViewed =
-          item is ChannelPostInboxItem &&
+      final bool individuallyViewed = switch (item) {
+        ChannelPostInboxItem() =>
           !item.candidate.channel.isDialog &&
-          _channelRootCount(current.snapshot.newItems, item.post.channelId) > 1;
-      if (individuallyViewed) {
-        await inbox.markPostViewed(session: session, item: item);
-        _individuallyViewedPostIds.add(item.post.id);
+              _channelRootCount(
+                    current.snapshot.newItems,
+                    item.post.channelId,
+                  ) >
+                  1,
+        ThreadInboxItem() =>
+          _channelRootCount(current.snapshot.newItems, item.thread.channelId) >
+              0,
+        DirectMessageBundleInboxItem() => false,
+      };
+      if (item is ThreadInboxItem) {
+        await inbox.markThreadRead(
+          session: session,
+          item: item,
+          preserveOtherChannelRoots: individuallyViewed,
+        );
+        if (individuallyViewed) {
+          _individuallyViewedPostIds.add(item.thread.root.id);
+        }
+      } else if (individuallyViewed) {
+        final ChannelPostInboxItem channelItem = item as ChannelPostInboxItem;
+        await inbox.markPostViewed(session: session, item: channelItem);
+        _individuallyViewedPostIds.add(channelItem.post.id);
       } else {
         await inbox.markRead(session: session, item: item);
       }
@@ -361,17 +380,16 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     required bool individuallyViewed,
   }) {
     if (individuallyViewed) return candidate.key == readItem.key;
-    if (readItem is ThreadInboxItem) return candidate.key == readItem.key;
     final String channelId = switch (readItem) {
       ChannelPostInboxItem(:final post) => post.channelId,
       DirectMessageBundleInboxItem(:final channelId) => channelId,
-      ThreadInboxItem() => '',
+      ThreadInboxItem(:final thread) => thread.channelId,
     };
     return switch (candidate) {
       ChannelPostInboxItem(:final post) => post.channelId == channelId,
       DirectMessageBundleInboxItem(channelId: final candidateChannelId) =>
         candidateChannelId == channelId,
-      ThreadInboxItem() => false,
+      ThreadInboxItem() => candidate.key == readItem.key,
     };
   }
 
@@ -475,6 +493,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       channel: item.channel,
       teamId: item.teamId,
       rootAttentionReason: item.rootAttentionReason,
+      unreadMentionDetails: item.unreadMentionDetails,
       reactivatesPostponed: item.reactivatesPostponed,
       postponedAt: at,
     ),
