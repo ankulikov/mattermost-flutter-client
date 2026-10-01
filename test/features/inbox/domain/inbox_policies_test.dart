@@ -293,6 +293,50 @@ void main() {
   });
 
   group('reconcileQueues', () {
+    test('sorts every item by its latest event date, newest first', () {
+      final DateTime start = DateTime.utc(2026);
+      final FollowedThread baseThread = _thread(rootId: 'thread');
+      final InboxSnapshot result = reconcileQueues(
+        newItems: <InboxItem>[
+          ChannelPostInboxItem(
+            candidate: _postCandidate(id: 'channel', at: start),
+          ),
+          DirectMessageBundleInboxItem(
+            channelId: 'dm',
+            authorId: 'other',
+            automationClass: InboxAutomationClass.person,
+            messages: <InboxPostCandidate>[
+              _postCandidate(id: 'dm-one', direct: true, at: start),
+              _postCandidate(
+                id: 'dm-two',
+                direct: true,
+                at: start.add(const Duration(days: 1)),
+              ),
+            ],
+          ),
+          ThreadInboxItem(
+            thread: FollowedThread(
+              root: baseThread.root,
+              replyCount: baseThread.replyCount,
+              lastReplyAt: start.add(const Duration(days: 2)),
+              lastViewedAt: baseThread.lastViewedAt,
+              unreadReplies: baseThread.unreadReplies,
+              unreadMentions: baseThread.unreadMentions,
+            ),
+            channel: _channel(),
+            teamId: 'team',
+          ),
+        ],
+        postponedItems: const <InboxItem>[],
+      );
+
+      expect(result.newItems.map((InboxItem item) => item.key), <String>[
+        'thread:thread',
+        'direct:dm:dm-one',
+        'post:channel',
+      ]);
+    });
+
     test('suppresses postponed post IDs from New bundles', () {
       final DateTime at = DateTime.utc(2026);
       final DirectMessageBundleInboxItem newBundle =

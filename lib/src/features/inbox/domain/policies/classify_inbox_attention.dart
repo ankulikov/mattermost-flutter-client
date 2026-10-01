@@ -6,7 +6,36 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candid
 /// The server remains authoritative for mention counters. Current group
 /// membership makes group mentions reconstructable, while presence-dependent
 /// `@here` still cannot be faithfully reconstructed after a cold start.
+final class InboxAttentionMatch {
+  const InboxAttentionMatch({required this.reason, this.groupMentionHandle});
+
+  final InboxAttentionReason reason;
+  final String? groupMentionHandle;
+}
+
 InboxAttentionReason? classifyInboxAttention({
+  required String message,
+  required String username,
+  required String firstName,
+  required String mentionKeys,
+  required bool firstNameEnabled,
+  required bool channelMentionsEnabled,
+  required bool ignoreChannelMentions,
+  required bool allMessagesSubscription,
+  Iterable<String> groupMentionNames = const <String>[],
+}) => classifyInboxAttentionMatch(
+  message: message,
+  username: username,
+  firstName: firstName,
+  mentionKeys: mentionKeys,
+  firstNameEnabled: firstNameEnabled,
+  channelMentionsEnabled: channelMentionsEnabled,
+  ignoreChannelMentions: ignoreChannelMentions,
+  allMessagesSubscription: allMessagesSubscription,
+  groupMentionNames: groupMentionNames,
+)?.reason;
+
+InboxAttentionMatch? classifyInboxAttentionMatch({
   required String message,
   required String username,
   required String firstName,
@@ -19,34 +48,47 @@ InboxAttentionReason? classifyInboxAttention({
 }) {
   final String lowerMessage = message.toLowerCase();
   if (_containsMention(lowerMessage, username.toLowerCase(), prefix: '@')) {
-    return InboxAttentionReason.directMention;
+    return const InboxAttentionMatch(
+      reason: InboxAttentionReason.directMention,
+    );
   }
   if (firstNameEnabled && firstName.isNotEmpty && message.contains(firstName)) {
-    return InboxAttentionReason.directMention;
+    return const InboxAttentionMatch(
+      reason: InboxAttentionReason.directMention,
+    );
   }
   for (final String key in mentionKeys.split(',')) {
     final String normalized = key.trim().toLowerCase();
     if (normalized.isNotEmpty && _containsToken(lowerMessage, normalized)) {
-      return InboxAttentionReason.keywordMention;
+      return const InboxAttentionMatch(
+        reason: InboxAttentionReason.keywordMention,
+      );
     }
   }
   for (final String name in groupMentionNames) {
     final String normalized = name.trim().toLowerCase();
     if (normalized.isNotEmpty &&
         _containsMention(lowerMessage, normalized, prefix: '@')) {
-      return InboxAttentionReason.groupMention;
+      return InboxAttentionMatch(
+        reason: InboxAttentionReason.groupMention,
+        groupMentionHandle: '@${name.trim()}',
+      );
     }
   }
   if (channelMentionsEnabled &&
       !ignoreChannelMentions &&
       (_containsMention(lowerMessage, 'channel', prefix: '@') ||
           _containsMention(lowerMessage, 'all', prefix: '@'))) {
-    return InboxAttentionReason.channelMention;
+    return const InboxAttentionMatch(
+      reason: InboxAttentionReason.channelMention,
+    );
   }
   // Send-time presence is absent from REST snapshots, so @here remains
   // intentionally omitted.
   return allMessagesSubscription
-      ? InboxAttentionReason.allMessagesSubscription
+      ? const InboxAttentionMatch(
+          reason: InboxAttentionReason.allMessagesSubscription,
+        )
       : null;
 }
 

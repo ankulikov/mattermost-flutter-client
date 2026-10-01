@@ -29,8 +29,10 @@ import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart'
 import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_postponed_repository.dart';
+import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_viewed_channel_posts_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/repositories/viewed_channel_posts_repository.dart';
 import 'package:mattermost_flutter/src/features/mentions/data/repositories/mattermost_mention_repository.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
 import 'package:mattermost_flutter/src/features/profile/data/repositories/mattermost_current_user_profile_repository.dart';
@@ -191,12 +193,20 @@ final Provider<PostponedRepository> postponedRepositoryProvider =
       ),
     );
 
+final Provider<ViewedChannelPostsRepository>
+viewedChannelPostsRepositoryProvider = Provider<ViewedChannelPostsRepository>(
+  (Ref ref) => MattermostViewedChannelPostsRepository(
+    api: ref.watch(activeMattermostApiProvider),
+  ),
+);
+
 final Provider<InboxRepository> inboxRepositoryProvider =
     Provider<InboxRepository>(
       (Ref ref) => MattermostInboxRepository(
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         postponed: ref.watch(postponedRepositoryProvider),
+        viewedChannelPosts: ref.watch(viewedChannelPostsRepositoryProvider),
         userGroupCache: ref.watch(userGroupMembershipCacheProvider),
         realtime: ref.watch(sessionRealtimeServiceProvider),
       ),

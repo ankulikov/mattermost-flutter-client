@@ -13,18 +13,21 @@ abstract final class InboxStrings {
   static const String disconnected = 'Inbox realtime is disconnected';
   static const String emptyNew = 'No new messages';
   static const String emptyPostponed = 'No postponed messages';
-  static const String read = 'Mark as read';
+  static const String read = 'Read';
   static const String postpone = 'Postpone';
   static const String remove = 'Remove';
   static const String markReadFailed = 'Could not mark this item as read.';
   static const String postponeFailed = 'Could not postpone this item.';
   static const String removeFailed = 'Could not remove this item.';
-  static const String mentions = 'Mentions';
-  static const String groupMention = 'Group mention';
-  static const String bots = 'Bots & integrations';
-  static const String directMessages = 'Direct Messages';
-  static const String threads = 'Threads';
-  static const String thread = 'Thread';
+  static const String directMessage = 'Direct message';
+  static const String groupMentionFallback = 'Group mention';
+  static String threadInChannel(String channelName) => 'Thread in $channelName';
+  static String groupMentionInChannel(String groupTag, String channelName) =>
+      '$groupTag in $channelName';
+  static String youMentionedInChannel(String channelName) =>
+      'You mentioned in $channelName';
+  static String unreadMessages(int count) =>
+      count == 1 ? '1 unread message' : '$count unread messages';
   static String tabWithMessageCount(String tab, int count) =>
       '$tab, ${messages(count)}';
   static String messages(int count) =>

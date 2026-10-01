@@ -64,6 +64,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   StreamSubscription<InboxRealtimeEvent>? _realtimeSubscription;
   final List<InboxPostChanged> _pendingRealtimePostChanges =
       <InboxPostChanged>[];
+  final Set<String> _individuallyViewedPostIds = <String>{};
   _InboxOperation _operation = _InboxOperation.idle;
   bool _realtimeRefreshQueued = false;
   var _buildGeneration = 0;
@@ -77,6 +78,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     unawaited(_realtimeSubscription?.cancel());
     _realtimeSubscription = null;
     _pendingRealtimePostChanges.clear();
+    _individuallyViewedPostIds.clear();
     _operation = _InboxOperation.idle;
     _realtimeRefreshQueued = false;
     ref.onDispose(() {
@@ -179,26 +181,29 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     InboxViewState current,
     InboxPostChanged change,
   ) {
+    final InboxPostCandidate? effectiveCandidate =
+        _individuallyViewedPostIds.contains(change.postId)
+        ? null
+        : change.candidate;
     final bool wasAlreadyPresent = current.snapshot.newItems.any(
       (InboxItem item) => item.postIds.contains(change.postId),
     );
     final InboxSnapshot snapshot = applyInboxPostChange(
       snapshot: current.snapshot,
       postId: change.postId,
-      candidate: change.candidate,
+      candidate: effectiveCandidate,
     );
     final bool wasAdded =
         !wasAlreadyPresent &&
-        change.candidate != null &&
+        effectiveCandidate != null &&
         snapshot.newItems.any(
           (InboxItem item) => item.postIds.contains(change.postId),
         );
-    final InboxPostCandidate? candidate = change.candidate;
     state = AsyncData(
       current.copyWith(
         snapshot: snapshot,
-        inAppNotification: wasAdded && candidate != null
-            ? InboxInAppNotification(candidate: candidate)
+        inAppNotification: wasAdded
+            ? InboxInAppNotification(candidate: effectiveCandidate)
             : current.inAppNotification,
       ),
     );
@@ -305,9 +310,24 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     }
     _operation = _InboxOperation.markRead;
     try {
-      await inbox.markRead(session: session, item: item);
+      final bool individuallyViewed =
+          item is ChannelPostInboxItem &&
+          !item.candidate.channel.isDialog &&
+          _channelRootCount(current.snapshot.newItems, item.post.channelId) > 1;
+      if (individuallyViewed) {
+        await inbox.markPostViewed(session: session, item: item);
+        _individuallyViewedPostIds.add(item.post.id);
+      } else {
+        await inbox.markRead(session: session, item: item);
+      }
       final List<InboxItem> newItems = current.snapshot.newItems
-          .where((InboxItem candidate) => !_isReadBy(candidate, item))
+          .where(
+            (InboxItem candidate) => !_isReadBy(
+              candidate,
+              item,
+              individuallyViewed: individuallyViewed,
+            ),
+          )
           .toList(growable: false);
       final InboxViewState latest = state.value ?? current;
       state = AsyncData(
@@ -330,7 +350,17 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     }
   }
 
-  bool _isReadBy(InboxItem candidate, InboxItem readItem) {
+  int _channelRootCount(Iterable<InboxItem> items, String channelId) => items
+      .whereType<ChannelPostInboxItem>()
+      .where((ChannelPostInboxItem item) => item.post.channelId == channelId)
+      .length;
+
+  bool _isReadBy(
+    InboxItem candidate,
+    InboxItem readItem, {
+    required bool individuallyViewed,
+  }) {
+    if (individuallyViewed) return candidate.key == readItem.key;
     if (readItem is ThreadInboxItem) return candidate.key == readItem.key;
     final String channelId = switch (readItem) {
       ChannelPostInboxItem(:final post) => post.channelId,

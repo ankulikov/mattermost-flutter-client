@@ -25,6 +25,7 @@ final class InboxPostCandidate {
     required this.post,
     required this.channel,
     required this.reason,
+    this.groupMentionHandle,
     this.isIncoming = true,
     this.isSystem = false,
     this.isSilentNotification = false,
@@ -36,6 +37,11 @@ final class InboxPostCandidate {
   final Post post;
   final SidebarChannel channel;
   final InboxAttentionReason reason;
+
+  /// The exact matched user-group slug prefixed with `@`.
+  ///
+  /// This is non-null only when [reason] is [InboxAttentionReason.groupMention].
+  final String? groupMentionHandle;
   final bool isIncoming;
   final bool isSystem;
   final bool isSilentNotification;
@@ -74,8 +80,8 @@ final class InboxThreadCandidate {
 
   /// The attention reason of the root post, when it can be reconstructed.
   ///
-  /// This survives canonicalization so a thread whose root introduced an
-  /// Inbox mention can remain in Mentions until a later reply needs attention.
+  /// This survives canonicalization so presentation and queue reconciliation
+  /// retain the root's original attention reason.
   final InboxAttentionReason? rootAttentionReason;
 
   /// True only when the incoming thread update is an explicit mention. It lets
