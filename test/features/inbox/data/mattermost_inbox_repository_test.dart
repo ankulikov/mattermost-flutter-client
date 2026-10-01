@@ -271,6 +271,99 @@ void main() {
     expect(item.candidate.groupMentionHandle, '@backend');
   });
 
+  test(
+    'hydrates unread thread replies and preserves personal and group reasons',
+    () async {
+      final _InboxApi api = _InboxApi(
+        teams: const <MattermostTeamDto>[
+          MattermostTeamDto(id: 'team', name: 'team', displayName: 'Team'),
+        ],
+        channels: const <MattermostChannelDto>[
+          MattermostChannelDto(
+            id: 'channel',
+            teamId: 'team',
+            type: 'O',
+            name: 'channel',
+            displayName: 'Channel',
+          ),
+        ],
+        members: const <MattermostChannelMemberDto>[
+          MattermostChannelMemberDto(channelId: 'channel', userId: 'me'),
+        ],
+        unread: const <MattermostPostDto>[],
+        groups: const <MattermostGroupDto>[
+          MattermostGroupDto(
+            id: 'group',
+            name: 'backend',
+            displayName: 'Backend',
+            allowReference: true,
+          ),
+        ],
+        threads: const <MattermostUserThreadDto>[
+          MattermostUserThreadDto(
+            id: 'root',
+            replyCount: 3,
+            lastReplyAt: 3000,
+            lastViewedAt: 1000,
+            participants: <MattermostUserDto>[],
+            post: MattermostPostDto(
+              id: 'root',
+              userId: 'other',
+              channelId: 'channel',
+              message: 'Root',
+              createAt: 500,
+            ),
+            unreadReplies: 2,
+            unreadMentions: 2,
+          ),
+        ],
+        threadPosts: const <String, List<MattermostPostDto>>{
+          'root': <MattermostPostDto>[
+            MattermostPostDto(
+              id: 'old',
+              rootId: 'root',
+              userId: 'other',
+              channelId: 'channel',
+              message: '@me old',
+              createAt: 900,
+            ),
+            MattermostPostDto(
+              id: 'personal',
+              rootId: 'root',
+              userId: 'other',
+              channelId: 'channel',
+              message: '@me please review',
+              createAt: 2000,
+            ),
+            MattermostPostDto(
+              id: 'group',
+              rootId: 'root',
+              userId: 'other',
+              channelId: 'channel',
+              message: '@backend please review',
+              createAt: 3000,
+            ),
+          ],
+        },
+      );
+
+      final InboxSnapshot snapshot = await _repository(
+        api,
+      ).load(session: session);
+
+      final ThreadInboxItem item = snapshot.newItems.single as ThreadInboxItem;
+      expect(item.thread.unreadReplies, 2);
+      expect(item.unreadMentionDetails?.mentionsCurrentUser, isTrue);
+      expect(item.unreadMentionDetails?.groupMentionHandles, <String>[
+        '@backend',
+      ]);
+      expect(item.unreadMentionDetails?.unclassifiedCount, 0);
+      expect(api.loadedThreadId, 'root');
+      expect(api.loadedThreadFromCreateAt, 1000);
+      expect(api.loadedThreadDirection, PostThreadDirection.down);
+    },
+  );
+
   test('flags incomplete historical mention reconstruction', () async {
     final _InboxApi api = _InboxApi(
       teams: const <MattermostTeamDto>[
@@ -1092,6 +1185,8 @@ final class _InboxApi extends Fake implements MattermostApi {
       usersByChannelId: <String, List<MattermostUserDto>>{},
     ),
     this.groups = const <MattermostGroupDto>[],
+    this.threads = const <MattermostUserThreadDto>[],
+    this.threadPosts = const <String, List<MattermostPostDto>>{},
     this.groupLookupError,
     this.failUserLookup = false,
   });
@@ -1102,6 +1197,8 @@ final class _InboxApi extends Fake implements MattermostApi {
   final List<MattermostUserDto> users;
   final MattermostGroupChannelUsersDto groupUsers;
   final List<MattermostGroupDto> groups;
+  final List<MattermostUserThreadDto> threads;
+  final Map<String, List<MattermostPostDto>> threadPosts;
   final Object? groupLookupError;
   final bool failUserLookup;
   final List<String> unreadChannelIds = <String>[];
@@ -1110,6 +1207,9 @@ final class _InboxApi extends Fake implements MattermostApi {
   String? readThreadId;
   String? readTeamId;
   int? readTimestamp;
+  String? loadedThreadId;
+  int? loadedThreadFromCreateAt;
+  PostThreadDirection? loadedThreadDirection;
   @override
   Future<MattermostUserDto> getCurrentUser() async =>
       const MattermostUserDto(id: 'me', username: 'me');
@@ -1134,12 +1234,41 @@ final class _InboxApi extends Fake implements MattermostApi {
     String? before,
     bool extended = true,
     bool unread = false,
-  }) async => const MattermostUserThreadsDto(
-    total: 0,
-    totalUnreadThreads: 0,
-    totalUnreadMentions: 0,
-    threads: <MattermostUserThreadDto>[],
+  }) async => MattermostUserThreadsDto(
+    total: threads.length,
+    totalUnreadThreads: threads.length,
+    totalUnreadMentions: threads.fold<int>(
+      0,
+      (int count, MattermostUserThreadDto thread) =>
+          count + thread.unreadMentions,
+    ),
+    threads: threads,
   );
+
+  @override
+  Future<MattermostPostListDto> getPostThread({
+    required String rootPostId,
+    int perPage = 60,
+    String? fromPost,
+    int? fromCreateAt,
+    PostThreadDirection direction = PostThreadDirection.up,
+  }) async {
+    loadedThreadId = rootPostId;
+    loadedThreadFromCreateAt = fromCreateAt;
+    loadedThreadDirection = direction;
+    final List<MattermostPostDto> posts =
+        threadPosts[rootPostId] ?? const <MattermostPostDto>[];
+    return MattermostPostListDto(
+      order: posts.map((MattermostPostDto post) => post.id).toList(),
+      posts: <String, MattermostPostDto>{
+        for (final MattermostPostDto post in posts) post.id: post,
+      },
+      nextPostId: '',
+      previousPostId: '',
+      hasNext: false,
+    );
+  }
+
   @override
   Future<MattermostPostListDto> getUnreadPostsForChannel({
     required String userId,

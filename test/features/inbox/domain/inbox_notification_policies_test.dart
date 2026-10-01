@@ -89,4 +89,28 @@ void main() {
       '@backend-team',
     );
   });
+
+  test('retains every mention kind found in one thread reply', () {
+    final List<InboxAttentionMatch> matches = classifyInboxAttentionMatches(
+      message: '@me and @backend-team please tell @channel',
+      username: 'me',
+      firstName: '',
+      mentionKeys: '',
+      firstNameEnabled: false,
+      channelMentionsEnabled: true,
+      ignoreChannelMentions: false,
+      allMessagesSubscription: false,
+      groupMentionNames: const <String>['backend-team'],
+    );
+
+    expect(
+      matches.map((InboxAttentionMatch match) => match.reason),
+      <InboxAttentionReason>[
+        InboxAttentionReason.directMention,
+        InboxAttentionReason.groupMention,
+        InboxAttentionReason.channelMention,
+      ],
+    );
+    expect(matches[1].groupMentionHandle, '@backend-team');
+  });
 }

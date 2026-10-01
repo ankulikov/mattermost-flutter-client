@@ -475,6 +475,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       channel: item.channel,
       teamId: item.teamId,
       rootAttentionReason: item.rootAttentionReason,
+      unreadMentionDetails: item.unreadMentionDetails,
       reactivatesPostponed: item.reactivatesPostponed,
       postponedAt: at,
     ),

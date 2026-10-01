@@ -20,14 +20,17 @@ abstract final class InboxStrings {
   static const String postponeFailed = 'Could not postpone this item.';
   static const String removeFailed = 'Could not remove this item.';
   static const String directMessage = 'Direct message';
+  static const String updates = 'Updates';
+  static const String mentioned = 'mentioned';
+  static const String you = 'You';
+  static const String mention = 'Mention';
+  static const String channelMention = '@channel';
+  static const String newPostInChannel = 'New post in a channel';
   static const String groupMentionFallback = 'Group mention';
-  static String threadInChannel(String channelName) => 'Thread in $channelName';
-  static String groupMentionInChannel(String groupTag, String channelName) =>
-      '$groupTag in $channelName';
-  static String youMentionedInChannel(String channelName) =>
-      'You mentioned in $channelName';
-  static String unreadMessages(int count) =>
-      count == 1 ? '1 unread message' : '$count unread messages';
+  static String newMessagesWithLastOneAt(int count) =>
+      '${count == 1 ? 'new message' : 'new messages'}, last one at';
+  static String newRepliesWithLastOneAt(int count) =>
+      '${count == 1 ? 'new reply' : 'new replies'}, last one at';
   static String tabWithMessageCount(String tab, int count) =>
       '$tab, ${messages(count)}';
   static String messages(int count) =>

@@ -28,14 +28,18 @@ The latest event is source-specific:
 
 Each New item follows the message-search result layout, with more detail:
 
-1. A localized source line explains why the item is present.
-2. The author and, for threads and dialog bundles, the unread counter remain
-   visible as message metadata.
+1. The header is only the channel display name, or `Direct message` for direct
+   and group-message dialogs. It does not include `Thread` or a mention reason.
+2. The author and message timestamp remain visible as message metadata.
 3. A card renders the complete selected post body with the shared
    `MessageContent` read path. It must not fall back to
    plain text, truncate to a fixed number of lines, or implement a smaller
    Inbox-only Markdown dialect.
-4. Read and Postpone controls sit in a divided footer inside the same bordered,
+4. A divided Updates block appears between the message and actions. Important
+   values such as counts, times, `You`, and user-group handles use compact
+   theme-aware tag backgrounds, align with the message content column, and wrap
+   at narrow widths or large text scales.
+5. Read and Postpone controls sit in a divided footer inside the same bordered,
    zero-elevation surface as the message. Opening the message area navigates to
    the shared thread, channel, or permalink destination without implicitly
    performing either action.
@@ -46,23 +50,29 @@ Markdown and navigation targets keep the shared renderer's security rules.
 Action failures keep useful content visible and expose local failure feedback
 instead of replacing the queue.
 
-The source line uses these exact templates, with display values escaped and
-rendered as text:
+The Updates block is derived from these presentation fields:
 
-| Source | Header |
+| Source | Updates |
 | --- | --- |
-| Followed thread | `Thread in <channel name>` |
-| Current referenceable user-group mention | `@<group slug> in <channel name>` |
-| Direct mention of the current user | `You mentioned in <channel name>` |
-| Direct or group-message dialog | `Direct message` |
-| Any other eligible trigger in a non-dialog channel | `<channel name>` |
+| Followed thread | `<count> new replies, last one at <time>`; when present, `You`, each matching `@<group slug>`, `@channel`, or an unclassified `Mention`, followed by `mentioned` |
+| Direct or group-message dialog | `<count> new messages, last one at <time>` when the bundle contains more than one message; no Updates block for a single message |
+| Current referenceable user-group mention | `@<group slug> mentioned` |
+| Direct or keyword mention of the current user | `You mentioned` |
+| Channel-wide mention | `@channel mentioned` |
+| All-messages subscription | `New post in a channel` |
 
-Thread and dialog identity takes precedence over the root's mention reason. For
-channel roots, a current-user mention takes precedence over a matching
-referenceable user-group mention; channel-wide mentions and all-messages
-subscriptions use only the channel name. Classification must retain the
-matching user-group slug through the domain model instead of trying to recover
-it from rendered Markdown.
+For channel roots, a current-user mention takes precedence over a matching
+referenceable user-group mention. Classification retains the matching
+user-group slug through the domain model instead of trying to recover it from
+rendered Markdown.
+
+The information needed to build Updates has explicit owners. CRT supplies a
+thread's unread-reply count, unread-mention count, last-viewed boundary, and
+last-reply timestamp. For threads with unread mentions, the repository pages
+thread posts newer than that boundary and applies the normal mention classifier
+to recover personal, user-group, and channel-wide reasons. The dialog bundle
+owns its message count and latest message timestamp. A channel-root candidate
+owns its classified attention reason and matching group handle.
 
 ## Sources and snapshot construction
 
@@ -81,7 +91,9 @@ retry. Refresh failure keeps the old snapshot.
 
 Unread channel requests run in bounded groups of four. Followed threads page by
 `before=<root_post_id>` until a page has fewer than 60 items or a cursor repeats.
-Post and author hydration uses bounded ID batches.
+For followed threads whose CRT projection reports unread mentions, thread posts
+newer than `last_viewed_at` are paged in bounded groups of four. Post and author
+hydration uses bounded ID batches.
 
 ## Eligibility
 
@@ -258,11 +270,13 @@ disconnected. System push notifications remain outside this feature.
 
 ## Known limits
 
-The standard API exposes historical mention counters but not the post IDs and
-reasons behind those counters. The client compares reconstructed mentions with
-`mention_count_root` and marks the snapshot incomplete when it finds fewer.
-Exact reconstruction, including historical `@here`, would require a server
-extension that returns unread attention post IDs and their reasons.
+The standard API exposes historical channel-root mention counters but not the
+post IDs and reasons behind those counters. The client compares reconstructed
+mentions with `mention_count_root` and marks the snapshot incomplete when it
+finds fewer. Thread replies can be hydrated after the CRT read boundary, but
+presence-dependent historical `@here` still cannot be classified exactly and
+is shown as an unclassified `Mention`. Exact reconstruction would require a
+server extension that returns unread attention post IDs and their reasons.
 
 Mattermost preferences do not provide compare-and-swap semantics. Re-reading
 and serializing mutations prevents lost updates inside one client instance, but

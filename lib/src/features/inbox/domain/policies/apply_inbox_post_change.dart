@@ -70,5 +70,6 @@ InboxThreadCandidate _threadCandidate(
   channel: item.channel,
   teamId: item.teamId,
   rootAttentionReason: item.rootAttentionReason,
+  unreadMentionDetails: item.unreadMentionDetails,
   hasNewExplicitMention: item.reactivatesPostponed,
 );
