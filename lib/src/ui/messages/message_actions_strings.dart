@@ -35,4 +35,10 @@ abstract final class MessageActionsStrings {
   static const String retry = 'Retry';
 
   static String noEmojiResults(String term) => 'No emojis found for “$term”.';
+
+  static String reactionPeople(String names, String emoji) =>
+      '$names\nreacted with $emoji';
+
+  static String reactionCount(int count, String emoji) =>
+      '$count ${count == 1 ? 'person' : 'people'} reacted with $emoji';
 }

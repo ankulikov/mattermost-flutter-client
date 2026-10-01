@@ -348,7 +348,13 @@ final class ChannelPostsController
       (PostReaction reaction) =>
           reaction.emojiName == emojiName && reaction.reactedByCurrentUser,
     );
-    replacePost(toggleCurrentUserReaction(original, emojiName));
+    replacePost(
+      toggleCurrentUserReaction(
+        original,
+        emojiName,
+        currentUserId: session.userId,
+      ),
+    );
     try {
       if (remove) {
         await _cancellation.run(

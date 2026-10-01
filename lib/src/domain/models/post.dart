@@ -22,6 +22,7 @@ final class PostReaction {
     required this.count,
     String? emojiName,
     this.reactedByCurrentUser = false,
+    this.userIds = const <String>[],
   }) : emojiName = emojiName ?? emoji,
        assert(count > 0, 'A visible reaction must have a positive count.');
 
@@ -32,14 +33,19 @@ final class PostReaction {
   final String emojiName;
   final int count;
   final bool reactedByCurrentUser;
+  final List<String> userIds;
 
-  PostReaction copyWith({int? count, bool? reactedByCurrentUser}) =>
-      PostReaction(
-        emoji: emoji,
-        emojiName: emojiName,
-        count: count ?? this.count,
-        reactedByCurrentUser: reactedByCurrentUser ?? this.reactedByCurrentUser,
-      );
+  PostReaction copyWith({
+    int? count,
+    bool? reactedByCurrentUser,
+    List<String>? userIds,
+  }) => PostReaction(
+    emoji: emoji,
+    emojiName: emojiName,
+    count: count ?? this.count,
+    reactedByCurrentUser: reactedByCurrentUser ?? this.reactedByCurrentUser,
+    userIds: userIds ?? this.userIds,
+  );
 }
 
 final class PostAttachment {
@@ -150,7 +156,11 @@ final class Post {
 @Deprecated('Use Post.')
 typedef ChannelPost = Post;
 
-Post toggleCurrentUserReaction(Post post, String emojiName) {
+Post toggleCurrentUserReaction(
+  Post post,
+  String emojiName, {
+  String currentUserId = '',
+}) {
   final int index = post.reactions.indexWhere(
     (PostReaction reaction) => reaction.emojiName == emojiName,
   );
@@ -162,6 +172,9 @@ Post toggleCurrentUserReaction(Post post, String emojiName) {
         emojiName: emojiName,
         count: 1,
         reactedByCurrentUser: true,
+        userIds: currentUserId.isEmpty
+            ? const <String>[]
+            : <String>[currentUserId],
       ),
     ]);
   }
@@ -175,12 +188,18 @@ Post toggleCurrentUserReaction(Post post, String emojiName) {
       reactions[index] = reaction.copyWith(
         count: reaction.count - 1,
         reactedByCurrentUser: false,
+        userIds: reaction.userIds
+            .where((String userId) => userId != currentUserId)
+            .toList(growable: false),
       );
     }
   } else {
     reactions[index] = reaction.copyWith(
       count: reaction.count + 1,
       reactedByCurrentUser: true,
+      userIds: currentUserId.isEmpty || reaction.userIds.contains(currentUserId)
+          ? reaction.userIds
+          : <String>[...reaction.userIds, currentUserId],
     );
   }
   return post.withReactions(reactions);
