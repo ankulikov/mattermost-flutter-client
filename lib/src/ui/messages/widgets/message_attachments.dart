@@ -325,6 +325,7 @@ class _AttachmentImageViewerState extends ConsumerState<AttachmentImageViewer> {
   );
   late int _index = widget.initialIndex;
   bool _isDownloading = false;
+  bool _isZoomed = false;
 
   @override
   void dispose() {
@@ -404,14 +405,20 @@ class _AttachmentImageViewerState extends ConsumerState<AttachmentImageViewer> {
               children: <Widget>[
                 PageView.builder(
                   controller: _controller,
+                  physics: _isZoomed
+                      ? const NeverScrollableScrollPhysics()
+                      : const PageScrollPhysics(),
                   itemCount: widget.images.length,
-                  onPageChanged: (int value) => setState(() => _index = value),
+                  onPageChanged: (int value) => setState(() {
+                    _index = value;
+                    _isZoomed = false;
+                  }),
                   itemBuilder: (BuildContext context, int index) => Padding(
                     padding: const EdgeInsets.all(24),
-                    child: _AttachmentImage(
+                    child: _ZoomableAttachmentImage(
                       attachment: widget.images[index],
-                      variant: AttachmentVariant.original,
-                      fit: BoxFit.contain,
+                      isCurrent: index == _index,
+                      onZoomChanged: _setZoomed,
                     ),
                   ),
                 ),
@@ -439,6 +446,11 @@ class _AttachmentImageViewerState extends ConsumerState<AttachmentImageViewer> {
         ),
       ),
     );
+  }
+
+  void _setZoomed(bool value) {
+    if (_isZoomed == value) return;
+    setState(() => _isZoomed = value);
   }
 
   void _showPrevious() {
@@ -480,6 +492,68 @@ class _AttachmentImageViewerState extends ConsumerState<AttachmentImageViewer> {
     } finally {
       if (mounted) setState(() => _isDownloading = false);
     }
+  }
+}
+
+class _ZoomableAttachmentImage extends StatefulWidget {
+  const _ZoomableAttachmentImage({
+    required this.attachment,
+    required this.isCurrent,
+    required this.onZoomChanged,
+  });
+
+  final PostAttachment attachment;
+  final bool isCurrent;
+  final ValueChanged<bool> onZoomChanged;
+
+  @override
+  State<_ZoomableAttachmentImage> createState() =>
+      _ZoomableAttachmentImageState();
+}
+
+class _ZoomableAttachmentImageState extends State<_ZoomableAttachmentImage> {
+  final TransformationController _transformationController =
+      TransformationController();
+  bool _isZoomed = false;
+
+  @override
+  void didUpdateWidget(_ZoomableAttachmentImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isCurrent && !widget.isCurrent) {
+      _transformationController.value = Matrix4.identity();
+      _updateZoomState(false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => InteractiveViewer(
+    key: ValueKey<String>('zoomable-attachment-${widget.attachment.id}'),
+    transformationController: _transformationController,
+    minScale: 1,
+    maxScale: 5,
+    onInteractionUpdate: (_) => _updateZoomState(
+      _transformationController.value.getMaxScaleOnAxis() > 1.01,
+    ),
+    onInteractionEnd: (_) => _updateZoomState(
+      _transformationController.value.getMaxScaleOnAxis() > 1.01,
+    ),
+    child: _AttachmentImage(
+      attachment: widget.attachment,
+      variant: AttachmentVariant.original,
+      fit: BoxFit.contain,
+    ),
+  );
+
+  void _updateZoomState(bool value) {
+    if (_isZoomed == value) return;
+    _isZoomed = value;
+    if (widget.isCurrent) widget.onZoomChanged(value);
   }
 }
 
