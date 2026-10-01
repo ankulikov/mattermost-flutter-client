@@ -23,6 +23,7 @@ final class ThreadInboxItem extends InboxItem {
     required this.channel,
     required this.teamId,
     this.rootAttentionReason,
+    this.unreadMentionDetails,
     this.reactivatesPostponed = false,
     super.postponedAt,
   });
@@ -31,6 +32,7 @@ final class ThreadInboxItem extends InboxItem {
   final SidebarChannel channel;
   final String teamId;
   final InboxAttentionReason? rootAttentionReason;
+  final InboxThreadMentionDetails? unreadMentionDetails;
   final bool reactivatesPostponed;
 
   @override

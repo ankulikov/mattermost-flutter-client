@@ -77,9 +77,14 @@ void main() {
       message: 'Hello',
     );
 
-    final Post updated = toggleCurrentUserReaction(post, 'grinning');
+    final Post updated = toggleCurrentUserReaction(
+      post,
+      'grinning',
+      currentUserId: 'user',
+    );
 
     expect(updated.reactions.single.emoji, '😀');
     expect(updated.reactions.single.reactedByCurrentUser, isTrue);
+    expect(updated.reactions.single.userIds, <String>['user']);
   });
 }

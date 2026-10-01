@@ -3,12 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
-import 'package:mattermost_flutter/src/features/inbox/domain/policies/classify_inbox_section.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class InboxPage extends ConsumerStatefulWidget {
@@ -207,37 +211,43 @@ class _InboxList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return Center(child: Text(empty));
-    final Map<InboxSection, List<InboxItem>> sections =
-        <InboxSection, List<InboxItem>>{
-          for (final InboxSection section in InboxSection.values)
-            section: <InboxItem>[],
-        };
-    final Iterable<InboxItem> presentationItems = isPostponed
+    final Iterable<InboxItem> expandedItems = isPostponed
         ? items.expand(_postponedPresentationItems)
         : items;
-    for (final InboxItem item in presentationItems) {
-      sections[classifyInboxSection(item)]!.add(item);
-    }
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      children: <Widget>[
-        for (final InboxSection section in InboxSection.values)
-          if (sections[section]!.isNotEmpty) ...<Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-              child: Text(
-                _sectionLabel(section),
-                style: Theme.of(context).textTheme.titleSmall,
+    final List<InboxItem> presentationItems = expandedItems.toList()
+      ..sort((InboxItem first, InboxItem second) {
+        final int byActivity = second.lastActivityAt.compareTo(
+          first.lastActivityAt,
+        );
+        return byActivity != 0 ? byActivity : first.key.compareTo(second.key);
+      });
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final bool expanded = constraints.maxWidth >= 700;
+        return ListView.builder(
+          padding: EdgeInsets.symmetric(
+            horizontal: expanded ? 24 : 8,
+            vertical: 12,
+          ),
+          itemCount: presentationItems.length,
+          itemBuilder: (BuildContext context, int index) {
+            final InboxItem item = presentationItems[index];
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _InboxRow(
+                    item: item,
+                    onOpen: () => onOpenItem(item),
+                    isPostponed: isPostponed,
+                  ),
+                ),
               ),
-            ),
-            for (final InboxItem item in sections[section]!)
-              _InboxRow(
-                item: item,
-                onOpen: () => onOpenItem(item),
-                isPostponed: isPostponed,
-              ),
-          ],
-      ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -256,14 +266,6 @@ class _InboxList extends StatelessWidget {
     }
     yield item;
   }
-
-  String _sectionLabel(InboxSection section) => switch (section) {
-    InboxSection.mentions => InboxStrings.mentions,
-    InboxSection.groupMentions => InboxStrings.groupMention,
-    InboxSection.botsAndIntegrations => InboxStrings.bots,
-    InboxSection.directMessages => InboxStrings.directMessages,
-    InboxSection.threads => InboxStrings.threads,
-  };
 }
 
 class _InboxRow extends ConsumerWidget {
@@ -280,60 +282,78 @@ class _InboxRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final _Preview preview = _preview(item);
-    return InkWell(
-      key: ValueKey<String>('inbox-item-${item.key}'),
-      onTap: onOpen,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: Theme.of(context).dividerColor),
-          ),
+    final AuthSession? session = ref.watch(authSessionProvider);
+    final ThemeData theme = Theme.of(context);
+    return Semantics(
+      container: true,
+      child: Card(
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: theme.colorScheme.outlineVariant),
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: Column(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            InkWell(
+              key: ValueKey<String>('inbox-item-${item.key}'),
+              onTap: onOpen,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      preview.title,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      preview.body,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
+                    MessageAvatar(author: preview.post.author),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            preview.header,
+                            key: ValueKey<String>('inbox-source-${item.key}'),
+                            style: theme.textTheme.labelLarge,
+                          ),
+                          _InboxAuthorLine(
+                            author: preview.post.author,
+                            sentAt: preview.post.sentAt,
+                          ),
+                          const SizedBox(height: 6),
+                          MessageContent(
+                            post: preview.post,
+                            serverUrl: session?.serverUrl,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              if (!isPostponed) ...<Widget>[
-                IconButton(
-                  key: ValueKey<String>('read-${item.key}'),
-                  tooltip: InboxStrings.read,
-                  onPressed: () => unawaited(_markRead(context, ref)),
-                  icon: const Icon(Icons.done),
-                ),
-                IconButton(
-                  key: ValueKey<String>('postpone-${item.key}'),
-                  tooltip: InboxStrings.postpone,
-                  onPressed: () => unawaited(_postpone(context, ref)),
-                  icon: const Icon(Icons.schedule),
-                ),
-              ] else
-                IconButton(
-                  key: ValueKey<String>('remove-${item.key}'),
-                  tooltip: InboxStrings.remove,
-                  onPressed: () => unawaited(_remove(context, ref)),
-                  icon: const Icon(Icons.delete_outline),
-                ),
+            ),
+            if (_showsUpdates(item)) ...<Widget>[
+              Divider(height: 1, color: theme.colorScheme.outlineVariant),
+              _InboxUpdates(item: item),
             ],
-          ),
+            Divider(height: 1, color: theme.colorScheme.outlineVariant),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: isPostponed
+                  ? TextButton.icon(
+                      key: ValueKey<String>('remove-${item.key}'),
+                      onPressed: () => unawaited(_remove(context, ref)),
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text(InboxStrings.remove),
+                    )
+                  : _NewItemActions(
+                      itemKey: item.key,
+                      onRead: () => unawaited(_markRead(context, ref)),
+                      onPostpone: () => unawaited(_postpone(context, ref)),
+                    ),
+            ),
+          ],
         ),
       ),
     );
@@ -367,26 +387,294 @@ class _InboxRow extends ConsumerWidget {
   }
 
   _Preview _preview(InboxItem item) => switch (item) {
-    ThreadInboxItem(thread: final thread) => _Preview(
-      thread.root.author.displayName,
-      thread.root.message.isEmpty ? InboxStrings.thread : thread.root.message,
+    ThreadInboxItem(thread: final thread, channel: final channel) => _Preview(
+      header: channel.isDialog
+          ? InboxStrings.directMessage
+          : _channelName(channel),
+      post: thread.root,
     ),
-    ChannelPostInboxItem(post: final post) => _Preview(
-      post.author.displayName,
-      post.message,
+    ChannelPostInboxItem(candidate: final candidate) => _Preview(
+      header: candidate.channel.isDialog
+          ? InboxStrings.directMessage
+          : _channelName(candidate.channel),
+      post: candidate.post,
     ),
     DirectMessageBundleInboxItem(messages: final messages) => _Preview(
-      messages.first.post.author.displayName,
-      messages.length == 1
-          ? messages.first.post.message
-          : InboxStrings.messages(messages.length),
+      header: InboxStrings.directMessage,
+      post: messages.last.post,
     ),
+  };
+
+  String _channelName(SidebarChannel channel) =>
+      channel.displayName.trim().isEmpty ? channel.name : channel.displayName;
+
+  bool _showsUpdates(InboxItem item) => switch (item) {
+    DirectMessageBundleInboxItem(:final messages) => messages.length > 1,
+    _ => true,
   };
 }
 
-final class _Preview {
-  const _Preview(this.title, this.body);
+class _InboxUpdates extends StatelessWidget {
+  const _InboxUpdates({required this.item});
 
-  final String title;
-  final String body;
+  final InboxItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final List<_UpdateLine> updates = switch (item) {
+      ThreadInboxItem(:final thread, :final unreadMentionDetails) =>
+        <_UpdateLine>[
+          _UpdateLine(
+            tags: <String>['${thread.unreadReplies}'],
+            text: InboxStrings.newRepliesWithLastOneAt(thread.unreadReplies),
+            trailingTags: <String>[_timestamp(context, thread.lastReplyAt)],
+          ),
+          if (thread.unreadMentions > 0)
+            _UpdateLine(
+              tags: _threadMentionTags(unreadMentionDetails),
+              text: InboxStrings.mentioned,
+            ),
+        ],
+      DirectMessageBundleInboxItem(:final messages) => <_UpdateLine>[
+        _UpdateLine(
+          tags: <String>['${messages.length}'],
+          text: InboxStrings.newMessagesWithLastOneAt(messages.length),
+          trailingTags: <String>[
+            _timestamp(context, messages.last.post.sentAt),
+          ],
+        ),
+      ],
+      ChannelPostInboxItem(:final candidate) => <_UpdateLine>[
+        _channelUpdate(candidate),
+      ],
+    };
+    return Semantics(
+      key: ValueKey<String>('inbox-updates-${item.key}'),
+      container: true,
+      label: InboxStrings.updates,
+      child: Padding(
+        // Match the message column after its 44 px avatar and 12 px gap.
+        padding: const EdgeInsets.fromLTRB(72, 12, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            for (var index = 0; index < updates.length; index++)
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: index == updates.length - 1 ? 0 : 8,
+                ),
+                child: _UpdateLineWidget(
+                  itemKey: item.key,
+                  lineIndex: index,
+                  update: updates[index],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _timestamp(BuildContext context, DateTime timestamp) =>
+      formatMessageTimestamp(
+        sentAt: timestamp,
+        locale: Localizations.localeOf(context).toLanguageTag(),
+      );
+
+  List<String> _threadMentionTags(InboxThreadMentionDetails? details) {
+    if (details == null || !details.hasMentions) {
+      return const <String>[InboxStrings.mention];
+    }
+    return <String>[
+      if (details.mentionsCurrentUser) InboxStrings.you,
+      ...details.groupMentionHandles,
+      if (details.mentionsChannel) InboxStrings.channelMention,
+      if (details.unclassifiedCount > 0) InboxStrings.mention,
+    ];
+  }
+
+  _UpdateLine _channelUpdate(InboxPostCandidate candidate) =>
+      switch (candidate.reason) {
+        InboxAttentionReason.directMention ||
+        InboxAttentionReason.keywordMention => const _UpdateLine(
+          tags: <String>[InboxStrings.you],
+          text: InboxStrings.mentioned,
+        ),
+        InboxAttentionReason.groupMention => _UpdateLine(
+          tags: <String>[_groupTag(candidate)],
+          text: InboxStrings.mentioned,
+        ),
+        InboxAttentionReason.channelMention => const _UpdateLine(
+          tags: <String>[InboxStrings.channelMention],
+          text: InboxStrings.mentioned,
+        ),
+        InboxAttentionReason.allMessagesSubscription => const _UpdateLine(
+          text: InboxStrings.newPostInChannel,
+        ),
+      };
+
+  String _groupTag(InboxPostCandidate candidate) {
+    final String? handle = candidate.groupMentionHandle;
+    if (handle != null && handle.trim().isNotEmpty) return handle;
+    return InboxStrings.groupMentionFallback;
+  }
+}
+
+class _UpdateLineWidget extends StatelessWidget {
+  const _UpdateLineWidget({
+    required this.itemKey,
+    required this.lineIndex,
+    required this.update,
+  });
+
+  final String itemKey;
+  final int lineIndex;
+  final _UpdateLine update;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 6,
+    runSpacing: 6,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: <Widget>[
+      for (var index = 0; index < update.tags.length; index++)
+        _UpdateTag(
+          key: ValueKey<String>('inbox-update-tag-$itemKey-$lineIndex-$index'),
+          label: update.tags[index],
+        ),
+      Text(update.text),
+      for (var index = 0; index < update.trailingTags.length; index++)
+        _UpdateTag(
+          key: ValueKey<String>(
+            'inbox-update-trailing-tag-$itemKey-$lineIndex-$index',
+          ),
+          label: update.trailingTags[index],
+        ),
+    ],
+  );
+}
+
+class _UpdateTag extends StatelessWidget {
+  const _UpdateTag({required this.label, super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: colors.onPrimaryContainer),
+        ),
+      ),
+    );
+  }
+}
+
+final class _UpdateLine {
+  const _UpdateLine({
+    required this.text,
+    this.tags = const <String>[],
+    this.trailingTags = const <String>[],
+  });
+
+  final String text;
+  final List<String> tags;
+  final List<String> trailingTags;
+}
+
+class _NewItemActions extends StatelessWidget {
+  const _NewItemActions({
+    required this.itemKey,
+    required this.onRead,
+    required this.onPostpone,
+  });
+
+  final String itemKey;
+  final VoidCallback onRead;
+  final VoidCallback onPostpone;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (BuildContext context, BoxConstraints constraints) {
+      final bool stack =
+          constraints.maxWidth < 320 ||
+          MediaQuery.textScalerOf(context).scale(1) > 1.3;
+      final Widget read = TextButton.icon(
+        key: ValueKey<String>('read-$itemKey'),
+        onPressed: onRead,
+        icon: const Icon(Icons.done),
+        label: const Text(InboxStrings.read),
+      );
+      final Widget postpone = TextButton.icon(
+        key: ValueKey<String>('postpone-$itemKey'),
+        onPressed: onPostpone,
+        icon: const Icon(Icons.schedule),
+        label: const Text(InboxStrings.postpone),
+      );
+      if (stack) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[read, const Divider(height: 1), postpone],
+        );
+      }
+      return Row(
+        children: <Widget>[
+          Expanded(child: read),
+          const SizedBox(height: 36, child: VerticalDivider(width: 1)),
+          Expanded(child: postpone),
+        ],
+      );
+    },
+  );
+}
+
+class _InboxAuthorLine extends StatelessWidget {
+  const _InboxAuthorLine({required this.author, required this.sentAt});
+
+  final PostAuthor author;
+  final DateTime sentAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 2,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        Text(
+          author.displayName,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          formatMessageTimestamp(
+            sentAt: sentAt,
+            locale: Localizations.localeOf(context).toLanguageTag(),
+          ),
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+final class _Preview {
+  const _Preview({required this.header, required this.post});
+
+  final String header;
+  final Post post;
 }

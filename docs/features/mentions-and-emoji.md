@@ -65,6 +65,12 @@ The reaction picker is an anchored popover for precise pointer input and a
 bottom sheet after a touch long press. It supports arrows, Enter, Escape,
 pointer input, and responsive grid widths.
 
+Each reaction retains the reactor user IDs supplied in post metadata. The open
+message surface resolves those IDs through the user repository and shows the
+display names in a tooltip on pointer hover or touch long press, with at most
+two names on each line. A short touch still toggles the reaction; the
+long-press tooltip uses platform haptic feedback.
+
 ## Relevant code
 
 - `lib/src/features/mentions/`

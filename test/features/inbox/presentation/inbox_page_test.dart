@@ -15,6 +15,7 @@ import 'package:mattermost_flutter/src/features/inbox/domain/repositories/inbox_
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postponed_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
@@ -96,9 +97,9 @@ void main() {
   });
 
   testWidgets(
-    'renders sectioned list rows with icon actions and opens the tapped row',
+    'shows plain headers, update tags, markdown, and newest activity first',
     (WidgetTester tester) async {
-      await tester.binding.setSurfaceSize(const Size(1000, 1400));
+      await tester.binding.setSurfaceSize(const Size(1000, 1800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final List<InboxItem> items = _items();
       final _InboxRepository repository = _InboxRepository(
@@ -121,24 +122,145 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Mentions'), findsOneWidget);
-      expect(find.text('Bots & integrations'), findsOneWidget);
-      expect(find.text('Direct Messages'), findsOneWidget);
-      expect(find.text('Threads'), findsOneWidget);
-      expect(find.text('2 messages'), findsOneWidget);
-      expect(find.text('first DM'), findsNothing);
-      expect(find.text('second DM'), findsNothing);
-      expect(find.byType(Card), findsNothing);
-      expect(find.text('Open'), findsNothing);
-      expect(find.byTooltip('Mark as read'), findsNWidgets(4));
-      expect(find.byTooltip('Postpone'), findsNWidgets(4));
-      expect(find.byIcon(Icons.done), findsNWidgets(4));
-      expect(find.byIcon(Icons.schedule), findsNWidgets(4));
+      expect(find.text('Mentions'), findsNothing);
+      expect(find.text('Direct Messages'), findsNothing);
+      expect(find.text('Threads'), findsNothing);
+      expect(find.text('Thread in Town Square'), findsNothing);
+      expect(find.text('@dev-team in Town Square'), findsNothing);
+      expect(find.text('You mentioned in Town Square'), findsNothing);
+      expect(find.text('Direct message'), findsOneWidget);
+      expect(find.text('Town Square'), findsNWidgets(4));
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey<String>('inbox-source-thread:root')),
+            )
+            .data,
+        'Town Square',
+      );
+      expect(find.text('new replies, last one at'), findsOneWidget);
+      expect(find.text('new messages, last one at'), findsOneWidget);
+      expect(find.text('mentioned'), findsNWidgets(3));
+      expect(find.text('You'), findsNWidgets(2));
+      expect(find.text('@dev-team'), findsNWidgets(2));
+      expect(find.text('New post in a channel'), findsOneWidget);
+      expect(
+        tester
+            .getTopLeft(
+              find.byKey(
+                const ValueKey<String>('inbox-update-tag-thread:root-0-0'),
+              ),
+            )
+            .dx,
+        tester
+            .getTopLeft(
+              find.byKey(const ValueKey<String>('inbox-source-thread:root')),
+            )
+            .dx,
+      );
+      expect(find.byType(Card), findsNWidgets(5));
+      expect(find.byType(MattermostMarkdown), findsNWidgets(5));
+      expect(
+        tester
+            .widgetList<MattermostMarkdown>(find.byType(MattermostMarkdown))
+            .map((MattermostMarkdown markdown) => markdown.data),
+        contains('**latest DM**'),
+      );
+      expect(
+        find.byKey(const ValueKey<String>('inbox-update-tag-thread:root-0-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('inbox-update-tag-direct:dm:dm-1-0-0'),
+        ),
+        findsOneWidget,
+      );
+      final Finder threadCount = find.byKey(
+        const ValueKey<String>('inbox-update-tag-thread:root-0-0'),
+      );
+      final Finder threadTimestamp = find.byKey(
+        const ValueKey<String>('inbox-update-trailing-tag-thread:root-0-0'),
+      );
+      expect(
+        find
+            .ancestor(of: threadCount, matching: find.byType(Wrap))
+            .evaluate()
+            .single,
+        same(
+          find
+              .ancestor(of: threadTimestamp, matching: find.byType(Wrap))
+              .evaluate()
+              .single,
+        ),
+      );
+      expect(
+        find.byKey(const ValueKey<String>('unread-post:mention')),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<DecoratedBox>(
+              find.descendant(
+                of: find.byKey(
+                  const ValueKey<String>('inbox-update-tag-thread:root-1-0'),
+                ),
+                matching: find.byType(DecoratedBox),
+              ),
+            )
+            .decoration,
+        isA<BoxDecoration>().having(
+          (BoxDecoration decoration) => decoration.color,
+          'tag background',
+          isNotNull,
+        ),
+      );
+      expect(find.text('3'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text(InboxStrings.read), findsNWidgets(5));
+      expect(find.text(InboxStrings.postpone), findsNWidgets(5));
+
+      final List<String> newestFirst = <String>[
+        'direct:dm:dm-1',
+        'thread:root',
+        'post:group',
+        'post:mention',
+        'post:channel',
+      ];
+      final List<double> itemTops = newestFirst
+          .map(
+            (String key) => tester
+                .getTopLeft(find.byKey(ValueKey<String>('inbox-item-$key')))
+                .dy,
+          )
+          .toList();
+      expect(itemTops, orderedEquals(itemTops.toList()..sort()));
+
+      final Rect cardRect = tester.getRect(
+        find.ancestor(
+          of: find.byKey(const ValueKey<String>('inbox-item-post:mention')),
+          matching: find.byType(Card),
+        ),
+      );
+      final Finder read = find.byKey(
+        const ValueKey<String>('read-post:mention'),
+      );
+      final Finder postpone = find.byKey(
+        const ValueKey<String>('postpone-post:mention'),
+      );
+      expect(cardRect.contains(tester.getCenter(read)), isTrue);
+      expect(cardRect.contains(tester.getCenter(postpone)), isTrue);
+      expect(
+        tester
+            .widget<Card>(find.ancestor(of: read, matching: find.byType(Card)))
+            .elevation,
+        0,
+      );
 
       await tester.tap(
         find.byKey(const ValueKey<String>('inbox-item-post:mention')),
       );
-      expect(opened, same(items.first));
+      expect(opened, same(items[1]));
     },
   );
 
@@ -154,7 +276,7 @@ void main() {
             _InboxRepository(
               InboxSnapshot(
                 newItems: items,
-                postponedItems: <InboxItem>[items.first, items[2]],
+                postponedItems: <InboxItem>[items.first, items.last],
               ),
             ),
           ),
@@ -171,7 +293,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey<String>('inbox-new-count')))
           .data,
-      '5',
+      '6',
     );
     expect(
       tester
@@ -189,13 +311,13 @@ void main() {
     );
   });
 
-  testWidgets('shows the message text for a single direct message', (
+  testWidgets('uses only the channel name for non-person channel triggers', (
     WidgetTester tester,
   ) async {
     final InboxPostCandidate message = _candidate(
-      'only-dm',
-      'Only direct message',
-      direct: true,
+      'keyword',
+      'Keyword notification',
+      reason: InboxAttentionReason.keywordMention,
     );
     await tester.pumpWidget(
       ProviderScope(
@@ -204,14 +326,7 @@ void main() {
           inboxRepositoryProvider.overrideWithValue(
             _InboxRepository(
               InboxSnapshot(
-                newItems: <InboxItem>[
-                  DirectMessageBundleInboxItem(
-                    channelId: 'dm',
-                    authorId: 'other',
-                    automationClass: InboxAutomationClass.person,
-                    messages: <InboxPostCandidate>[message],
-                  ),
-                ],
+                newItems: <InboxItem>[ChannelPostInboxItem(candidate: message)],
               ),
             ),
           ),
@@ -224,14 +339,96 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Only direct message'), findsOneWidget);
-    expect(find.text('1 message'), findsNothing);
+    expect(find.text('Town Square'), findsOneWidget);
+    expect(find.text('You mentioned in Town Square'), findsNothing);
+  });
+
+  testWidgets('hides update details for a single direct message', (
+    WidgetTester tester,
+  ) async {
+    final InboxPostCandidate message = _candidate(
+      'single-dm',
+      'Only unread direct message',
+      direct: true,
+    );
+    final InboxItem item = DirectMessageBundleInboxItem(
+      channelId: 'dm',
+      authorId: 'other',
+      automationClass: InboxAutomationClass.person,
+      messages: <InboxPostCandidate>[message],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(
+            _InboxRepository(InboxSnapshot(newItems: <InboxItem>[item])),
+          ),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('inbox-updates-direct:dm:single-dm')),
+      findsNothing,
+    );
+    expect(find.text('new message, last one at'), findsNothing);
+    expect(find.text('Only unread direct message'), findsOneWidget);
+  });
+
+  testWidgets('compact and expanded layouts support large text', (
+    WidgetTester tester,
+  ) async {
+    final InboxItem item = ChannelPostInboxItem(
+      candidate: _candidate(
+        'adaptive',
+        '**Readable** at a large text scale',
+        sentAt: DateTime.utc(2026, 9, 7),
+      ),
+    );
+    Future<void> pumpAt(Size size) async {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authSessionProvider.overrideWithValue(_session),
+            inboxRepositoryProvider.overrideWithValue(
+              _InboxRepository(InboxSnapshot(newItems: <InboxItem>[item])),
+            ),
+            postponedRepositoryProvider.overrideWithValue(
+              const _PostponedRepository(),
+            ),
+          ],
+          child: MediaQuery(
+            data: MediaQueryData(size: size, textScaler: TextScaler.linear(2)),
+            child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpAt(const Size(360, 900));
+    final double compactWidth = tester.getSize(find.byType(Card).first).width;
+    expect(compactWidth, lessThanOrEqualTo(344));
+
+    await pumpAt(const Size(1200, 900));
+    final double expandedWidth = tester.getSize(find.byType(Card).first).width;
+    expect(expandedWidth, lessThanOrEqualTo(760));
+    expect(expandedWidth, greaterThan(compactWidth));
   });
 
   testWidgets('read action marks the item without opening its row', (
     WidgetTester tester,
   ) async {
-    final InboxItem mention = _items().first;
+    final InboxItem mention = _items()[1];
     final _InboxRepository repository = _InboxRepository(
       InboxSnapshot(newItems: <InboxItem>[mention]),
     );
@@ -259,6 +456,43 @@ void main() {
     expect(opened, isNull);
     expect(find.text('No new messages'), findsOneWidget);
   });
+
+  testWidgets('postpone and remove actions update the postponed preference', (
+    WidgetTester tester,
+  ) async {
+    final InboxItem item = ChannelPostInboxItem(
+      candidate: _candidate('later', 'Review later'),
+    );
+    final _RecordingPostponedRepository postponed =
+        _RecordingPostponedRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(
+            _InboxRepository(InboxSnapshot(newItems: <InboxItem>[item])),
+          ),
+          postponedRepositoryProvider.overrideWithValue(postponed),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('postpone-post:later')));
+    await tester.pumpAndSettle();
+
+    expect(postponed.saved.single.postId, 'later');
+    expect(find.text(InboxStrings.emptyNew), findsOneWidget);
+
+    await tester.tap(find.text(InboxStrings.postponed));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('remove-post:later')));
+    await tester.pumpAndSettle();
+
+    expect(postponed.removed.single.postId, 'later');
+    expect(find.text(InboxStrings.emptyPostponed), findsOneWidget);
+  });
 }
 
 final AuthSession _session = AuthSession(
@@ -268,42 +502,61 @@ final AuthSession _session = AuthSession(
 );
 
 List<InboxItem> _items() {
-  final InboxPostCandidate mention = _candidate('mention', 'mention');
-  final InboxPostCandidate bot = _candidate(
-    'bot',
-    'bot message',
-    fromBot: true,
+  final InboxPostCandidate channel = _candidate(
+    'channel',
+    'Channel notification',
+    reason: InboxAttentionReason.allMessagesSubscription,
+    sentAt: DateTime.utc(2026, 9),
+  );
+  final InboxPostCandidate mention = _candidate(
+    'mention',
+    'Please read **this**',
+    sentAt: DateTime.utc(2026, 9, 2),
+  );
+  final InboxPostCandidate group = _candidate(
+    'group',
+    '@dev-team please review',
+    reason: InboxAttentionReason.groupMention,
+    groupMentionHandle: '@dev-team',
+    sentAt: DateTime.utc(2026, 9, 3),
   );
   final InboxPostCandidate firstDm = _candidate(
     'dm-1',
     'first DM',
     direct: true,
+    sentAt: DateTime.utc(2026, 9, 4),
   );
   final InboxPostCandidate secondDm = _candidate(
     'dm-2',
-    'second DM',
+    '**latest DM**',
     direct: true,
+    sentAt: DateTime.utc(2026, 9, 5),
   );
   return <InboxItem>[
+    ChannelPostInboxItem(candidate: channel),
     ChannelPostInboxItem(candidate: mention),
-    ChannelPostInboxItem(candidate: bot),
+    ThreadInboxItem(
+      thread: FollowedThread(
+        root: _post('root', 'thread root', sentAt: DateTime.utc(2026, 9, 3)),
+        replyCount: 5,
+        lastReplyAt: DateTime.utc(2026, 9, 4),
+        lastViewedAt: DateTime.utc(2026, 9, 3),
+        unreadReplies: 3,
+        unreadMentions: 1,
+      ),
+      channel: _channel(),
+      teamId: 'team',
+      unreadMentionDetails: InboxThreadMentionDetails(
+        mentionsCurrentUser: true,
+        groupMentionHandles: const <String>['@dev-team'],
+      ),
+    ),
+    ChannelPostInboxItem(candidate: group),
     DirectMessageBundleInboxItem(
       channelId: 'dm',
       authorId: 'other',
       automationClass: InboxAutomationClass.person,
       messages: <InboxPostCandidate>[firstDm, secondDm],
-    ),
-    ThreadInboxItem(
-      thread: FollowedThread(
-        root: _post('root', 'thread root'),
-        replyCount: 1,
-        lastReplyAt: DateTime.utc(2026, 9, 4),
-        lastViewedAt: DateTime.utc(2026, 9, 3),
-        unreadReplies: 1,
-        unreadMentions: 1,
-      ),
-      channel: _channel(),
-      teamId: 'team',
     ),
   ];
 }
@@ -312,21 +565,26 @@ InboxPostCandidate _candidate(
   String id,
   String message, {
   bool direct = false,
-  bool fromBot = false,
+  InboxAttentionReason reason = InboxAttentionReason.directMention,
+  String? groupMentionHandle,
+  DateTime? sentAt,
 }) => InboxPostCandidate(
-  post: _post(id, message, direct: direct),
+  post: _post(id, message, direct: direct, sentAt: sentAt),
   channel: _channel(direct: direct),
-  reason: direct
-      ? InboxAttentionReason.allMessagesSubscription
-      : InboxAttentionReason.directMention,
-  isFromBot: fromBot,
+  reason: direct ? InboxAttentionReason.allMessagesSubscription : reason,
+  groupMentionHandle: groupMentionHandle,
 );
 
-Post _post(String id, String message, {bool direct = false}) => Post(
+Post _post(
+  String id,
+  String message, {
+  bool direct = false,
+  DateTime? sentAt,
+}) => Post(
   id: id,
   channelId: direct ? 'dm' : 'channel',
   author: const PostAuthor(id: 'other', displayName: 'Other'),
-  sentAt: DateTime.utc(2026, 9, 4),
+  sentAt: sentAt ?? DateTime.utc(2026, 9, 4),
   message: message,
 );
 
@@ -334,7 +592,7 @@ SidebarChannel _channel({bool direct = false}) => SidebarChannel(
   id: direct ? 'dm' : 'channel',
   teamId: 'team',
   name: direct ? 'dm' : 'channel',
-  displayName: direct ? 'DM' : 'Channel',
+  displayName: direct ? 'Other' : 'Town Square',
   kind: direct ? ChannelKind.directMessage : ChannelKind.publicChannel,
 );
 
@@ -382,4 +640,26 @@ final class _PostponedRepository extends PostponedRepository {
     required AuthSession session,
     required List<PostponedReference> references,
   }) async {}
+}
+
+final class _RecordingPostponedRepository extends PostponedRepository {
+  final List<PostponedReference> saved = <PostponedReference>[];
+  final List<PostponedReference> removed = <PostponedReference>[];
+
+  @override
+  Future<PostponedReferencesSnapshot> load({
+    required AuthSession session,
+  }) async => PostponedReferencesSnapshot(const <PostponedReference>[]);
+
+  @override
+  Future<void> remove({
+    required AuthSession session,
+    required List<PostponedReference> references,
+  }) async => removed.addAll(references);
+
+  @override
+  Future<void> save({
+    required AuthSession session,
+    required List<PostponedReference> references,
+  }) async => saved.addAll(references);
 }

@@ -131,6 +131,19 @@ final userProfileProvider = FutureProvider.autoDispose
       );
     });
 
+final reactionUsersProvider = FutureProvider.autoDispose
+    .family<List<UserSummary>, String>((Ref ref, String lookupKey) {
+      final List<String> userIds = lookupKey.isEmpty
+          ? const <String>[]
+          : lookupKey.split('\u0000');
+      if (userIds.isEmpty) return const <UserSummary>[];
+      final RequestCancellation cancellation = RequestCancellation();
+      ref.onDispose(cancellation.cancel);
+      return cancellation.run(
+        () => ref.watch(userRepositoryProvider).getUsers(userIds),
+      );
+    });
+
 final AsyncNotifierProvider<
   CurrentUserProfileController,
   CurrentUserProfileViewState

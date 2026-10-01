@@ -22,4 +22,23 @@ abstract class InboxRepository {
     required AuthSession session,
     required InboxItem item,
   });
+
+  /// Marks a followed thread and its root post read as one Inbox action.
+  ///
+  /// When [preserveOtherChannelRoots] is true, implementations must retain the
+  /// containing channel's other unread roots and suppress only this root.
+  Future<void> markThreadRead({
+    required AuthSession session,
+    required ThreadInboxItem item,
+    required bool preserveOtherChannelRoots,
+  }) => markRead(session: session, item: item);
+
+  /// Dismisses only [item] without advancing the containing channel boundary.
+  ///
+  /// Implementations without individual-post persistence retain their previous
+  /// whole-channel behavior.
+  Future<void> markPostViewed({
+    required AuthSession session,
+    required ChannelPostInboxItem item,
+  }) => markRead(session: session, item: item);
 }

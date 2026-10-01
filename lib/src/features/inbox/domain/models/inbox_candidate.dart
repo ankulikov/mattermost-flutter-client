@@ -16,6 +16,39 @@ enum InboxAttentionReason {
 /// Whether a direct message was sent by a person or an automation.
 enum InboxAutomationClass { person, automation }
 
+/// Reconstructed reasons for unread mentions inside a followed thread.
+///
+/// CRT provides the authoritative unread-mention count but not the matching
+/// reply IDs or mention kinds. The data layer hydrates unread replies and
+/// records every reason it can reconstruct without guessing about the rest.
+final class InboxThreadMentionDetails {
+  InboxThreadMentionDetails({
+    this.mentionsCurrentUser = false,
+    this.mentionsChannel = false,
+    Iterable<String> groupMentionHandles = const <String>[],
+    this.unclassifiedCount = 0,
+  }) : groupMentionHandles = UnmodifiableListView<String>(
+         (groupMentionHandles
+             .map((String handle) => handle.trim())
+             .where((String handle) => handle.isNotEmpty)
+             .toSet()
+             .toList()
+           ..sort()),
+       ),
+       assert(unclassifiedCount >= 0);
+
+  final bool mentionsCurrentUser;
+  final bool mentionsChannel;
+  final List<String> groupMentionHandles;
+  final int unclassifiedCount;
+
+  bool get hasMentions =>
+      mentionsCurrentUser ||
+      mentionsChannel ||
+      groupMentionHandles.isNotEmpty ||
+      unclassifiedCount > 0;
+}
+
 /// A post projection with Inbox-only eligibility metadata.
 ///
 /// Transport mappers decide [reason] from server mention data or the notification
@@ -25,6 +58,7 @@ final class InboxPostCandidate {
     required this.post,
     required this.channel,
     required this.reason,
+    this.groupMentionHandle,
     this.isIncoming = true,
     this.isSystem = false,
     this.isSilentNotification = false,
@@ -36,6 +70,11 @@ final class InboxPostCandidate {
   final Post post;
   final SidebarChannel channel;
   final InboxAttentionReason reason;
+
+  /// The exact matched user-group slug prefixed with `@`.
+  ///
+  /// This is non-null only when [reason] is [InboxAttentionReason.groupMention].
+  final String? groupMentionHandle;
   final bool isIncoming;
   final bool isSystem;
   final bool isSilentNotification;
@@ -65,6 +104,7 @@ final class InboxThreadCandidate {
     required this.channel,
     required this.teamId,
     this.rootAttentionReason,
+    this.unreadMentionDetails,
     this.hasNewExplicitMention = false,
   });
 
@@ -74,9 +114,13 @@ final class InboxThreadCandidate {
 
   /// The attention reason of the root post, when it can be reconstructed.
   ///
-  /// This survives canonicalization so a thread whose root introduced an
-  /// Inbox mention can remain in Mentions until a later reply needs attention.
+  /// This survives canonicalization so presentation and queue reconciliation
+  /// retain the root's original attention reason.
   final InboxAttentionReason? rootAttentionReason;
+
+  /// The reconstructable mention kinds found in replies newer than the CRT
+  /// read boundary. A null value means the thread has no unread mentions.
+  final InboxThreadMentionDetails? unreadMentionDetails;
 
   /// True only when the incoming thread update is an explicit mention. It lets
   /// that mention reactivate an otherwise postponed thread.

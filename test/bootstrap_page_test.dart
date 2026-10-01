@@ -477,20 +477,31 @@ void main() {
     expect(find.text('Inbox'), findsWidgets);
     expect(find.text('New'), findsOneWidget);
     expect(find.text('Postponed'), findsOneWidget);
-    expect(find.text('Group mention'), findsOneWidget);
+    expect(find.text('@dev-team'), findsOneWidget);
+    expect(find.text('mentioned'), findsOneWidget);
     expect(find.text('Inbox message'), findsOneWidget);
-    expect(find.byTooltip('Postpone'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('postpone-post:inbox-post')),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.byTooltip('Postpone'));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('postpone-post:inbox-post')),
+    );
     await tester.pumpAndSettle();
     expect(find.text('No new messages'), findsOneWidget);
 
     await tester.tap(find.text('Postponed'));
     await tester.pumpAndSettle();
     expect(find.text('Inbox message'), findsOneWidget);
-    expect(find.byTooltip('Remove'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('remove-post:inbox-post')),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.byTooltip('Remove'));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('remove-post:inbox-post')),
+    );
     await tester.pumpAndSettle();
     expect(find.text('No postponed messages'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -2179,6 +2190,7 @@ final class _InboxTestRepository extends InboxRepository {
       ),
       channel: channel,
       reason: InboxAttentionReason.groupMention,
+      groupMentionHandle: '@dev-team',
     );
     return InboxSnapshot(
       newItems: <InboxItem>[ChannelPostInboxItem(candidate: candidate)],
