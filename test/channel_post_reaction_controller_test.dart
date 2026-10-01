@@ -49,6 +49,7 @@ void main() {
         .single;
     expect(reaction.count, 3);
     expect(reaction.reactedByCurrentUser, isTrue);
+    expect(reaction.userIds, <String>['ada', 'grace', 'me']);
     expect(posts.added, <String>['post-1:party_parrot']);
 
     expect(
@@ -67,6 +68,7 @@ void main() {
         .single;
     expect(reaction.count, 2);
     expect(reaction.reactedByCurrentUser, isFalse);
+    expect(reaction.userIds, <String>['ada', 'grace']);
     expect(posts.removed, <String>['post-1:party_parrot']);
 
     posts.failAdd = true;
@@ -86,6 +88,7 @@ void main() {
         .single;
     expect(reaction.count, 2);
     expect(reaction.reactedByCurrentUser, isFalse);
+    expect(reaction.userIds, <String>['ada', 'grace']);
   });
 
   test(
@@ -150,6 +153,7 @@ final class _PostRepository extends PostRepository {
             emoji: ':party_parrot:',
             emojiName: 'party_parrot',
             count: 2,
+            userIds: <String>['ada', 'grace'],
           ),
         ],
       ),

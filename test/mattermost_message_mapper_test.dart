@@ -35,6 +35,7 @@ void main() {
     expect(mapped.reactions.single.emoji, '🟢');
     expect(mapped.reactions.single.emojiName, 'large_green_circle');
     expect(mapped.reactions.single.reactedByCurrentUser, isTrue);
+    expect(mapped.reactions.single.userIds, <String>['ada']);
   });
 
   test('carries active custom emoji metadata into the message snapshot', () {
@@ -292,9 +293,10 @@ void main() {
       },
     });
 
-    final List<RichAttachmentAction> actions = _mapSingle(
-      post,
-    ).richAttachments.single.actions;
+    final List<RichAttachmentAction> actions = _mapSingle(post)
+        .richAttachments
+        .single
+        .actions;
     expect(
       actions.whereType<RichAttachmentButtonAction>().map(
         (RichAttachmentButtonAction action) => action.style,

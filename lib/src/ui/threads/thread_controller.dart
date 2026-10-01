@@ -319,7 +319,13 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
       (PostReaction reaction) =>
           reaction.emojiName == emojiName && reaction.reactedByCurrentUser,
     );
-    replacePost(toggleCurrentUserReaction(original, emojiName));
+    replacePost(
+      toggleCurrentUserReaction(
+        original,
+        emojiName,
+        currentUserId: session.userId,
+      ),
+    );
     try {
       if (remove) {
         await _cancellation.run(

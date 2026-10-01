@@ -11,6 +11,7 @@ import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
+import 'package:mattermost_flutter/src/ui/messages/message_actions_strings.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_avatar_image.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
@@ -274,7 +275,7 @@ Future<void> _openDirectMessage(
   if (context.mounted) context.go('/');
 }
 
-class MessageReactions extends StatelessWidget {
+class MessageReactions extends ConsumerWidget {
   const MessageReactions({
     required this.post,
     required this.semanticsLabel,
@@ -287,22 +288,61 @@ class MessageReactions extends StatelessWidget {
   final Future<void> Function(PostReaction reaction) onToggle;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: semanticsLabel,
-    child: Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: post.reactions
-          .map(
-            (PostReaction reaction) => _ReactionButton(
-              reaction: reaction,
-              customEmoji: _customEmojiFor(post, reaction),
-              onPressed: () => unawaited(onToggle(reaction)),
-            ),
-          )
-          .toList(growable: false),
-    ),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final List<String> userIds = post.reactions
+        .expand((PostReaction reaction) => reaction.userIds)
+        .toSet()
+        .toList(growable: false);
+    final AsyncValue<List<UserSummary>> users = ref.watch(
+      reactionUsersProvider(userIds.join('\u0000')),
+    );
+    final Map<String, String> namesById = users.maybeWhen(
+      data: (List<UserSummary> values) => <String, String>{
+        for (final UserSummary user in values) user.id: user.fullName,
+      },
+      orElse: () => const <String, String>{},
+    );
+    return Semantics(
+      label: semanticsLabel,
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: post.reactions
+            .map(
+              (PostReaction reaction) => _ReactionButton(
+                reaction: reaction,
+                customEmoji: _customEmojiFor(post, reaction),
+                tooltipMessage: _reactionTooltip(reaction, namesById),
+                onPressed: () => unawaited(onToggle(reaction)),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  static String _reactionTooltip(
+    PostReaction reaction,
+    Map<String, String> namesById,
+  ) {
+    if (reaction.userIds.isEmpty) {
+      return MessageActionsStrings.reactionCount(
+        reaction.count,
+        reaction.emoji,
+      );
+    }
+    final List<String> names = reaction.userIds
+        .map((String userId) => namesById[userId] ?? userId)
+        .toList(growable: false);
+    final List<String> rows = <String>[];
+    for (var index = 0; index < names.length; index += 2) {
+      rows.add(names.skip(index).take(2).join(', '));
+    }
+    return MessageActionsStrings.reactionPeople(
+      rows.join('\n'),
+      reaction.emoji,
+    );
+  }
 
   static CustomEmojiReference? _customEmojiFor(
     ChannelPost post,
@@ -323,11 +363,13 @@ class _ReactionButton extends StatelessWidget {
   const _ReactionButton({
     required this.reaction,
     required this.customEmoji,
+    required this.tooltipMessage,
     required this.onPressed,
   });
 
   final PostReaction reaction;
   final CustomEmojiReference? customEmoji;
+  final String tooltipMessage;
   final VoidCallback onPressed;
 
   @override
@@ -339,52 +381,57 @@ class _ReactionButton extends StatelessWidget {
     final Color border = reaction.reactedByCurrentUser
         ? colors.primary
         : colors.outlineVariant;
-    return Semantics(
-      button: true,
-      selected: reaction.reactedByCurrentUser,
-      label: '${reaction.emoji}: ${reaction.count}',
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            key: ValueKey<String>('reaction-${reaction.emojiName}'),
-            behavior: HitTestBehavior.opaque,
-            onTap: onPressed,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: DecoratedBox(
-                key: ValueKey<String>('reaction-chip-${reaction.emojiName}'),
-                decoration: BoxDecoration(
-                  color: background,
-                  border: Border.all(
-                    color: border,
-                    width: reaction.reactedByCurrentUser ? 1.5 : 1,
+    return Tooltip(
+      key: ValueKey<String>('reaction-tooltip-${reaction.emojiName}'),
+      message: tooltipMessage,
+      enableFeedback: true,
+      child: Semantics(
+        button: true,
+        selected: reaction.reactedByCurrentUser,
+        label: '${reaction.emoji}: ${reaction.count}',
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              key: ValueKey<String>('reaction-${reaction.emojiName}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onPressed,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: DecoratedBox(
+                  key: ValueKey<String>('reaction-chip-${reaction.emojiName}'),
+                  decoration: BoxDecoration(
+                    color: background,
+                    border: Border.all(
+                      color: border,
+                      width: reaction.reactedByCurrentUser ? 1.5 : 1,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                      if (customEmoji case final CustomEmojiReference emoji)
-                        _CustomEmojiReaction(reference: emoji)
-                      else
-                        _ReactionEmojiGlyph(
-                          emoji: reaction.emoji,
-                          emojiName: reaction.emojiName,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        if (customEmoji case final CustomEmojiReference emoji)
+                          _CustomEmojiReaction(reference: emoji)
+                        else
+                          _ReactionEmojiGlyph(
+                            emoji: reaction.emoji,
+                            emojiName: reaction.emojiName,
+                          ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '${reaction.count}',
+                          style: Theme.of(context).textTheme.labelMedium,
                         ),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${reaction.count}',
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

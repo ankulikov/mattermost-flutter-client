@@ -116,6 +116,10 @@ List<PostReaction> _mapReactions(MattermostPostDto post, String currentUserId) {
             (MattermostReactionDto reaction) =>
                 reaction.userId == currentUserId,
           ),
+          userIds: entry.value
+              .map((MattermostReactionDto reaction) => reaction.userId)
+              .where((String userId) => userId.isNotEmpty)
+              .toList(growable: false),
         ),
       )
       .toList(growable: false);
