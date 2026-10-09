@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 
 enum PostThreadDirection { up, down }
@@ -176,6 +178,15 @@ abstract interface class MattermostApi {
 
   /// Creates a channel post or a threaded reply through the REST API.
   Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post);
+
+  /// Uploads one file and returns its server-confirmed ID.
+  Future<String> uploadFile({
+    required String channelId,
+    required String name,
+    required int length,
+    required Stream<Uint8List> stream,
+    required void Function(int sent, int total) onProgress,
+  }) => throw UnimplementedError();
 
   /// Permanently deletes a post the authenticated user is allowed to delete.
   Future<void> deletePost(String postId) => throw UnimplementedError();

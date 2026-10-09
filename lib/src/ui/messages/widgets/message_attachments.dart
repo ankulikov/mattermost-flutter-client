@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
 import 'package:mattermost_flutter/src/ui/messages/attachment_strings.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/file_attachment_presentation.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class MessageAttachments extends ConsumerWidget {
@@ -228,22 +229,12 @@ class _FileIcon extends StatelessWidget {
     ),
     child: Center(
       child: Icon(
-        _iconForExtension(extension),
+        attachmentFileIcon(extension),
         size: 34,
         color: Theme.of(context).colorScheme.onPrimaryContainer,
       ),
     ),
   );
-
-  IconData _iconForExtension(String extension) => switch (extension
-      .toLowerCase()) {
-    'pdf' => Icons.picture_as_pdf_outlined,
-    'zip' || 'tar' || 'gz' || '7z' => Icons.folder_zip_outlined,
-    'mp3' || 'wav' || 'ogg' => Icons.audio_file_outlined,
-    'mp4' || 'mov' || 'webm' => Icons.video_file_outlined,
-    'html' || 'htm' || 'js' || 'dart' || 'json' || 'xml' => Icons.code_outlined,
-    _ => Icons.insert_drive_file_outlined,
-  };
 }
 
 class _AttachmentImage extends ConsumerWidget {
@@ -573,14 +564,5 @@ String _fileDescription(PostAttachment attachment) {
   final String type = attachment.extension.isEmpty
       ? (attachment.mimeType.isEmpty ? 'FILE' : attachment.mimeType)
       : attachment.extension.toUpperCase();
-  return '$type ${_formatFileSize(attachment.size)}';
-}
-
-String _formatFileSize(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  final double kilobytes = bytes / 1024;
-  if (kilobytes < 1024) return '${kilobytes.toStringAsFixed(0)} KB';
-  final double megabytes = kilobytes / 1024;
-  if (megabytes < 1024) return '${megabytes.toStringAsFixed(1)} MB';
-  return '${(megabytes / 1024).toStringAsFixed(1)} GB';
+  return '$type ${formatAttachmentFileSize(attachment.size)}';
 }

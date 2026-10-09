@@ -291,6 +291,7 @@ final class ChannelPostsController
   Future<ChannelPost> sendText({
     required String message,
     required String pendingPostId,
+    List<String> fileIds = const <String>[],
   }) async {
     final AuthSession? session = _session;
     final PostRepository? repository = _repository;
@@ -303,11 +304,12 @@ final class ChannelPostsController
     _sendRunning = true;
     try {
       final ChannelPost sent = await _cancellation.run(
-        () => repository.sendText(
+        () => repository.sendPost(
           session: session,
           channelId: channelId,
           message: message,
           pendingPostId: pendingPostId,
+          fileIds: fileIds,
         ),
       );
       final ChannelPostsViewState? latest = state.value;

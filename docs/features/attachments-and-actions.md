@@ -11,6 +11,12 @@ is not stored locally. Thumbnails, previews, and originals load through
 authenticated `MattermostApi` requests; widgets never receive a token or a raw
 HTTP client.
 
+New posts and replies upload selected files through the authenticated API and
+pass their ordered IDs in `file_ids` when creating the post. Upload state and
+picked sources are never persisted. Removing a completed tile detaches its ID
+from the pending post; the public API does not provide immediate draft-file
+deletion.
+
 A single image receives a large preview. Multiple files use compact cards, and
 the full-screen viewer pages through images from one post. Images support pinch
 zoom and panning up to 5x; page swiping pauses while an image is enlarged, and

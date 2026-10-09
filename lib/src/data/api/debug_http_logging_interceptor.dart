@@ -74,7 +74,7 @@ final class DebugHttpLoggingInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    if (kDebugMode && err.response != null) {
+    if (kDebugMode && err.response != null && !_isUpload(err.requestOptions)) {
       _logResponse(err.response!.data);
     }
     handler.next(err);
@@ -86,7 +86,9 @@ final class DebugHttpLoggingInterceptor extends Interceptor {
       _log(<String, Object?>{
         'method': options.method,
         'url': _sanitizeUrl(options.uri),
-        'payload': _normalizePayload(options.data),
+        'payload': _isUpload(options)
+            ? _omittedBinary
+            : _normalizePayload(options.data),
       });
     }
     handler.next(options);
@@ -98,7 +100,7 @@ final class DebugHttpLoggingInterceptor extends Interceptor {
     ResponseInterceptorHandler handler,
   ) {
     if (kDebugMode) {
-      _logResponse(response.data);
+      if (!_isUpload(response.requestOptions)) _logResponse(response.data);
     }
     handler.next(response);
   }
@@ -107,6 +109,9 @@ final class DebugHttpLoggingInterceptor extends Interceptor {
 
   void _logResponse(Object? data) =>
       _log(<String, Object?>{'payload': _normalizePayload(data)});
+
+  static bool _isUpload(RequestOptions options) =>
+      options.uri.path.endsWith('/api/v4/files');
 
   static Object? _normalizePayload(Object? value) {
     if (value is String) {

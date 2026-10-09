@@ -10,6 +10,15 @@ Posts and replies use `POST /api/v4/posts`. Replies include `root_id`. The
 composer creates `pending_post_id` and reuses it when the same failed draft is
 retried manually. A send in progress blocks duplicate submission.
 
+The paperclip selects up to five files per post. Each selection starts one
+`POST /api/v4/files` request per file, with at most two running together. The
+composer keeps ordered file tiles and server-confirmed IDs in volatile state
+scoped to the account, channel, and thread root. Send stays unavailable while
+any tile is queued, uploading, finalizing, or failed. A failed tile must be
+retried or removed. Attachment-only posts are supported. A failed post keeps
+its text, file IDs, and pending post ID for manual retry without reuploading.
+Removing or closing a composer cancels its in-flight requests.
+
 Enter sends the message. Shift+Enter inserts a line break. The draft clears
 only after a successful REST response. A failure leaves the draft and shows a
 non-blocking error.

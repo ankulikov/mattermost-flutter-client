@@ -38,6 +38,30 @@ void main() {
     expect(sent.rootId, 'root-1');
     expect(sent.author.displayName, 'current-user');
   });
+
+  test('sends an attachment-only reply with ordered IDs', () async {
+    final api = _CreatePostApi();
+    final sender = MattermostPostRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
+    );
+    final session = AuthSession(
+      serverUrl: Uri.parse('https://chat.example.com'),
+      userId: 'me',
+      username: 'current-user',
+    );
+    await sender.sendPost(
+      session: session,
+      channelId: 'channel-1',
+      rootPostId: 'root-1',
+      message: '',
+      pendingPostId: 'pending-1',
+      fileIds: <String>['first', 'second'],
+    );
+    expect(api.request?.fileIds, <String>['first', 'second']);
+    expect(api.request?.rootId, 'root-1');
+  });
 }
 
 final class _CreatePostApi extends Fake implements MattermostApi {

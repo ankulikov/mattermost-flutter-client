@@ -222,10 +222,25 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                 teamId: channel.teamId,
                 channelId: channel.id,
                 accountId: session?.durableDataScopeId ?? '',
+                uploadFilePickerFactory: session == null
+                    ? null
+                    : () => ref.read(uploadFilePickerProvider),
+                fileUploadRepositoryFactory: session == null
+                    ? null
+                    : () => ref.read(fileUploadRepositoryProvider),
                 onSubmit: (String message, String pendingPostId) async {
                   await ref
                       .read(_postsProvider.notifier)
                       .sendText(message: message, pendingPostId: pendingPostId);
+                },
+                onSubmitWithFiles: (message, pendingPostId, fileIds) async {
+                  await ref
+                      .read(_postsProvider.notifier)
+                      .sendText(
+                        message: message,
+                        pendingPostId: pendingPostId,
+                        fileIds: fileIds,
+                      );
                 },
               ),
           ],
