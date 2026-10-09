@@ -27,8 +27,8 @@ abstract final class InboxStrings {
   static const String channelMention = '@channel';
   static const String newPostInChannel = 'New post in a channel';
   static const String groupMentionFallback = 'Group mention';
-  static String newMessagesWithLastOneAt(int count) =>
-      '${count == 1 ? 'new message' : 'new messages'}, last one at';
+  static String messagesSince(int count) =>
+      '${count == 1 ? 'message' : 'messages'} since';
   static String newRepliesWithLastOneAt(int count) =>
       '${count == 1 ? 'new reply' : 'new replies'}, last one at';
   static String tabWithMessageCount(String tab, int count) =>
