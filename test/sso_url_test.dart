@@ -18,7 +18,7 @@ void main() {
       );
     });
 
-    test('allows HTTP only for local development servers', () {
+    test('preserves explicit HTTP origins', () {
       expect(
         tryNormalizeMattermostServerUrl('http://localhost:8065/mattermost'),
         Uri.parse('http://localhost:8065/mattermost'),
@@ -29,7 +29,7 @@ void main() {
       );
       expect(
         tryNormalizeMattermostServerUrl('http://chat.example.com'),
-        isNull,
+        Uri.parse('http://chat.example.com'),
       );
     });
 

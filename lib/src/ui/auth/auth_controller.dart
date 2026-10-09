@@ -47,6 +47,7 @@ final class AuthController extends Notifier<AuthState> {
 
   final Provider<AuthRepository> _repositoryProvider;
   int _attemptId = 0;
+  String? _lastDiscoveryAddress;
 
   @override
   AuthState build() {
@@ -77,41 +78,55 @@ final class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> discoverServer(String rawServerUrl) async {
-    final Uri serverUrl;
+    final List<Uri> serverUrls;
     try {
-      serverUrl = const NormalizeServerUrl()(rawServerUrl);
+      serverUrls = const NormalizeServerUrl().candidates(rawServerUrl);
     } on AuthFailure catch (error) {
       state = AuthState(failure: error.kind);
       return;
     }
 
     final int attemptId = ++_attemptId;
-    state = AuthState(phase: AuthPhase.discoveringServer, serverUrl: serverUrl);
-    try {
-      final AuthenticationMethods methods = await ref
-          .read(_repositoryProvider)
-          .discoverAuthenticationMethods(serverUrl: serverUrl);
-      if (!_isCurrent(attemptId)) return;
+    _lastDiscoveryAddress = rawServerUrl;
+    for (int index = 0; index < serverUrls.length; index += 1) {
+      final Uri serverUrl = serverUrls[index];
       state = AuthState(
-        phase: AuthPhase.choosingSso,
+        phase: AuthPhase.discoveringServer,
         serverUrl: serverUrl,
-        ssoOptions: methods.ssoOptions,
-        passwordLoginEnabled: methods.passwordLoginEnabled,
       );
-    } on AuthFailure catch (error) {
-      if (!_isCurrent(attemptId)) return;
-      state = AuthState(serverUrl: serverUrl, failure: error.kind);
+      try {
+        final AuthenticationMethods methods = await ref
+            .read(_repositoryProvider)
+            .discoverAuthenticationMethods(serverUrl: serverUrl);
+        if (!_isCurrent(attemptId)) return;
+        state = AuthState(
+          phase: AuthPhase.choosingSso,
+          serverUrl: serverUrl,
+          ssoOptions: methods.ssoOptions,
+          passwordLoginEnabled: methods.passwordLoginEnabled,
+        );
+        return;
+      } on AuthFailure catch (error) {
+        if (!_isCurrent(attemptId)) return;
+        if (error.kind == AuthFailureKind.network &&
+            index < serverUrls.length - 1) {
+          continue;
+        }
+        state = AuthState(serverUrl: serverUrl, failure: error.kind);
+        return;
+      }
     }
   }
 
   Future<void> retryDiscovery() async {
     final Uri? serverUrl = state.serverUrl;
     if (serverUrl == null) return;
-    await discoverServer(serverUrl.toString());
+    await discoverServer(_lastDiscoveryAddress ?? serverUrl.toString());
   }
 
   void changeServer() {
     _attemptId += 1;
+    _lastDiscoveryAddress = null;
     state = const AuthState();
   }
 

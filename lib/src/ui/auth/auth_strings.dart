@@ -3,7 +3,7 @@ abstract final class AuthStrings {
   static const String description =
       'Укажите адрес Mattermost-сервера, чтобы выбрать доступный способ входа.';
   static const String serverLabel = 'Адрес сервера';
-  static const String serverHint = 'https://mattermost.example.com';
+  static const String serverHint = 'mattermost.example.com';
   static const String continueLabel = 'Продолжить';
   static const String chooseMethod = 'Выберите способ входа';
   static const String loginWithToken = 'Войти по токену';
@@ -32,7 +32,7 @@ abstract final class AuthStrings {
       'Сессия недействительна или была отозвана. Войдите снова.';
   static const String networkError =
       'Не удалось связаться с сервером. Проверьте адрес и подключение.';
-  static const String invalidInput = 'Укажите корректный HTTPS-адрес сервера.';
+  static const String invalidInput = 'Укажите корректный адрес сервера.';
   static const String storageError = 'Не удалось безопасно сохранить сессию.';
   static const String ssoUnavailable =
       'На этом сервере не включены поддерживаемые способы единого входа.';

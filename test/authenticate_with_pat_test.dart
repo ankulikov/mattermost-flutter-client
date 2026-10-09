@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
@@ -22,23 +21,14 @@ void main() {
     expect(repository.token, 'secret');
   });
 
-  test('rejects insecure non-local server URL without calling repository', () {
+  test('delegates an explicit HTTP server URL', () async {
     final _FakeAuthRepository repository = _FakeAuthRepository();
 
-    expect(
-      () => AuthenticateWithSessionToken(repository)(
-        serverUrl: 'http://chat.example.com',
-        token: 'secret',
-      ),
-      throwsA(
-        isA<AuthFailure>().having(
-          (AuthFailure error) => error.kind,
-          'kind',
-          AuthFailureKind.invalidServer,
-        ),
-      ),
+    await AuthenticateWithSessionToken(repository)(
+      serverUrl: 'http://chat.example.com',
+      token: 'secret',
     );
-    expect(repository.serverUrl, isNull);
+    expect(repository.serverUrl, Uri.parse('http://chat.example.com'));
   });
 }
 

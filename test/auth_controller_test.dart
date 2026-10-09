@@ -109,6 +109,48 @@ void main() {
     expect(repository.token, 'personal-access-token');
   });
 
+  test(
+    'falls back to HTTP after HTTPS discovery fails for a bare host',
+    () async {
+      final _RecordingAuthRepository repository = _RecordingAuthRepository(
+        discoveryFailures: <Uri, AuthFailure>{
+          Uri.parse('https://chat.example.com'): const AuthFailure(
+            AuthFailureKind.network,
+          ),
+        },
+      );
+      final ProviderContainer container = _container(repository: repository);
+      addTearDown(container.dispose);
+
+      await container
+          .read(authControllerProvider.notifier)
+          .discoverServer('chat.example.com');
+
+      final AuthState state = container.read(authControllerProvider);
+      expect(state.phase, AuthPhase.choosingSso);
+      expect(state.serverUrl, Uri.parse('http://chat.example.com'));
+      expect(repository.discoveredServerUrls, <Uri>[
+        Uri.parse('https://chat.example.com'),
+        Uri.parse('http://chat.example.com'),
+      ]);
+    },
+  );
+
+  test('tries HTTP first for a bare local host', () async {
+    final _RecordingAuthRepository repository = _RecordingAuthRepository();
+    final ProviderContainer container = _container(repository: repository);
+    addTearDown(container.dispose);
+
+    await container
+        .read(authControllerProvider.notifier)
+        .discoverServer('mattermost.local');
+
+    expect(
+      repository.discoveredServerUrls.single,
+      Uri.parse('http://mattermost.local'),
+    );
+  });
+
   test('authenticates with password when the server enables it', () async {
     final _RecordingAuthRepository repository = _RecordingAuthRepository(
       passwordLoginEnabled: true,
@@ -164,12 +206,15 @@ final class _RecordingAuthRepository implements AuthRepository {
       SsoOption(provider: SsoProvider.saml, displayLabel: 'Company SSO'),
     ],
     this.passwordLoginEnabled = false,
+    this.discoveryFailures = const <Uri, AuthFailure>{},
   });
 
   final AuthFailure? restoreFailure;
   final AuthFailure? ssoFailure;
   final List<SsoOption> options;
   final bool passwordLoginEnabled;
+  final Map<Uri, AuthFailure> discoveryFailures;
+  final List<Uri> discoveredServerUrls = <Uri>[];
   Uri? serverUrl;
   String? token;
   String? loginId;
@@ -221,10 +266,16 @@ final class _RecordingAuthRepository implements AuthRepository {
   @override
   Future<AuthenticationMethods> discoverAuthenticationMethods({
     required Uri serverUrl,
-  }) async => AuthenticationMethods(
-    ssoOptions: options,
-    passwordLoginEnabled: passwordLoginEnabled,
-  );
+  }) async {
+    discoveredServerUrls.add(serverUrl);
+    if (discoveryFailures[serverUrl] case final AuthFailure failure) {
+      throw failure;
+    }
+    return AuthenticationMethods(
+      ssoOptions: options,
+      passwordLoginEnabled: passwordLoginEnabled,
+    );
+  }
 
   @override
   Future<AuthSession?> restoreSession() async {
