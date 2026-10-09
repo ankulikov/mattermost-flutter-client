@@ -3,6 +3,15 @@
 Authentication owns server discovery, credentials, the active API client, and
 the lifetime of the realtime connection.
 
+## Server addresses
+
+The sign-in form accepts full `http://` or `https://` origins as well as a
+schemeless host (with an optional deployment path). Explicit schemes are used
+as entered. For a schemeless address, discovery tries HTTPS and then HTTP;
+`localhost`, `127.0.0.1`, `.lan`, and `.local` hosts try HTTP first. The origin
+that responds successfully becomes the session origin for API, SSO, and
+realtime traffic.
+
 ## Sign-in methods
 
 Before showing password controls, the client requests `/config/client`. Email

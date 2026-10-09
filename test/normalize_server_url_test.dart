@@ -16,15 +16,38 @@ void main() {
     );
   });
 
-  test('permits HTTP only for local development hosts', () {
+  test('preserves an explicit HTTP scheme', () {
     expect(
       normalize('http://localhost:8065/mattermost/'),
       Uri.parse('http://localhost:8065/mattermost'),
     );
+    expect(
+      normalize('http://chat.example.com'),
+      Uri.parse('http://chat.example.com'),
+    );
   });
 
+  test('uses HTTPS first for a schemeless remote address', () {
+    expect(normalize.candidates('chat.example.com/mattermost/'), <Uri>[
+      Uri.parse('https://chat.example.com/mattermost'),
+      Uri.parse('http://chat.example.com/mattermost'),
+    ]);
+  });
+
+  for (final String host in <String>[
+    'localhost:8065',
+    '127.0.0.1:8065',
+    'mattermost.lan',
+    'mattermost.local',
+  ]) {
+    test('uses HTTP first for schemeless local address: $host', () {
+      final List<Uri> candidates = normalize.candidates(host);
+      expect(candidates.first.scheme, 'http');
+      expect(candidates.last.scheme, 'https');
+    });
+  }
+
   for (final String value in <String>[
-    'http://chat.example.com',
     'https://user@chat.example.com',
     'https://chat.example.com/?next=/login',
     'https://chat.example.com/#login',
