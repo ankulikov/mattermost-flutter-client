@@ -49,6 +49,26 @@ abstract class PostRepository {
     String rootPostId = '',
   }) => throw UnimplementedError();
 
+  Future<ChannelPost> sendPost({
+    required AuthSession session,
+    required String channelId,
+    required String message,
+    required String pendingPostId,
+    String rootPostId = '',
+    List<String> fileIds = const <String>[],
+  }) {
+    if (fileIds.isNotEmpty) {
+      throw UnimplementedError('This post repository does not support files');
+    }
+    return sendText(
+      session: session,
+      channelId: channelId,
+      message: message,
+      pendingPostId: pendingPostId,
+      rootPostId: rootPostId,
+    );
+  }
+
   /// Deletes a post. Presentation owns removing it from its volatile snapshot
   /// after this command succeeds.
   Future<void> deletePost({

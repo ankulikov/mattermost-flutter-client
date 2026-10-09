@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
+import 'package:mattermost_flutter/src/features/file_upload/domain/file_upload.dart';
+import 'package:mattermost_flutter/src/features/file_upload/presentation/composer_upload_controller.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/find_mention_query.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/mention_query.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
@@ -16,11 +18,18 @@ import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_editor_controller.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/emoji_picker.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/file_attachment_presentation.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_formatting_toolbar.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
 typedef SubmitMessage =
     Future<void> Function(String message, String pendingPostId);
+typedef SubmitPost =
+    Future<void> Function(
+      String message,
+      String pendingPostId,
+      List<String> fileIds,
+    );
 
 /// Presentation command surface for inserting content into a composer.
 final class MessageComposerController {
@@ -44,7 +53,7 @@ String formatMarkdownQuote(String text) => text
     .map((String line) => '> $line')
     .join('\n');
 
-/// Shared text-only composer for channel posts and thread replies.
+/// Shared composer for channel posts and thread replies.
 class MessageComposer extends StatefulWidget {
   const MessageComposer({
     required this.destinationId,
@@ -56,12 +65,18 @@ class MessageComposer extends StatefulWidget {
     this.channelId,
     this.accountId = '',
     this.composerController,
+    this.onSubmitWithFiles,
+    this.uploadFilePickerFactory,
+    this.fileUploadRepositoryFactory,
     super.key,
   });
 
   final String destinationId;
   final String placeholder;
   final SubmitMessage onSubmit;
+  final SubmitPost? onSubmitWithFiles;
+  final UploadFilePicker Function()? uploadFilePickerFactory;
+  final FileUploadRepository Function()? fileUploadRepositoryFactory;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final MentionRepository Function()? mentionRepositoryFactory;
   final String? teamId;
@@ -84,13 +99,80 @@ class _MessageComposerState extends State<MessageComposer> {
   CustomEmojiRepository? _emojiRepository;
   MentionAutocompleteController? _mentionController;
   bool _sending = false;
+  bool _picking = false;
   bool _failed = false;
+  bool _pickFailed = false;
+  bool _tooManyFiles = false;
+  int _scopeGeneration = 0;
+  ComposerUploadController? _uploads;
   String? _pendingPostId;
   String? _pendingDraft;
   String? _dismissedEmojiQuery;
   String? _dismissedMentionQuery;
 
-  bool get _canSend => !_sending && _controller.messageText.trim().isNotEmpty;
+  bool get _canSend =>
+      !_sending &&
+      !_picking &&
+      (_uploads?.ready ?? true) &&
+      ((_uploads?.tiles.isEmpty ?? true) || widget.onSubmitWithFiles != null) &&
+      (_controller.messageText.trim().isNotEmpty ||
+          (_uploads?.tiles.isNotEmpty ?? false));
+
+  void _onUploadsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _resetUploads() {
+    _uploads?.removeListener(_onUploadsChanged);
+    _uploads?.dispose();
+    _uploads = null;
+  }
+
+  Future<void> _pickFiles() async {
+    final UploadFilePicker Function()? picker = widget.uploadFilePickerFactory;
+    _initUploads();
+    final ComposerUploadController? uploads = _uploads;
+    if (picker == null ||
+        uploads == null ||
+        !uploads.canAdd ||
+        _sending ||
+        _picking) {
+      return;
+    }
+    setState(() => _picking = true);
+    try {
+      final files = await picker().pickFiles();
+      if (!mounted || uploads != _uploads || files.isEmpty) return;
+      if (!uploads.addFiles(files)) {
+        setState(() {
+          _pickFailed = true;
+          _tooManyFiles = true;
+        });
+      } else {
+        _pendingPostId = null;
+        _pendingDraft = null;
+        setState(() => _pickFailed = false);
+      }
+    } on Object {
+      if (mounted && uploads == _uploads) {
+        setState(() {
+          _pickFailed = true;
+          _tooManyFiles = false;
+        });
+      }
+    } finally {
+      if (mounted && uploads == _uploads) {
+        setState(() => _picking = false);
+        _focusNode.requestFocus();
+      }
+    }
+  }
+
+  void _removeFile(int localId) {
+    _uploads?.remove(localId);
+    _pendingPostId = null;
+    _pendingDraft = null;
+  }
 
   CustomEmojiRepository? get _availableEmojiRepository {
     final CustomEmojiRepository Function()? factory =
@@ -196,6 +278,20 @@ class _MessageComposerState extends State<MessageComposer> {
     widget.composerController?._attach(this);
   }
 
+  void _initUploads() {
+    if (_uploads != null) return;
+    final FileUploadRepository Function()? factory =
+        widget.fileUploadRepositoryFactory;
+    final String? channelId = widget.channelId;
+    if (factory == null || channelId == null || widget.accountId.isEmpty) {
+      return;
+    }
+    _uploads = ComposerUploadController(
+      repository: factory(),
+      channelId: channelId,
+    )..addListener(_onUploadsChanged);
+  }
+
   @override
   void didUpdateWidget(covariant MessageComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -203,11 +299,18 @@ class _MessageComposerState extends State<MessageComposer> {
       oldWidget.composerController?._detach(this);
       widget.composerController?._attach(this);
     }
-    if (oldWidget.destinationId != widget.destinationId) {
+    if (oldWidget.destinationId != widget.destinationId ||
+        oldWidget.channelId != widget.channelId ||
+        oldWidget.accountId != widget.accountId) {
+      _scopeGeneration++;
+      _sending = false;
+      _picking = false;
+      _resetUploads();
       _controller.clear();
       _pendingPostId = null;
       _pendingDraft = null;
       _failed = false;
+      _pickFailed = false;
       _dismissedMentionQuery = null;
       _mentionController?.dispose();
       _mentionController = null;
@@ -222,6 +325,8 @@ class _MessageComposerState extends State<MessageComposer> {
 
   @override
   void dispose() {
+    _scopeGeneration++;
+    _resetUploads();
     widget.composerController?._detach(this);
     _controller
       ..removeListener(_onTextChanged)
@@ -311,6 +416,11 @@ class _MessageComposerState extends State<MessageComposer> {
 
     final String message = _controller.messageText;
     final String draft = _controller.messageText;
+    final List<String> fileIds = _uploads?.uploadedIds ?? const <String>[];
+    final ComposerUploadController? uploads = _uploads;
+    final String destinationId = widget.destinationId;
+    final String accountId = widget.accountId;
+    final int scopeGeneration = _scopeGeneration;
     final String pendingPostId =
         _pendingPostId ??
         'flutter:${DateTime.now().microsecondsSinceEpoch}:${widget.destinationId}';
@@ -321,18 +431,35 @@ class _MessageComposerState extends State<MessageComposer> {
       _failed = false;
     });
     try {
-      await widget.onSubmit(message, pendingPostId);
-      if (!mounted) return;
+      if (widget.onSubmitWithFiles case final SubmitPost submit) {
+        await submit(message, pendingPostId, fileIds);
+      } else {
+        await widget.onSubmit(message, pendingPostId);
+      }
+      if (!mounted ||
+          destinationId != widget.destinationId ||
+          accountId != widget.accountId ||
+          uploads != _uploads ||
+          scopeGeneration != _scopeGeneration) {
+        return;
+      }
       if (_controller.messageText == draft) _controller.clear();
+      uploads?.clear();
       _pendingPostId = null;
       _pendingDraft = null;
       _focusNode.unfocus();
     } on Object {
-      if (!mounted) return;
+      if (!mounted ||
+          destinationId != widget.destinationId ||
+          accountId != widget.accountId ||
+          uploads != _uploads ||
+          scopeGeneration != _scopeGeneration) {
+        return;
+      }
       setState(() => _failed = true);
       _focusNode.requestFocus();
     } finally {
-      if (mounted) {
+      if (mounted && scopeGeneration == _scopeGeneration) {
         setState(() => _sending = false);
       }
     }
@@ -677,6 +804,17 @@ class _MessageComposerState extends State<MessageComposer> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
+                      if (_uploads?.tiles.isNotEmpty ?? false)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _uploads!.tiles
+                                .map(_buildUploadTile)
+                                .toList(),
+                          ),
+                        ),
                       TextFieldTapRegion(
                         groupId: _textFieldTapGroup,
                         child: MessageFormattingToolbar(
@@ -689,6 +827,24 @@ class _MessageComposerState extends State<MessageComposer> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: <Widget>[
+                          if (widget.fileUploadRepositoryFactory != null &&
+                              widget.uploadFilePickerFactory != null &&
+                              widget.accountId.isNotEmpty) ...<Widget>[
+                            IconButton(
+                              key: ValueKey<String>(
+                                'attach-file-${widget.destinationId}',
+                              ),
+                              tooltip: MessageComposerStrings.attach,
+                              onPressed:
+                                  (_uploads?.canAdd ?? true) &&
+                                      !_sending &&
+                                      !_picking
+                                  ? () => unawaited(_pickFiles())
+                                  : null,
+                              icon: const Icon(Icons.attach_file),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
                           Expanded(
                             child: CallbackShortcuts(
                               bindings: <ShortcutActivator, VoidCallback>{
@@ -857,7 +1013,98 @@ class _MessageComposerState extends State<MessageComposer> {
                   ),
                 ),
               ],
+              if (_pickFailed)
+                Text(
+                  _tooManyFiles
+                      ? MessageComposerStrings.tooManyFiles
+                      : MessageComposerStrings.pickerFailed,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.error,
+                  ),
+                ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUploadTile(UploadTile tile) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final String status = switch (tile.status) {
+      UploadTileStatus.queued => MessageComposerStrings.uploadQueued,
+      UploadTileStatus.uploading => '${tile.percent}%',
+      UploadTileStatus.finalizing => MessageComposerStrings.uploadFinalizing,
+      UploadTileStatus.uploaded => MessageComposerStrings.uploadReady,
+      UploadTileStatus.failed => switch (tile.failure) {
+        UploadFailure.tooLarge => MessageComposerStrings.fileTooLarge,
+        UploadFailure.forbidden => MessageComposerStrings.uploadForbidden,
+        UploadFailure.unauthorized => MessageComposerStrings.signInAgain,
+        UploadFailure.rateLimited => MessageComposerStrings.retryLater,
+        UploadFailure.invalidFile => MessageComposerStrings.invalidFile,
+        _ => MessageComposerStrings.uploadFailed,
+      },
+    };
+    return Semantics(
+      label: '${tile.name}, $status',
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsetsDirectional.only(start: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(attachmentFileIcon(tile.type), size: 20),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        tile.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        status,
+                        style: TextStyle(
+                          color: tile.status == UploadTileStatus.failed
+                              ? colors.error
+                              : colors.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        MessageComposerStrings.fileDetails(
+                          tile.type,
+                          tile.size,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      if (tile.status == UploadTileStatus.uploading)
+                        LinearProgressIndicator(value: tile.percent / 100),
+                    ],
+                  ),
+                ),
+                if (tile.status == UploadTileStatus.failed)
+                  IconButton(
+                    tooltip: MessageComposerStrings.retryUpload,
+                    onPressed: tile.retryAt == null
+                        ? () => _uploads?.retry(tile.localId)
+                        : null,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                IconButton(
+                  tooltip: MessageComposerStrings.removeFile,
+                  onPressed: _sending ? null : () => _removeFile(tile.localId),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
           ),
         ),
       ),

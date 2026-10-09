@@ -734,18 +734,21 @@ final class MattermostCreatePostRequestDto {
     required this.message,
     required this.pendingPostId,
     this.rootId = '',
+    this.fileIds = const <String>[],
   });
 
   final String channelId;
   final String message;
   final String pendingPostId;
   final String rootId;
+  final List<String> fileIds;
 
   JsonMap toJson() => <String, Object?>{
     'channel_id': channelId,
     'message': message,
     'pending_post_id': pendingPostId,
     if (rootId.isNotEmpty) 'root_id': rootId,
+    if (fileIds.isNotEmpty) 'file_ids': fileIds,
   };
 }
 

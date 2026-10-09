@@ -137,6 +137,7 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
     required String channelId,
     required String message,
     required String pendingPostId,
+    List<String> fileIds = const <String>[],
   }) async {
     final AuthSession? session = _session;
     if (_sendRunning) {
@@ -150,11 +151,12 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
       final ChannelPost sent = await _cancellation.run(
         () => ref
             .read(_postRepositoryProvider)
-            .sendText(
+            .sendPost(
               session: session,
               channelId: channelId,
               message: message,
               pendingPostId: pendingPostId,
+              fileIds: fileIds,
               rootPostId: rootPostId,
             ),
       );

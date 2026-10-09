@@ -143,6 +143,22 @@ final class MattermostPostRepository extends PostRepository {
     required String message,
     required String pendingPostId,
     String rootPostId = '',
+  }) => sendPost(
+    session: session,
+    channelId: channelId,
+    message: message,
+    pendingPostId: pendingPostId,
+    rootPostId: rootPostId,
+  );
+
+  @override
+  Future<ChannelPost> sendPost({
+    required AuthSession session,
+    required String channelId,
+    required String message,
+    required String pendingPostId,
+    String rootPostId = '',
+    List<String> fileIds = const <String>[],
   }) async {
     final MattermostPostDto post = await _api.createPost(
       MattermostCreatePostRequestDto(
@@ -150,6 +166,7 @@ final class MattermostPostRepository extends PostRepository {
         message: message,
         pendingPostId: pendingPostId,
         rootId: rootPostId,
+        fileIds: fileIds,
       ),
     );
     final List<ChannelPost> mapped = _messageMapper.map(

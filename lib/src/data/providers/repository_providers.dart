@@ -27,6 +27,9 @@ import 'package:mattermost_flutter/src/domain/repositories/rich_attachment_optio
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
+import 'package:mattermost_flutter/src/features/file_upload/data/mattermost_file_upload_repository.dart';
+import 'package:mattermost_flutter/src/features/file_upload/data/system_upload_file_picker.dart';
+import 'package:mattermost_flutter/src/features/file_upload/domain/file_upload.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_inbox_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_postponed_repository.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_viewed_channel_posts_repository.dart';
@@ -45,6 +48,16 @@ import 'package:mattermost_flutter/src/features/search/domain/repositories/messa
 final Provider<RealtimeConnectionService> realtimeConnectionServiceProvider =
     Provider<RealtimeConnectionService>(
       (Ref ref) => ref.watch(sessionRealtimeServiceProvider),
+    );
+
+final Provider<UploadFilePicker> uploadFilePickerProvider =
+    Provider<UploadFilePicker>((Ref ref) => const SystemUploadFilePicker());
+
+final Provider<FileUploadRepository> fileUploadRepositoryProvider =
+    Provider<FileUploadRepository>(
+      (Ref ref) => MattermostFileUploadRepository(
+        ref.watch(activeMattermostApiProvider),
+      ),
     );
 
 final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =

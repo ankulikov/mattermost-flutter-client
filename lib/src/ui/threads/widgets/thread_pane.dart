@@ -346,7 +346,14 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                       teamId: widget.teamId ?? widget.channel.teamId,
                       channelId: widget.channel.id,
                       accountId: session?.durableDataScopeId ?? '',
+                      uploadFilePickerFactory: session == null
+                          ? null
+                          : () => ref.read(uploadFilePickerProvider),
+                      fileUploadRepositoryFactory: session == null
+                          ? null
+                          : () => ref.read(fileUploadRepositoryProvider),
                       onSubmit: _sendReply,
+                      onSubmitWithFiles: _sendReplyWithFiles,
                     ),
                   ],
                 );
@@ -455,12 +462,21 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
   }
 
   Future<void> _sendReply(String message, String pendingPostId) async {
+    await _sendReplyWithFiles(message, pendingPostId, const <String>[]);
+  }
+
+  Future<void> _sendReplyWithFiles(
+    String message,
+    String pendingPostId,
+    List<String> fileIds,
+  ) async {
     final ChannelPost sent = await ref
         .read(_threadStateProvider.notifier)
         .sendText(
           channelId: widget.channel.id,
           message: message,
           pendingPostId: pendingPostId,
+          fileIds: fileIds,
         );
     widget.onReplySent?.call(sent);
     WidgetsBinding.instance.addPostFrameCallback((_) {

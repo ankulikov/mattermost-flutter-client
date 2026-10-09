@@ -518,6 +518,39 @@ final class DioMattermostApi
   }
 
   @override
+  Future<String> uploadFile({
+    required String channelId,
+    required String name,
+    required int length,
+    required Stream<Uint8List> stream,
+    required void Function(int sent, int total) onProgress,
+  }) async {
+    if (length < 0) throw const FormatException('Unknown upload length');
+    final FormData form = FormData.fromMap(<String, Object?>{
+      'channel_id': channelId,
+      'files': MultipartFile.fromStream(() => stream, length, filename: name),
+    });
+    final Response<Object?> response = await _withCancellation(
+      (CancelToken? token) => _dio.post<Object?>(
+        '/files',
+        data: form,
+        cancelToken: token,
+        onSendProgress: onProgress,
+      ),
+    );
+    final Object? infos = _object(response.data)['file_infos'];
+    if (infos is! List<Object?> || infos.length != 1) {
+      throw const FormatException('Expected one uploaded file');
+    }
+    final Object? info = infos.single;
+    final Object? id = info is Map<String, Object?> ? info['id'] : null;
+    if (id is! String || id.isEmpty) {
+      throw const FormatException('Missing uploaded file ID');
+    }
+    return id;
+  }
+
+  @override
   Future<void> deletePost(String postId) =>
       _delete('/posts/${Uri.encodeComponent(postId)}');
 
