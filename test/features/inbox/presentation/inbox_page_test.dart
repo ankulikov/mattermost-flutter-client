@@ -139,7 +139,18 @@ void main() {
         'Town Square',
       );
       expect(find.text('new replies, last one at'), findsOneWidget);
-      expect(find.text('new messages, last one at'), findsOneWidget);
+      expect(find.text('messages since'), findsOneWidget);
+      expect(find.text('new messages, last one at'), findsNothing);
+      final Finder dmSinceDate = find.byKey(
+        const ValueKey<String>('inbox-update-trailing-tag-direct:dm:dm-1-0-0'),
+      );
+      final String firstMessageDate = MaterialLocalizations.of(
+        tester.element(dmSinceDate),
+      ).formatMediumDate(DateTime.utc(2026, 9, 4).toLocal());
+      expect(
+        find.descendant(of: dmSinceDate, matching: find.text(firstMessageDate)),
+        findsOneWidget,
+      );
       expect(find.text('mentioned'), findsNWidgets(3));
       expect(find.text('You'), findsNWidgets(2));
       expect(find.text('@dev-team'), findsNWidgets(2));
@@ -377,20 +388,14 @@ void main() {
       find.byKey(const ValueKey<String>('inbox-updates-direct:dm:single-dm')),
       findsNothing,
     );
-    expect(find.text('new message, last one at'), findsNothing);
+    expect(find.text('message since'), findsNothing);
     expect(find.text('Only unread direct message'), findsOneWidget);
   });
 
   testWidgets('compact and expanded layouts support large text', (
     WidgetTester tester,
   ) async {
-    final InboxItem item = ChannelPostInboxItem(
-      candidate: _candidate(
-        'adaptive',
-        '**Readable** at a large text scale',
-        sentAt: DateTime.utc(2026, 9, 7),
-      ),
-    );
+    final InboxItem item = _items().last;
     Future<void> pumpAt(Size size) async {
       await tester.binding.setSurfaceSize(size);
       await tester.pumpWidget(
@@ -412,6 +417,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      expect(find.text('messages since'), findsOneWidget);
     }
 
     addTearDown(() => tester.binding.setSurfaceSize(null));

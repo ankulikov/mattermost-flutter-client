@@ -438,9 +438,11 @@ class _InboxUpdates extends StatelessWidget {
       DirectMessageBundleInboxItem(:final messages) => <_UpdateLine>[
         _UpdateLine(
           tags: <String>['${messages.length}'],
-          text: InboxStrings.newMessagesWithLastOneAt(messages.length),
+          text: InboxStrings.messagesSince(messages.length),
           trailingTags: <String>[
-            _timestamp(context, messages.last.post.sentAt),
+            MaterialLocalizations.of(
+              context,
+            ).formatMediumDate(messages.first.post.sentAt.toLocal()),
           ],
         ),
       ],
