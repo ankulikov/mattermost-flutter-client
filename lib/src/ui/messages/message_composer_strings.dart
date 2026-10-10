@@ -6,6 +6,9 @@ abstract final class MessageComposerStrings {
   static const String sendFailed =
       'Message could not be sent. Your draft has been kept.';
   static const String attach = 'Attach files';
+  static const String openFullEditor = 'Open full message editor';
+  static const String closeFullEditor = 'Close full message editor';
+  static const String fullEditorTitle = 'Message editor';
   static const String removeFile = 'Remove file';
   static const String retryUpload = 'Retry upload';
   static const String uploadReady = 'Ready';

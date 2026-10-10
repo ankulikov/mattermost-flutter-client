@@ -11,6 +11,7 @@ import 'package:mattermost_flutter/src/features/mentions/domain/models/mention_s
 import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_formatting_toolbar.dart';
 
 import 'support/fake_emoji_repository.dart';
 
@@ -510,7 +511,7 @@ void main() {
   });
 
   testWidgets(
-    'toolbar commands retain focus and apply raw Markdown selection',
+    'quick composer opens the full editor and preserves its formatted draft',
     (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -526,9 +527,29 @@ void main() {
       final Finder input = find.byKey(
         const ValueKey<String>('message-input-formatting'),
       );
+      expect(
+        find.byKey(const ValueKey<String>('message-formatting-bold')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('open-full-editor-formatting')),
+        findsOneWidget,
+      );
       await tester.enterText(input, 'format me');
+      await tester.tap(
+        find.byKey(const ValueKey<String>('open-full-editor-formatting')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('full-editor-modal')),
+        findsOneWidget,
+      );
+      final Finder fullInput = find.byKey(
+        const ValueKey<String>('full-message-input-formatting'),
+      );
       final TextEditingController controller = tester
-          .widget<TextField>(input)
+          .widget<TextField>(fullInput)
           .controller!;
       controller.selection = const TextSelection(
         baseOffset: 0,
@@ -546,9 +567,126 @@ void main() {
         controller.selection,
         const TextSelection(baseOffset: 2, extentOffset: 11),
       );
-      expect(tester.widget<TextField>(input).focusNode?.hasFocus, isTrue);
+      expect(tester.widget<TextField>(fullInput).focusNode?.hasFocus, isTrue);
+
+      await tester.tap(find.byKey(const ValueKey<String>('close-full-editor')));
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<TextField>(input).controller?.text, '**format me**');
     },
   );
+
+  for (final double width in <double>[320, 900]) {
+    testWidgets(
+      'full editor adapts and keeps every formatting icon visible at $width',
+      (WidgetTester tester) async {
+        await tester.binding.setSurfaceSize(Size(width, 760));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: Size(width, 760),
+                textScaler: const TextScaler.linear(2),
+              ),
+              child: Scaffold(
+                body: MessageComposer(
+                  destinationId: 'adaptive-editor',
+                  placeholder: 'Write a message',
+                  onSubmit: (_, _) async {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(
+          find.byKey(
+            const ValueKey<String>('open-full-editor-adaptive-editor'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(
+            ValueKey<String>(
+              width < 700 ? 'full-editor-fullscreen' : 'full-editor-modal',
+            ),
+          ),
+          findsOneWidget,
+        );
+        for (final MessageFormattingCommand command
+            in MessageFormattingCommand.values) {
+          expect(
+            find.byKey(ValueKey<String>('message-formatting-${command.name}')),
+            findsOneWidget,
+          );
+        }
+        expect(
+          find.byKey(const ValueKey<String>('message-formatting-overflow')),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('full editor keeps a failed draft and closes after retry', (
+    WidgetTester tester,
+  ) async {
+    var attempts = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageComposer(
+            destinationId: 'full-retry',
+            placeholder: 'Write a message',
+            onSubmit: (_, _) async {
+              attempts += 1;
+              if (attempts == 1) throw StateError('offline');
+            },
+          ),
+        ),
+      ),
+    );
+    final Finder quickInput = find.byKey(
+      const ValueKey<String>('message-input-full-retry'),
+    );
+    await tester.enterText(quickInput, 'Keep this draft');
+    await tester.tap(
+      find.byKey(const ValueKey<String>('open-full-editor-full-retry')),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder fullInput = find.byKey(
+      const ValueKey<String>('full-message-input-full-retry'),
+    );
+    final Finder send = find.byKey(
+      const ValueKey<String>('full-editor-send-full-retry'),
+    );
+    await tester.tap(send);
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('full-editor-send-error-full-retry')),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<TextField>(fullInput).controller?.text,
+      'Keep this draft',
+    );
+    expect(tester.widget<TextField>(fullInput).focusNode?.hasFocus, isTrue);
+
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+
+    expect(attempts, 2);
+    expect(
+      find.byKey(const ValueKey<String>('full-editor-modal')),
+      findsNothing,
+    );
+    expect(tester.widget<TextField>(quickInput).controller?.text, isEmpty);
+  });
 
   testWidgets(
     'Ctrl+B and Ctrl+I apply formatting when autocomplete and IME are idle',

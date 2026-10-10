@@ -1,8 +1,9 @@
 # Message composer
 
-Channels and threads share `MessageComposer`. It sends ordinary Mattermost
-Markdown, supports formatting controls and inline atoms, and keeps a failed
-draft available for correction or retry.
+Channels and threads share `MessageComposer`. Its quick mode sends ordinary
+Mattermost Markdown with file upload and a full-editor switch, while its full
+editor exposes every formatting control. Both modes use the same editing
+buffer and keep a failed draft available for correction or retry.
 
 ## Send behavior
 
@@ -43,12 +44,23 @@ Unrecognized syntax, escaped content, and Markdown inside code ranges remain
 literal source. The controller has a source mode, but the composer does not yet
 expose a user preference for it.
 
+## Composer modes
+
+The quick composer keeps the message field, file upload, full-editor switch,
+and send action visible without a formatting toolbar. The full editor opens as
+a constrained modal at medium and expanded widths and as a full-screen dialog
+at compact widths. Closing it preserves the same draft, selection, attachments,
+and Markdown source in the quick composer. A successful send closes the full
+editor and clears the shared draft through the normal send flow.
+
 ## Formatting controls
 
-The toolbar applies source-preserving commands for bold, italic,
+The full-editor toolbar applies source-preserving commands for bold, italic,
 strikethrough, heading, code, quote, bulleted list, and ordered list. Compact
-layouts move the less common block commands into an overflow menu. Choosing a
-command returns focus to the editor and preserves its selection.
+full-editor layouts wrap the toolbar so every command remains visible. Other
+compact toolbar consumers may move less common block commands into an overflow
+menu. Choosing a command returns focus to the editor and preserves its
+selection.
 
 The tolerant editing parser covers bold, italic, strikethrough, inline and
 fenced code, headings, quotes, and ordered and bulleted lists. The read-only
@@ -70,4 +82,5 @@ cancels work that is no longer relevant.
 - `lib/src/ui/messages/message_editor_controller.dart`
 - `lib/src/ui/messages/editor/`
 - `lib/src/ui/messages/widgets/message_composer.dart`
+- `lib/src/ui/messages/widgets/full_message_editor.dart`
 - `lib/src/ui/messages/widgets/message_formatting_toolbar.dart`
