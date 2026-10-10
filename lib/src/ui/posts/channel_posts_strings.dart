@@ -1,4 +1,5 @@
 abstract final class ChannelPostsStrings {
+  static const String resizeThreadPane = 'Resize thread pane';
   static const String highlightedMessage = 'Linked message';
   static const String loadingLinkedMessage = 'Loading linked message';
   static const String linkedMessageLoadFailed =

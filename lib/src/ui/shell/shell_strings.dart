@@ -6,6 +6,7 @@ abstract final class ShellStrings {
   static const String inbox = 'Inbox';
   static const String search = 'Search';
   static const String profile = 'Profile';
+  static const String resizeChannelsPane = 'Resize channels pane';
   static const String inboxHasNewMessages = 'Inbox has new messages';
   static const String openInbox = 'Open Inbox';
   static const String newInboxMessage = 'New Inbox message';

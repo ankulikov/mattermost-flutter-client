@@ -20,6 +20,7 @@ import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/resizable_pane_divider.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_strings.dart';
 import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_strings.dart';
@@ -35,6 +36,7 @@ class BootstrapPage extends ConsumerStatefulWidget {
 class _BootstrapPageState extends ConsumerState<BootstrapPage>
     with WidgetsBindingObserver {
   bool _showCompactChannel = false;
+  double _sidebarWidth = 280;
   late final ProviderSubscription<InboxInAppNotification?>
   _notificationSubscription;
   late final ProviderSubscription<bool> _channelPresentationSubscription;
@@ -243,18 +245,57 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                       showAdjacentWorkspace: true,
                       onSelectChannel: _selectChannelNamed,
                     )
-                  : Row(
-                      children: <Widget>[
-                        SizedBox(
-                          key: ValueKey<String>('channels-side-pane'),
-                          width: 280,
-                          child: ChannelSidebar(
-                            onChannelSelected: _showSelectedChannel,
-                          ),
-                        ),
-                        const VerticalDivider(width: 1),
-                        Expanded(child: mainContent),
-                      ],
+                  : LayoutBuilder(
+                      builder:
+                          (BuildContext context, BoxConstraints constraints) {
+                            final double maximumWidth =
+                                (constraints.maxWidth - 320).clamp(
+                                  200.0,
+                                  500.0,
+                                );
+                            final double sidebarWidth = _sidebarWidth.clamp(
+                              200.0,
+                              maximumWidth,
+                            );
+                            return Stack(
+                              children: <Widget>[
+                                Positioned.fill(
+                                  child: Row(
+                                    children: <Widget>[
+                                      SizedBox(
+                                        key: const ValueKey<String>(
+                                          'channels-side-pane',
+                                        ),
+                                        width: sidebarWidth,
+                                        child: ChannelSidebar(
+                                          onChannelSelected:
+                                              _showSelectedChannel,
+                                        ),
+                                      ),
+                                      Expanded(child: mainContent),
+                                    ],
+                                  ),
+                                ),
+                                Positioned(
+                                  left:
+                                      sidebarWidth -
+                                      ResizablePaneDivider.width / 2,
+                                  top: 0,
+                                  bottom: 0,
+                                  child: ResizablePaneDivider(
+                                    key: const ValueKey<String>(
+                                      'channels-pane-divider',
+                                    ),
+                                    label: ShellStrings.resizeChannelsPane,
+                                    onResize: (double delta) => setState(() {
+                                      _sidebarWidth = (sidebarWidth + delta)
+                                          .clamp(200.0, maximumWidth);
+                                    }),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                     ),
             ),
           ],

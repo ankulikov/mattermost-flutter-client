@@ -129,7 +129,10 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                 displayedState?.followUpdateStatus is OperationInProgress,
             onToggleFollowing: _toggleFollowing,
           ),
-          const Divider(height: 1),
+          const Divider(
+            key: ValueKey<String>('thread-header-divider'),
+            height: 1,
+          ),
           Expanded(
             child: value.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -585,7 +588,7 @@ class _ThreadHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 10, 8, 10),
+    padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
     child: Row(
       children: <Widget>[
         Expanded(

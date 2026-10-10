@@ -47,6 +47,10 @@ panel or route releases the thread snapshot.
 On touch input inside an open thread, tapping a message opens actions while a
 long press remains available for native text selection. The context menu starts
 with Quote and inserts each selected line into the composer with a `> ` prefix.
+The channel's side-thread divider can be dragged or adjusted with the arrow
+keys. The thread width stays within 280–700 px while leaving at least 360 px
+for channel history. The width is view state and is clamped to the available
+space when the window changes size.
 
 ## Relevant code
 
