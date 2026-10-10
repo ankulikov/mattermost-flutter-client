@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:mattermost_flutter/src/core/utils/date_time_utils.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
+import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
@@ -14,9 +17,11 @@ final class MattermostPostRepository extends PostRepository {
     required MattermostApi api,
     required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
     required UserRepository users,
+    SessionRealtimeService? realtime,
   }) : _api = api,
        _messageMapper = messageMapper,
-       _users = users;
+       _users = users,
+       _realtime = realtime;
 
   static const int pageSize = 60;
   static const int aroundPageSize = pageSize ~/ 2;
@@ -24,6 +29,65 @@ final class MattermostPostRepository extends PostRepository {
   final MattermostApi _api;
   final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
   final UserRepository _users;
+  final SessionRealtimeService? _realtime;
+
+  @override
+  Stream<PostRealtimeEvent> watchRealtime({
+    required AuthSession session,
+    String channelId = '',
+    String rootPostId = '',
+  }) {
+    final SessionRealtimeService? realtime = _realtime;
+    if (realtime == null || (channelId.isEmpty && rootPostId.isEmpty)) {
+      return const Stream<PostRealtimeEvent>.empty();
+    }
+    return realtime
+        .watch(
+          session: session,
+          subscription: SessionRealtimeSubscription(
+            eventNames: MattermostRealtimeEventGroups.posts,
+            acceptsChannel: channelId.isEmpty
+                ? null
+                : (String candidate) => candidate == channelId,
+          ),
+        )
+        .asyncMap((SessionRealtimeSignal signal) async {
+          switch (signal) {
+            case SessionRealtimeRecoveryRequired():
+              return const PostRealtimeRecoveryRequired();
+            case SessionRealtimeConnectionChanged():
+              return null;
+            case SessionRealtimeEventReceived(:final event):
+              if (channelId.isNotEmpty &&
+                  event.channelId.isNotEmpty &&
+                  event.channelId != channelId) {
+                return null;
+              }
+              final MattermostPostDto? raw = _postFromEvent(event.data);
+              if (raw == null || raw.id.isEmpty) {
+                return const PostRealtimeRecoveryRequired();
+              }
+              if ((channelId.isNotEmpty && raw.channelId != channelId) ||
+                  (rootPostId.isNotEmpty &&
+                      raw.id != rootPostId &&
+                      raw.rootId != rootPostId)) {
+                return null;
+              }
+              try {
+                final ChannelPost post = await _mapRealtimePost(session, raw);
+                return event.name == 'post_deleted' || post.isDeleted
+                    ? PostRealtimeDeleted(post)
+                    : PostRealtimeUpserted(post);
+              } on Object {
+                // A failed author/projection lookup cannot safely be ignored:
+                // ask the active view to reconcile from REST instead.
+                return const PostRealtimeRecoveryRequired();
+              }
+          }
+        })
+        .where((PostRealtimeEvent? event) => event != null)
+        .cast<PostRealtimeEvent>();
+  }
 
   @override
   Future<ChannelPostPage> loadLatest({
@@ -216,6 +280,42 @@ final class MattermostPostRepository extends PostRepository {
     postId: postId,
     emojiName: emojiName,
   );
+
+  Future<ChannelPost> _mapRealtimePost(
+    AuthSession session,
+    MattermostPostDto raw,
+  ) async {
+    final List<UserSummary> authors = raw.userId.isEmpty
+        ? const <UserSummary>[]
+        : await _users.getUsers(<String>[raw.userId]);
+    final List<ChannelPost> mapped = _messageMapper.map(
+      posts: <MattermostPostDto>[raw],
+      users: authors,
+      currentUserId: session.userId,
+      includeDeleted: true,
+    );
+    if (mapped case <ChannelPost>[final ChannelPost post]) return post;
+    throw const FormatException('Realtime post could not be mapped');
+  }
+
+  static MattermostPostDto? _postFromEvent(Map<String, Object?> data) {
+    final Object? encoded = data['post'];
+    final Object? decoded;
+    try {
+      decoded = encoded is String ? jsonDecode(encoded) : encoded;
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map<Object?, Object?>) return null;
+    return MattermostPostDto.fromJson(
+      decoded.map(
+        (Object? key, Object? value) => MapEntry<String, Object?>(
+          key is String ? key : key.toString(),
+          value,
+        ),
+      ),
+    );
+  }
 
   Future<ChannelPostPage> _mapPage({
     required AuthSession session,

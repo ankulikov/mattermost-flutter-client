@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
@@ -64,6 +66,7 @@ final class ChannelPostsController
     this._repositoryProvider,
   );
 
+  static const int _maxBufferedRealtimeEvents = 1000;
   final String channelId;
   final Provider<AuthSession?> _sessionProvider;
   final Provider<PostRepository> _repositoryProvider;
@@ -75,6 +78,15 @@ final class ChannelPostsController
   String? _requestedFocusPostId;
   final Set<String> _reactionRequests = <String>{};
   final Set<String> _deleteRequests = <String>{};
+  StreamSubscription<PostRealtimeEvent>? _realtimeSubscription;
+  final List<_VersionedPostRealtimeEvent> _realtimeEvents =
+      <_VersionedPostRealtimeEvent>[];
+  final Map<int, int> _realtimeBaselines = <int, int>{};
+  int _realtimeRevision = 0;
+  int _realtimeRequest = 0;
+  int _realtimeGeneration = 0;
+  bool _recoveryPending = false;
+  bool _recoveryRunning = false;
 
   @override
   Future<ChannelPostsViewState> build() async {
@@ -85,6 +97,7 @@ final class ChannelPostsController
     _repository = null;
     final AuthSession? session = ref.watch(_sessionProvider);
     if (session == null) {
+      _stopRealtime();
       return const ChannelPostsViewState(
         posts: <ChannelPost>[],
         hasOlder: false,
@@ -93,7 +106,17 @@ final class ChannelPostsController
     final PostRepository repository = ref.watch(_repositoryProvider);
     _session = session;
     _repository = repository;
-    return cancellation.run(() => _loadLatest(session, repository));
+    final int generation = _startRealtime(session, repository);
+    final _RealtimeBaseline baseline = _beginRealtimeReconciliation();
+    try {
+      final ChannelPostsViewState loaded = await cancellation.run(
+        () => _loadLatest(session, repository),
+      );
+      return _applyRealtimeEvents(loaded, _eventsAfter(baseline.revision));
+    } finally {
+      _finishRealtimeReconciliation(baseline.token);
+      _scheduleRealtimeDrain(generation);
+    }
   }
 
   Future<void> retry() async {
@@ -102,13 +125,20 @@ final class ChannelPostsController
     if (session == null || repository == null) return;
     final RequestCancellation cancellation = _cancellation;
     state = const AsyncLoading<ChannelPostsViewState>();
+    final _RealtimeBaseline baseline = _beginRealtimeReconciliation();
     try {
+      final ChannelPostsViewState loaded = await cancellation.run(
+        () => _loadLatest(session, repository),
+      );
       state = AsyncData(
-        await cancellation.run(() => _loadLatest(session, repository)),
+        _applyRealtimeEvents(loaded, _eventsAfter(baseline.revision)),
       );
     } on Object catch (error, stackTrace) {
       if (cancellation.isCancelled) return;
       state = AsyncError<ChannelPostsViewState>(error, stackTrace);
+    } finally {
+      _finishRealtimeReconciliation(baseline.token);
+      _scheduleRealtimeDrain(_realtimeGeneration);
     }
   }
 
@@ -129,6 +159,7 @@ final class ChannelPostsController
     state = AsyncData(
       current.copyWith(olderLoadStatus: const OperationStatus.inProgress()),
     );
+    final _RealtimeBaseline baseline = _beginRealtimeReconciliation();
     try {
       final ChannelPostPage page = await cancellation.run(
         () => repository.loadOlder(
@@ -142,15 +173,18 @@ final class ChannelPostsController
       final Map<String, ChannelReplySummary> replySummaries =
           mergeReplySummaries(latest.replySummaries, page.replySummaries);
       state = AsyncData(
-        latest.copyWith(
-          posts: applyReplySummaries(
-            mergePosts(latest.posts, page.posts),
-            replySummaries,
+        _applyRealtimeEvents(
+          latest.copyWith(
+            posts: applyReplySummaries(
+              mergePosts(latest.posts, page.posts),
+              replySummaries,
+            ),
+            hasOlder: page.hasOlder,
+            replySummaries: replySummaries,
+            beforePostId: page.beforePostId,
+            olderLoadStatus: const OperationStatus.idle(),
           ),
-          hasOlder: page.hasOlder,
-          replySummaries: replySummaries,
-          beforePostId: page.beforePostId,
-          olderLoadStatus: const OperationStatus.idle(),
+          _eventsAfter(baseline.revision),
         ),
       );
     } on Object catch (error) {
@@ -162,6 +196,7 @@ final class ChannelPostsController
         );
       }
     } finally {
+      _finishRealtimeReconciliation(baseline.token);
       if (!cancellation.isCancelled) {
         final ChannelPostsViewState? latest = state.value;
         if (latest != null && latest.olderLoadStatus is OperationInProgress) {
@@ -190,6 +225,7 @@ final class ChannelPostsController
     state = AsyncData(
       current.copyWith(newerLoadStatus: const OperationStatus.inProgress()),
     );
+    final _RealtimeBaseline baseline = _beginRealtimeReconciliation();
     try {
       final ChannelPostPage page = await cancellation.run(
         () => repository.loadNewer(
@@ -203,15 +239,18 @@ final class ChannelPostsController
       final Map<String, ChannelReplySummary> replySummaries =
           mergeReplySummaries(latest.replySummaries, page.replySummaries);
       state = AsyncData(
-        latest.copyWith(
-          posts: applyReplySummaries(
-            mergePosts(latest.posts, page.posts),
-            replySummaries,
+        _applyRealtimeEvents(
+          latest.copyWith(
+            posts: applyReplySummaries(
+              mergePosts(latest.posts, page.posts),
+              replySummaries,
+            ),
+            hasNewer: page.hasNewer,
+            replySummaries: replySummaries,
+            afterPostId: page.afterPostId ?? afterPostId,
+            newerLoadStatus: const OperationStatus.idle(),
           ),
-          hasNewer: page.hasNewer,
-          replySummaries: replySummaries,
-          afterPostId: page.afterPostId ?? afterPostId,
-          newerLoadStatus: const OperationStatus.idle(),
+          _eventsAfter(baseline.revision),
         ),
       );
     } on Object catch (error) {
@@ -223,6 +262,7 @@ final class ChannelPostsController
         );
       }
     } finally {
+      _finishRealtimeReconciliation(baseline.token);
       if (!cancellation.isCancelled) {
         final ChannelPostsViewState? latest = state.value;
         if (latest != null && latest.newerLoadStatus is OperationInProgress) {
@@ -251,6 +291,7 @@ final class ChannelPostsController
     state = AsyncData(
       current.copyWith(focusStatus: const OperationStatus.inProgress()),
     );
+    final _RealtimeBaseline baseline = _beginRealtimeReconciliation();
     try {
       final ChannelPostPage page = await cancellation.run(
         () => repository.loadAround(
@@ -261,14 +302,17 @@ final class ChannelPostsController
       );
       if (request != _focusRequest || cancellation.isCancelled) return;
       state = AsyncData(
-        ChannelPostsViewState(
-          posts: page.posts,
-          hasOlder: page.hasOlder,
-          hasNewer: page.hasNewer,
-          replySummaries: page.replySummaries,
-          beforePostId: page.beforePostId,
-          afterPostId: page.afterPostId,
-          focusPostId: postId,
+        _applyRealtimeEvents(
+          ChannelPostsViewState(
+            posts: page.posts,
+            hasOlder: page.hasOlder,
+            hasNewer: page.hasNewer,
+            replySummaries: page.replySummaries,
+            beforePostId: page.beforePostId,
+            afterPostId: page.afterPostId,
+            focusPostId: postId,
+          ),
+          _eventsAfter(baseline.revision),
         ),
       );
     } on Object catch (error) {
@@ -279,6 +323,8 @@ final class ChannelPostsController
           latest.copyWith(focusStatus: OperationStatus.failed(error)),
         );
       }
+    } finally {
+      _finishRealtimeReconciliation(baseline.token);
     }
   }
 
@@ -433,43 +479,62 @@ final class ChannelPostsController
     required String postId,
     ChannelPost? reply,
   }) {
-    if (reply == null || reply.rootId.isEmpty) {
-      state = AsyncData(
-        current.copyWith(
-          posts: List<ChannelPost>.unmodifiable(
-            current.posts.where((ChannelPost post) => post.id != postId),
-          ),
+    state = AsyncData(_withoutPost(current, postId: postId, reply: reply));
+  }
+
+  static ChannelPostsViewState _withoutPost(
+    ChannelPostsViewState current, {
+    required String postId,
+    ChannelPost? reply,
+  }) {
+    String rootId = reply?.rootId ?? '';
+    if (rootId.isEmpty) {
+      for (final MapEntry<String, ChannelReplySummary> entry
+          in current.replySummaries.entries) {
+        if (entry.value.replyIds.contains(postId)) {
+          rootId = entry.key;
+          break;
+        }
+      }
+    }
+    if (rootId.isEmpty) {
+      final ChannelPost? existing = current.posts
+          .where((ChannelPost post) => post.id == postId)
+          .firstOrNull;
+      if (reply != null &&
+          existing != null &&
+          existing.revisionAt.isAfter(reply.revisionAt)) {
+        return current;
+      }
+      return current.copyWith(
+        posts: List<ChannelPost>.unmodifiable(
+          current.posts.where((ChannelPost post) => post.id != postId),
         ),
       );
-      return;
     }
-    final ChannelReplySummary? summary = current.replySummaries[reply.rootId];
+    final ChannelReplySummary? summary = current.replySummaries[rootId];
     final bool wasKnown = summary?.replyIds.contains(postId) == true;
     final Map<String, ChannelReplySummary> summaries =
         <String, ChannelReplySummary>{...current.replySummaries};
     if (summary != null && wasKnown) {
-      summaries[reply.rootId] = ChannelReplySummary(
+      summaries[rootId] = ChannelReplySummary(
         replyIds: Set<String>.unmodifiable(
           summary.replyIds.where((String id) => id != postId),
         ),
         lastReplyAt: summary.lastReplyAt,
       );
     }
-    state = AsyncData(
-      current.copyWith(
-        posts: List<ChannelPost>.unmodifiable(
-          current.posts.map((ChannelPost post) {
-            if (post.id != reply.rootId || !wasKnown) return post;
-            return post.withThreadSummary(
-              replyCount: post.replyCount > 0 ? post.replyCount - 1 : 0,
-              lastReplyAt: post.lastReplyAt,
-            );
-          }),
-        ),
-        replySummaries: Map<String, ChannelReplySummary>.unmodifiable(
-          summaries,
-        ),
+    return current.copyWith(
+      posts: List<ChannelPost>.unmodifiable(
+        current.posts.map((ChannelPost post) {
+          if (post.id != rootId || !wasKnown) return post;
+          return post.withThreadSummary(
+            replyCount: post.replyCount > 0 ? post.replyCount - 1 : 0,
+            lastReplyAt: post.lastReplyAt,
+          );
+        }),
       ),
+      replySummaries: Map<String, ChannelReplySummary>.unmodifiable(summaries),
     );
   }
 
@@ -487,6 +552,13 @@ final class ChannelPostsController
   void recordSentReply(ChannelPost reply) {
     final ChannelPostsViewState? current = state.value;
     if (current == null || reply.rootId.isEmpty) return;
+    state = AsyncData(_withRecordedReply(current, reply));
+  }
+
+  static ChannelPostsViewState _withRecordedReply(
+    ChannelPostsViewState current,
+    ChannelPost reply,
+  ) {
     final ChannelReplySummary? previous = current.replySummaries[reply.rootId];
     final bool wasKnown = previous?.replyIds.contains(reply.id) == true;
     final ChannelReplySummary updatedSummary = ChannelReplySummary(
@@ -503,24 +575,239 @@ final class ChannelPostsController
             reply.rootId: updatedSummary,
           },
         );
-    state = AsyncData(
-      current.copyWith(
-        posts: List<ChannelPost>.unmodifiable(
-          current.posts.map((ChannelPost post) {
-            if (post.id != reply.rootId) return post;
-            final int incrementedCount = post.replyCount + (wasKnown ? 0 : 1);
-            final int observedCount = updatedSummary.replyIds.length;
-            return post.withThreadSummary(
-              replyCount: incrementedCount > observedCount
-                  ? incrementedCount
-                  : observedCount,
-              lastReplyAt: latestDateTime(post.lastReplyAt, reply.sentAt),
-            );
-          }),
-        ),
-        replySummaries: summaries,
+    return current.copyWith(
+      posts: List<ChannelPost>.unmodifiable(
+        current.posts.map((ChannelPost post) {
+          if (post.id != reply.rootId) return post;
+          final int incrementedCount = post.replyCount + (wasKnown ? 0 : 1);
+          final int observedCount = updatedSummary.replyIds.length;
+          return post.withThreadSummary(
+            replyCount: incrementedCount > observedCount
+                ? incrementedCount
+                : observedCount,
+            lastReplyAt: latestDateTime(post.lastReplyAt, reply.sentAt),
+          );
+        }),
       ),
+      replySummaries: summaries,
     );
+  }
+
+  int _startRealtime(AuthSession session, PostRepository repository) {
+    final int generation = ++_realtimeGeneration;
+    final StreamSubscription<PostRealtimeEvent>? previous =
+        _realtimeSubscription;
+    if (previous != null) unawaited(previous.cancel());
+    _realtimeEvents.clear();
+    _realtimeBaselines.clear();
+    _realtimeRevision = 0;
+    _recoveryPending = false;
+    _recoveryRunning = false;
+    final StreamSubscription<PostRealtimeEvent> subscription = repository
+        .watchRealtime(session: session, channelId: channelId)
+        .listen(
+          (PostRealtimeEvent event) => _onRealtimeEvent(event, generation),
+          onError: (Object _, StackTrace _) =>
+              _requestRealtimeRecovery(generation),
+        );
+    _realtimeSubscription = subscription;
+    ref.onDispose(() {
+      if (_realtimeGeneration == generation) _realtimeGeneration += 1;
+      unawaited(subscription.cancel());
+    });
+    return generation;
+  }
+
+  void _stopRealtime() {
+    _realtimeGeneration += 1;
+    final StreamSubscription<PostRealtimeEvent>? subscription =
+        _realtimeSubscription;
+    _realtimeSubscription = null;
+    if (subscription != null) unawaited(subscription.cancel());
+    _realtimeEvents.clear();
+    _realtimeBaselines.clear();
+    _recoveryPending = false;
+    _recoveryRunning = false;
+  }
+
+  void _onRealtimeEvent(PostRealtimeEvent event, int generation) {
+    if (generation != _realtimeGeneration || _cancellation.isCancelled) return;
+    _realtimeRevision += 1;
+    var bufferOverflowed = false;
+    if (_realtimeBaselines.isNotEmpty || state.value == null) {
+      _realtimeEvents.add(
+        _VersionedPostRealtimeEvent(_realtimeRevision, event),
+      );
+      if (_realtimeEvents.length > _maxBufferedRealtimeEvents) {
+        _realtimeEvents.removeRange(
+          0,
+          _realtimeEvents.length - _maxBufferedRealtimeEvents,
+        );
+        _recoveryPending = true;
+        bufferOverflowed = true;
+      }
+    }
+    if (event is PostRealtimeRecoveryRequired) {
+      _requestRealtimeRecovery(generation);
+      return;
+    }
+    final ChannelPostsViewState? current = state.value;
+    if (current != null) {
+      state = AsyncData(_applyRealtimeEvent(current, event));
+    }
+    if (bufferOverflowed) _requestRealtimeRecovery(generation);
+  }
+
+  _RealtimeBaseline _beginRealtimeReconciliation() {
+    final int token = ++_realtimeRequest;
+    _realtimeBaselines[token] = _realtimeRevision;
+    return (token: token, revision: _realtimeRevision);
+  }
+
+  List<PostRealtimeEvent> _eventsAfter(int revision) => _realtimeEvents
+      .where((_VersionedPostRealtimeEvent item) => item.revision > revision)
+      .map((_VersionedPostRealtimeEvent item) => item.event)
+      .toList(growable: false);
+
+  void _finishRealtimeReconciliation(int token) {
+    _realtimeBaselines.remove(token);
+    _pruneRealtimeEvents();
+    if (_recoveryPending && _realtimeBaselines.isEmpty) {
+      _requestRealtimeRecovery(_realtimeGeneration);
+    }
+  }
+
+  void _pruneRealtimeEvents() {
+    if (_realtimeBaselines.isEmpty) {
+      if (state.value != null) _realtimeEvents.clear();
+      return;
+    }
+    final int oldestBaseline = _realtimeBaselines.values.reduce(
+      (int first, int second) => first < second ? first : second,
+    );
+    _realtimeEvents.removeWhere(
+      (_VersionedPostRealtimeEvent item) => item.revision <= oldestBaseline,
+    );
+  }
+
+  void _scheduleRealtimeDrain(int generation) {
+    unawaited(
+      Future<void>.delayed(Duration.zero, () {
+        if (generation != _realtimeGeneration || _cancellation.isCancelled) {
+          return;
+        }
+        final ChannelPostsViewState? current = state.value;
+        if (current != null && _realtimeEvents.isNotEmpty) {
+          state = AsyncData(
+            _applyRealtimeEvents(
+              current,
+              _realtimeEvents
+                  .map((_VersionedPostRealtimeEvent item) => item.event)
+                  .toList(growable: false),
+            ),
+          );
+          _pruneRealtimeEvents();
+        }
+        if (_recoveryPending) _requestRealtimeRecovery(generation);
+      }),
+    );
+  }
+
+  ChannelPostsViewState _applyRealtimeEvents(
+    ChannelPostsViewState current,
+    Iterable<PostRealtimeEvent> events,
+  ) {
+    ChannelPostsViewState result = current;
+    for (final PostRealtimeEvent event in events) {
+      result = _applyRealtimeEvent(result, event);
+    }
+    return result;
+  }
+
+  ChannelPostsViewState _applyRealtimeEvent(
+    ChannelPostsViewState current,
+    PostRealtimeEvent event,
+  ) => switch (event) {
+    PostRealtimeUpserted(:final post)
+        when post.channelId == channelId && post.isReply =>
+      _withRecordedReply(current, post),
+    PostRealtimeUpserted(:final post) when post.channelId == channelId =>
+      current.copyWith(
+        posts: applyReplySummaries(
+          mergePosts(current.posts, <ChannelPost>[post]),
+          current.replySummaries,
+        ),
+      ),
+    PostRealtimeDeleted(:final post) when post.channelId == channelId =>
+      _withoutPost(current, postId: post.id, reply: post),
+    _ => current,
+  };
+
+  void _requestRealtimeRecovery(int generation) {
+    if (generation != _realtimeGeneration || _cancellation.isCancelled) return;
+    _recoveryPending = true;
+    if (_recoveryRunning ||
+        _realtimeBaselines.isNotEmpty ||
+        state.value == null) {
+      return;
+    }
+    unawaited(_recoverRealtime(generation));
+  }
+
+  Future<void> _recoverRealtime(int generation) async {
+    final AuthSession? session = _session;
+    final PostRepository? repository = _repository;
+    if (session == null || repository == null || _recoveryRunning) return;
+    _recoveryRunning = true;
+    try {
+      while (_recoveryPending &&
+          generation == _realtimeGeneration &&
+          !_cancellation.isCancelled) {
+        _recoveryPending = false;
+        final ChannelPostsViewState? current = state.value;
+        if (current == null) return;
+        final _RealtimeBaseline baseline = _beginRealtimeReconciliation();
+        try {
+          final String? focusPostId = current.focusPostId;
+          final ChannelPostPage page = await _cancellation.run(
+            () => focusPostId == null
+                ? repository.loadLatest(session: session, channelId: channelId)
+                : repository.loadAround(
+                    session: session,
+                    channelId: channelId,
+                    postId: focusPostId,
+                  ),
+          );
+          if (generation != _realtimeGeneration || _cancellation.isCancelled) {
+            return;
+          }
+          final ChannelPostsViewState recovered = ChannelPostsViewState(
+            posts: page.posts,
+            hasOlder: page.hasOlder,
+            hasNewer: page.hasNewer,
+            replySummaries: page.replySummaries,
+            beforePostId: page.beforePostId,
+            afterPostId: page.afterPostId,
+            focusPostId: focusPostId,
+          );
+          state = AsyncData(
+            _applyRealtimeEvents(recovered, _eventsAfter(baseline.revision)),
+          );
+        } on Object {
+          // Keep the useful snapshot; another recovery signal or explicit
+          // navigation retry can attempt the authoritative reload again.
+        } finally {
+          _finishRealtimeReconciliation(baseline.token);
+        }
+      }
+    } finally {
+      if (generation == _realtimeGeneration) {
+        _recoveryRunning = false;
+        if (_recoveryPending && !_cancellation.isCancelled) {
+          _requestRealtimeRecovery(generation);
+        }
+      }
+    }
   }
 
   Future<ChannelPostsViewState> _loadLatest(
@@ -538,4 +825,13 @@ final class ChannelPostsController
       beforePostId: page.beforePostId,
     );
   }
+}
+
+typedef _RealtimeBaseline = ({int token, int revision});
+
+final class _VersionedPostRealtimeEvent {
+  const _VersionedPostRealtimeEvent(this.revision, this.event);
+
+  final int revision;
+  final PostRealtimeEvent event;
 }

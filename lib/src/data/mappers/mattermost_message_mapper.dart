@@ -29,6 +29,9 @@ final class MattermostMessageMapper
             channelId: post.channelId,
             author: _mapAuthor(post.userId, authors[post.userId]),
             sentAt: DateTime.fromMillisecondsSinceEpoch(post.createAt),
+            updatedAt: DateTime.fromMillisecondsSinceEpoch(
+              post.updateAt == 0 ? post.createAt : post.updateAt,
+            ),
             message: post.deleteAt == 0 ? post.message : '',
             customEmojis: post.deleteAt == 0
                 ? (post.metadata?.emojis ?? const <MattermostEmojiDto>[])

@@ -6,9 +6,42 @@ import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 export '../models/page.dart';
 export '../models/post.dart';
 
+sealed class PostRealtimeEvent {
+  const PostRealtimeEvent();
+}
+
+/// A newly created or edited post from the active session's shared event bus.
+final class PostRealtimeUpserted extends PostRealtimeEvent {
+  const PostRealtimeUpserted(this.post);
+
+  final ChannelPost post;
+}
+
+/// A server-confirmed deletion. The deleted projection retains thread context.
+final class PostRealtimeDeleted extends PostRealtimeEvent {
+  const PostRealtimeDeleted(this.post);
+
+  final ChannelPost post;
+}
+
+/// The socket reconnected or skipped sequence numbers, so REST must reconcile.
+final class PostRealtimeRecoveryRequired extends PostRealtimeEvent {
+  const PostRealtimeRecoveryRequired();
+}
+
 /// Owns channel post pages, creation and reaction commands.
 abstract class PostRepository {
   const PostRepository();
+
+  /// Watches post mutations for one open channel.
+  ///
+  /// Cancelling the returned subscription releases only this feature's
+  /// interest; the authenticated session continues owning the shared socket.
+  Stream<PostRealtimeEvent> watchRealtime({
+    required AuthSession session,
+    String channelId = '',
+    String rootPostId = '',
+  }) => const Stream<PostRealtimeEvent>.empty();
 
   Future<ChannelPostPage> loadLatest({
     required AuthSession session,
