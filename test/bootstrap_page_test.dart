@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/app/app.dart';
@@ -1109,7 +1110,6 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -1136,11 +1136,59 @@ void main() {
     expect(find.text('Message for town-square'), findsNWidgets(2));
     expect(
       tester
+          .getTopLeft(
+            find.byKey(const ValueKey<String>('channel-header-divider')),
+          )
+          .dy,
+      tester
+          .getTopLeft(
+            find.byKey(const ValueKey<String>('thread-header-divider')),
+          )
+          .dy,
+    );
+    expect(
+      tester
           .getSize(
             find.byKey(const ValueKey<String>('thread-town-square-post')),
           )
           .width,
       380,
+    );
+
+    final Finder channelsPane = find.byKey(
+      const ValueKey<String>('channels-side-pane'),
+    );
+    await tester.drag(
+      find.byKey(const ValueKey<String>('channels-pane-divider')),
+      const Offset(-40, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(channelsPane).width, 240);
+
+    final Finder threadDivider = find.byKey(
+      const ValueKey<String>('thread-pane-divider'),
+    );
+    await tester.drag(threadDivider, const Offset(-50, 0));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey<String>('thread-town-square-post')),
+          )
+          .width,
+      430,
+    );
+
+    await tester.tap(threadDivider);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey<String>('thread-town-square-post')),
+          )
+          .width,
+      410,
     );
   });
 

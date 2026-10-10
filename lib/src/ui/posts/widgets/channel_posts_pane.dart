@@ -12,6 +12,7 @@ import 'package:mattermost_flutter/src/domain/policies/post_permalink.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/resizable_pane_divider.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/post_action_navigation.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart';
@@ -50,6 +51,7 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
 
 class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
   String? _selectedRootPostId;
+  double _threadWidth = 380;
   String? _highlightedThreadPostId;
   PostNavigationTarget? _scheduledFocusTarget;
   PostNavigationTarget? _openedThreadTarget;
@@ -118,7 +120,10 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
               onBack: widget.onBack,
               onSearchInChannel: widget.onSearchInChannel,
             ),
-            const Divider(height: 1),
+            const Divider(
+              key: ValueKey<String>('channel-header-divider'),
+              height: 1,
+            ),
             if (viewState?.focusStatus is OperationFailed)
               MaterialBanner(
                 content: const Text(
@@ -263,11 +268,37 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
           onClose: () => setState(() => _selectedRootPostId = null),
         );
         if (showSideThread) {
-          return Row(
+          final double maximumWidth = (constraints.maxWidth - 360).clamp(
+            280.0,
+            700.0,
+          );
+          final double threadWidth = _threadWidth.clamp(280.0, maximumWidth);
+          return Stack(
             children: <Widget>[
-              Expanded(child: channelPane),
-              const VerticalDivider(width: 1),
-              SizedBox(width: 380, child: thread),
+              Positioned.fill(
+                child: Row(
+                  children: <Widget>[
+                    Expanded(child: channelPane),
+                    SizedBox(width: threadWidth, child: thread),
+                  ],
+                ),
+              ),
+              Positioned(
+                right: threadWidth - ResizablePaneDivider.width / 2,
+                top: 0,
+                bottom: 0,
+                child: ResizablePaneDivider(
+                  key: const ValueKey<String>('thread-pane-divider'),
+                  label: ChannelPostsStrings.resizeThreadPane,
+                  increaseDirection: -1,
+                  onResize: (double delta) => setState(() {
+                    _threadWidth = (threadWidth - delta).clamp(
+                      280.0,
+                      maximumWidth,
+                    );
+                  }),
+                ),
+              ),
             ],
           );
         }
@@ -402,16 +433,29 @@ class _ChannelHeader extends StatelessWidget {
           BackButton(onPressed: onBack),
           const SizedBox(width: 4),
         ],
-        Icon(_channelIcon(channel.kind), size: 20),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(_channelIcon(channel.kind), size: 20),
+            const _ChannelHeaderMetadataSpacer(),
+          ],
+        ),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            channel.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                channel.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const _ChannelHeaderMetadataSpacer(),
+            ],
           ),
         ),
         if (onSearchInChannel != null)
@@ -441,6 +485,18 @@ class _ChannelHeader extends StatelessWidget {
     ChannelKind.directMessage => Icons.person_outline,
     ChannelKind.groupMessage => Icons.group_outlined,
   };
+}
+
+class _ChannelHeaderMetadataSpacer extends StatelessWidget {
+  const _ChannelHeaderMetadataSpacer();
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: Opacity(
+      opacity: 0,
+      child: Text(' ', style: Theme.of(context).textTheme.bodySmall),
+    ),
+  );
 }
 
 class _PostsLoading extends StatelessWidget {
