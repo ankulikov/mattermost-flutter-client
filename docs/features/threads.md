@@ -26,6 +26,13 @@ marks their boundary and becomes the initial scroll target. A followed thread
 with no unread replies opens at the end; a thread opened from channel history
 starts at its root.
 
+An open thread subscribes to post events by root ID through the session-wide
+realtime service, so it can subscribe before the REST load reveals a channel.
+Created and edited replies reconcile by post ID, realtime-deleted replies are
+removed from the open-thread projection, and reconnect/sequence-gap recovery
+reloads the complete thread without temporarily clearing it. Closing the thread
+cancels its subscription.
+
 After the first frame of a complete followed thread, the client updates the
 thread read timestamp to the time captured before loading began. The timestamp
 cannot jump past replies that arrived during the request.

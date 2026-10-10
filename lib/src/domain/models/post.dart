@@ -80,6 +80,7 @@ final class Post {
     required this.channelId,
     required this.author,
     required this.sentAt,
+    this.updatedAt,
     required this.message,
     this.customEmojis = const <CustomEmojiReference>[],
     this.attachments = const <PostAttachment>[],
@@ -95,6 +96,11 @@ final class Post {
   final String channelId;
   final PostAuthor author;
   final DateTime sentAt;
+
+  /// Last server-side revision time used to reject stale REST/realtime races.
+  ///
+  /// Hand-built posts without protocol metadata fall back to [sentAt].
+  final DateTime? updatedAt;
   final String message;
   final List<CustomEmojiReference> customEmojis;
   final List<PostAttachment> attachments;
@@ -106,6 +112,8 @@ final class Post {
   final bool isDeleted;
 
   bool get isReply => rootId.isNotEmpty;
+
+  DateTime get revisionAt => updatedAt ?? sentAt;
 
   /// Whether this post has content a message surface can render.
   ///
@@ -124,6 +132,7 @@ final class Post {
         channelId: channelId,
         author: author,
         sentAt: sentAt,
+        updatedAt: updatedAt,
         message: message,
         customEmojis: customEmojis,
         attachments: attachments,
@@ -140,6 +149,7 @@ final class Post {
     channelId: channelId,
     author: author,
     sentAt: sentAt,
+    updatedAt: updatedAt,
     message: message,
     customEmojis: customEmojis,
     attachments: attachments,

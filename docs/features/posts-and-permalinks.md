@@ -26,7 +26,16 @@ pagination failures keep the history already displayed.
 After a successful send, the returned post is inserted into the active channel
 or thread snapshot. Realtime `posted`, `post_edited`, and `post_deleted` events
 use the same merge and replacement rules as REST results. Duplicate REST and
-WebSocket delivery does not create duplicate posts.
+WebSocket delivery does not create duplicate posts. Subscriptions are scoped to
+the open channel or thread and are cancelled with that route's auto-disposed
+state.
+
+Realtime events received while an initial load, refresh, focus request, or page
+request is in flight are replayed over its response before publication. Post
+`update_at` revisions prevent a delayed event from replacing a newer REST
+projection. A WebSocket reconnect or sequence gap starts one coalesced,
+authoritative reload while preserving the useful snapshot already on screen;
+events received during that recovery are replayed over the replacement too.
 
 ## Permalink navigation
 

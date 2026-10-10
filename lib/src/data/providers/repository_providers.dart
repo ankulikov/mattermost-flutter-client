@@ -152,6 +152,7 @@ final Provider<PostRepository> postRepositoryProvider =
         api: ref.watch(activeMattermostApiProvider),
         messageMapper: ref.watch(mattermostMessageMapperProvider),
         users: ref.watch(userRepositoryProvider),
+        realtime: ref.watch(sessionRealtimeServiceProvider),
       ),
     );
 

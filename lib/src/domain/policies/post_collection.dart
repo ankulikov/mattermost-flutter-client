@@ -7,14 +7,19 @@ List<Post> mergePosts(List<Post> current, List<Post> incoming) {
   };
   for (final Post post in incoming) {
     final Post? existing = byId[post.id];
-    byId[post.id] = existing == null
-        ? post
-        : post.withThreadSummary(
-            replyCount: existing.replyCount > post.replyCount
-                ? existing.replyCount
-                : post.replyCount,
-            lastReplyAt: _latest(existing.lastReplyAt, post.lastReplyAt),
-          );
+    if (existing == null) {
+      byId[post.id] = post;
+      continue;
+    }
+    final Post canonical = existing.revisionAt.isAfter(post.revisionAt)
+        ? existing
+        : post;
+    byId[post.id] = canonical.withThreadSummary(
+      replyCount: existing.replyCount > post.replyCount
+          ? existing.replyCount
+          : post.replyCount,
+      lastReplyAt: _latest(existing.lastReplyAt, post.lastReplyAt),
+    );
   }
   final List<Post> result = byId.values.toList(growable: false)
     ..sort((Post a, Post b) {
