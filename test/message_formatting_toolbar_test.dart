@@ -79,6 +79,28 @@ void main() {
     expect(selected, MessageFormattingCommand.quote);
   });
 
+  testWidgets('show-all mode wraps instead of hiding compact controls', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 300));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const _ToolbarApp(showAllCommands: true));
+
+    for (final MessageFormattingCommand command
+        in MessageFormattingCommand.values) {
+      expect(
+        find.byKey(ValueKey<String>('message-formatting-${command.name}')),
+        findsOneWidget,
+      );
+    }
+    expect(
+      find.byKey(const ValueKey<String>('message-formatting-overflow')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('reports the label and active toggle state to semantics', (
     WidgetTester tester,
   ) async {
@@ -184,16 +206,19 @@ class _ToolbarApp extends StatelessWidget {
   const _ToolbarApp({
     this.activeCommands = const <MessageFormattingCommand>{},
     this.onCommandSelected,
+    this.showAllCommands = false,
   });
 
   final Set<MessageFormattingCommand> activeCommands;
   final ValueChanged<MessageFormattingCommand>? onCommandSelected;
+  final bool showAllCommands;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     home: Scaffold(
       body: MessageFormattingToolbar(
         activeCommands: activeCommands,
+        showAllCommands: showAllCommands,
         onCommandSelected: onCommandSelected ?? (_) {},
       ),
     ),

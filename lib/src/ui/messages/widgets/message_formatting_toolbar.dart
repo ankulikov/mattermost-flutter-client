@@ -28,6 +28,7 @@ class MessageFormattingToolbar extends StatelessWidget {
     required this.onCommandSelected,
     this.editorFocusNode,
     this.enabled = true,
+    this.showAllCommands = false,
     super.key,
   });
 
@@ -47,6 +48,12 @@ class MessageFormattingToolbar extends StatelessWidget {
   /// Whether formatting commands are available.
   final bool enabled;
 
+  /// Whether every command remains visible instead of using an overflow menu.
+  ///
+  /// The full message editor uses this mode and lets the controls wrap when
+  /// horizontal space is constrained.
+  final bool showAllCommands;
+
   void _selectCommand(MessageFormattingCommand command) {
     if (!enabled) return;
     onCommandSelected(command);
@@ -60,35 +67,31 @@ class MessageFormattingToolbar extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (BuildContext context, BoxConstraints constraints) {
       final bool compact = constraints.maxWidth < AppBreakpoints.compact;
+      final List<Widget> controls = <Widget>[
+        _commandButton(MessageFormattingCommand.bold),
+        _commandButton(MessageFormattingCommand.italic),
+        _commandButton(MessageFormattingCommand.strike),
+        _commandButton(MessageFormattingCommand.heading),
+        if (showAllCommands || !compact) ...<Widget>[
+          const ExcludeSemantics(
+            child: SizedBox(height: 24, child: VerticalDivider(width: 16)),
+          ),
+          _commandButton(MessageFormattingCommand.code),
+          _commandButton(MessageFormattingCommand.quote),
+          _commandButton(MessageFormattingCommand.bulletedList),
+          _commandButton(MessageFormattingCommand.orderedList),
+        ] else
+          _overflowButton(),
+      ];
       return Semantics(
         container: true,
         label: MessageComposerStrings.formattingToolbar,
-        child: SizedBox(
-          height: 48,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              _commandButton(MessageFormattingCommand.bold),
-              _commandButton(MessageFormattingCommand.italic),
-              _commandButton(MessageFormattingCommand.strike),
-              _commandButton(MessageFormattingCommand.heading),
-              if (compact)
-                _overflowButton()
-              else ...<Widget>[
-                const ExcludeSemantics(
-                  child: SizedBox(
-                    height: 24,
-                    child: VerticalDivider(width: 16),
-                  ),
-                ),
-                _commandButton(MessageFormattingCommand.code),
-                _commandButton(MessageFormattingCommand.quote),
-                _commandButton(MessageFormattingCommand.bulletedList),
-                _commandButton(MessageFormattingCommand.orderedList),
-              ],
-            ],
-          ),
-        ),
+        child: showAllCommands
+            ? Wrap(children: controls)
+            : SizedBox(
+                height: 48,
+                child: Row(mainAxisSize: MainAxisSize.min, children: controls),
+              ),
       );
     },
   );

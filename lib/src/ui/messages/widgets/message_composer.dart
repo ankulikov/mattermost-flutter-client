@@ -19,6 +19,7 @@ import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart
 import 'package:mattermost_flutter/src/ui/messages/message_editor_controller.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/emoji_picker.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/file_attachment_presentation.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/full_message_editor.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_formatting_toolbar.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
@@ -101,6 +102,7 @@ class _MessageComposerState extends State<MessageComposer> {
   bool _sending = false;
   bool _picking = false;
   bool _failed = false;
+  bool _fullEditorOpen = false;
   bool _pickFailed = false;
   bool _tooManyFiles = false;
   int _scopeGeneration = 0;
@@ -403,11 +405,11 @@ class _MessageComposerState extends State<MessageComposer> {
   String _mentionQueryKey(MentionQuery query) =>
       '${query.start}:${query.end}:${query.key}';
 
-  Future<void> _submit({bool finalizeComposing = false}) async {
-    if (!_canSend) return;
+  Future<bool> _submit({bool finalizeComposing = false}) async {
+    if (!_canSend) return false;
     final TextEditingValue value = _controller.value;
     if (value.composing.isValid && !value.composing.isCollapsed) {
-      if (!finalizeComposing) return;
+      if (!finalizeComposing) return false;
       // Android keyboards such as Gboard keep the word at the caret in a
       // composing region for autocorrect. An explicit send action finalizes
       // that word; it must not silently discard the tap while the IME is open.
@@ -441,28 +443,87 @@ class _MessageComposerState extends State<MessageComposer> {
           accountId != widget.accountId ||
           uploads != _uploads ||
           scopeGeneration != _scopeGeneration) {
-        return;
+        return false;
       }
       if (_controller.messageText == draft) _controller.clear();
       uploads?.clear();
       _pendingPostId = null;
       _pendingDraft = null;
       _focusNode.unfocus();
+      return true;
     } on Object {
       if (!mounted ||
           destinationId != widget.destinationId ||
           accountId != widget.accountId ||
           uploads != _uploads ||
           scopeGeneration != _scopeGeneration) {
-        return;
+        return false;
       }
       setState(() => _failed = true);
-      _focusNode.requestFocus();
+      if (!_fullEditorOpen) _focusNode.requestFocus();
+      return false;
     } finally {
       if (mounted && scopeGeneration == _scopeGeneration) {
         setState(() => _sending = false);
       }
     }
+  }
+
+  Future<void> _openFullEditor() async {
+    if (_sending) return;
+    _initUploads();
+    _focusNode.unfocus();
+    final bool compact =
+        MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
+    _fullEditorOpen = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          final Size size = MediaQuery.sizeOf(dialogContext);
+          final Widget editor = FullMessageEditor(
+            destinationId: widget.destinationId,
+            placeholder: widget.placeholder,
+            controller: _controller,
+            uploads: _uploads,
+            canSend: () => _canSend,
+            canAttach: () =>
+                (_uploads?.canAdd ?? true) && !_sending && !_picking,
+            onAttach:
+                widget.fileUploadRepositoryFactory != null &&
+                    widget.uploadFilePickerFactory != null &&
+                    widget.accountId.isNotEmpty
+                ? _pickFiles
+                : null,
+            onSubmit: () => _submit(finalizeComposing: true),
+            onInsertNewLine: _insertNewLine,
+            uploadTilesBuilder: () =>
+                _uploads?.tiles.map(_buildUploadTile).toList(growable: false) ??
+                const <Widget>[],
+            contextMenuBuilder: _buildContextMenu,
+          );
+          if (compact) {
+            return Dialog.fullscreen(
+              key: const ValueKey<String>('full-editor-fullscreen'),
+              child: editor,
+            );
+          }
+          return Dialog(
+            key: const ValueKey<String>('full-editor-modal'),
+            clipBehavior: Clip.antiAlias,
+            child: SizedBox(
+              width: 840,
+              height: (size.height * 0.72).clamp(480, 720),
+              child: editor,
+            ),
+          );
+        },
+      );
+    } finally {
+      _fullEditorOpen = false;
+    }
+    if (mounted && !_sending) _focusNode.requestFocus();
   }
 
   void _insertNewLine() {
@@ -815,15 +876,6 @@ class _MessageComposerState extends State<MessageComposer> {
                                 .toList(),
                           ),
                         ),
-                      TextFieldTapRegion(
-                        groupId: _textFieldTapGroup,
-                        child: MessageFormattingToolbar(
-                          activeCommands: _controller.activeFormattingCommands,
-                          editorFocusNode: _focusNode,
-                          enabled: !_sending,
-                          onCommandSelected: _controller.applyFormattingCommand,
-                        ),
-                      ),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: <Widget>[
@@ -965,6 +1017,17 @@ class _MessageComposerState extends State<MessageComposer> {
                                 ),
                               ),
                             ),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            key: ValueKey<String>(
+                              'open-full-editor-${widget.destinationId}',
+                            ),
+                            tooltip: MessageComposerStrings.openFullEditor,
+                            onPressed: _sending
+                                ? null
+                                : () => unawaited(_openFullEditor()),
+                            icon: const Icon(Icons.edit_note_outlined),
                           ),
                           const SizedBox(width: 4),
                           Semantics(
