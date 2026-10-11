@@ -1,65 +1,79 @@
-# Mattermost Flutter
+# Mattermost X
 
-A cross-platform Mattermost client for Android, iOS, Web, macOS, and Windows.
-It keeps the interface responsive while server data loads, adapts the workspace
-to the available width, and gives message-heavy teams a faster way to handle
-their day.
+![readme-cover.jpg](docs/img/readme-cover.jpg)
 
-## What sets it apart
+> A fast, modern Mattermost client for Android, iOS, Web, macOS, and Windows written in Flutter + Dart
 
-### One Inbox for work that needs attention
+One client for every screen, built for busy Mattermost workdays.
 
-The official Mattermost client does not provide this Inbox. It collects
-mentions, direct messages, integration messages, and unread followed threads in
-one place. New items stay separate from messages you have postponed, so the
-Inbox works as a lightweight communication queue rather than another unread
-badge.
+[![CI](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/ci.yml/badge.svg)](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/ci.yml)
 
-### A responsive interface from the first frame
+[![Release builds](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/release.yml/badge.svg)](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/release.yml)
 
-The client does not wait for every request before it becomes useful. Initial
-loads have clear retry states, while refresh and pagination keep existing
-content on screen. Layouts respond to the space they receive: compact windows
-use stacked screens, medium widths add a navigation rail, and expanded windows
-show channels, messages, and threads side by side.
 
-### Markdown that is comfortable to write
+## ✨ What sets it apart
 
-The message composer includes formatting controls and a live Markdown preview.
-It styles completed Markdown while preserving the exact source text, selection,
-clipboard behavior, and IME composing range. Messages support the Mattermost
-dialect, including tables, task lists, code highlighting, LaTeX, channel links,
-mentions, and custom emoji.
+- 📱 One codebase, every screen. The interface adapts to compact, medium,
+  and expanded widths instead of treating mobile and desktop as separate apps.
+- ⚡ Fast by design. GPU-rendered UI, asynchronous data loading, and
+  background work keep the UI isolate free from blocking I/O and heavy tasks.
+- 📥 One Inbox. Mentions, direct messages, integration posts, and unread
+  followed threads share a single action queue that the official client does
+  not provide.
+- ⏰ A queue for later. Postpone a message without losing it in the unread
+  pile, then finish or remove it when you are ready.
+- ✍️ Live Markdown editing. Write in a source-preserving live preview, or
+  switch to article mode for a full editor with every formatting control.
+- 💬 Select and quote. Select message text and insert it into the composer
+  as a properly formatted quote.
+- 🔗 Links stay in context. Message permalinks open the right channel or
+  thread inside the app. Back returns to the original scroll position, focus,
+  and draft.
+- 🟢 Everyday status presets. Set meeting, lunch, commute, or vacation
+  status in one click, with optional expiration where Mattermost supports it.
 
-### Status changes without the settings hunt
+## 🧰 Also included
 
-The profile page puts availability and custom status controls together. Common
-statuses such as "In a meeting", "Out for lunch", "Commuting", and "On
-vacation" take one tap, with expiration handled through the Mattermost API.
+- 🧭 Searchable sidebar for channels, direct messages, and group messages
+- 🔎 Message search with channel and author filters
+- 😄 Emoji and custom-emoji autocomplete
+- @️⃣ User and user-group mention suggestions
+- 👤 User profile cards with authenticated avatars
+- 🛰️ Real-time updates for messages, edits, deletions, reactions, and threads
+- 🖱️ Quick context actions for mouse, trackpad, touch, and keyboard workflows
+- 🔐 Password and personal access token sign-in, plus SSO on supported native
+  platforms, with tokens kept in secure platform storage
+- 📎 Retryable uploads, authenticated previews, and original-file downloads
+- 🧩 Initial support for legacy interactive messages, including buttons and
+  select menus
 
-## More of the client
+## 🗺️ Backlog
 
-- Network-first channels, posts, threads, search, and sidebar data
-- Post permalinks that open the right channel or thread without losing the
-  source screen's scroll position or draft
-- Direct and group messages grouped by conversation and sender in the Inbox
-- Reactions, custom emoji search, recent emoji, and mention autocomplete
-- User cards, authenticated avatars, file previews, and legacy interactive
-  message attachments
-- Keyboard navigation, scalable text, semantics, touch and pointer workflows,
-  and light and dark themes
-- Secure token storage and redacted diagnostics
+- 🔔 Push notifications
+- 🏢 Multiple teams per account
+- 🧩 Full interactive messages and dialogs
 
-## Documentation
+## 🚧 Out of scope
 
-- [Architecture and module index](docs/features/readme.md)
-- [Release builds](docs/RELEASES.md)
-- [Instructions for coding agents](AGENTS.md)
+- 🛡️ System Console: use the stock Mattermost web client for administration.
+- 🧱 Third-party apps: products such as Mattermost Boards are not planned.
+- 🔌 Plugins: support is TBD.
 
-## Run the project
+## 🤝 Contributing
 
-Install a stable Flutter SDK compatible with the constraint in `pubspec.yaml`,
-then run:
+1. 🧰 Install Android Studio and enable its Flutter and Dart plugins. This project
+   requires Flutter 3.38 or newer and Dart 3.10 or newer; the constraints live
+   in `pubspec.yaml`.
+2. 🤖 Follow Flutter's [AI development setup](https://docs.flutter.dev/ai/get-started).
+3. 🛠️ Read [AGENTS.md](AGENTS.md) and the relevant
+   [feature document](docs/features/readme.md), then implement the change and
+   cover it with tests. If you use a coding agent, make sure it uses the
+   installed Dart or Flutter skill that matches the task.
+4. ✅ Run the checks below, prepare a focused pull request, and explain any new
+   runtime dependency.
+5. 👀 Submit the pull request and wait for review.
+
+Set up the project:
 
 ```sh
 flutter pub get
@@ -68,7 +82,7 @@ dart run tool/generate_mattermost_system_emojis.dart
 flutter run
 ```
 
-Useful checks during development:
+Before opening a pull request:
 
 ```sh
 dart format --output=none --set-exit-if-changed lib test tool
@@ -77,6 +91,12 @@ flutter analyze
 flutter test
 ```
 
-Platform toolchains still apply: iOS and macOS builds require macOS and Xcode,
-while Windows builds require Windows. Android release signing and CI release
-artifacts are covered in [the release guide](docs/RELEASES.md).
+iOS and macOS builds require macOS and Xcode. Windows builds require Windows.
+Android release signing and CI artifacts are covered in the
+[release guide](docs/RELEASES.md).
+
+## 📚 Documentation
+
+- [Architecture and feature guide](docs/features/readme.md)
+- [Release builds](docs/RELEASES.md)
+- [Instructions for coding agents](AGENTS.md)
