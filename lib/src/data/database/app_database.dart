@@ -79,10 +79,32 @@ class CachedUserGroups extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId, groupId};
 }
 
+/// Content-free Inbox badge counts retained across process restarts.
+///
+/// The row is replaced after every authoritative snapshot or local Inbox
+/// mutation. Message IDs and message content remain volatile.
+class InboxCounters extends Table {
+  TextColumn get accountId => text()();
+
+  IntColumn get newMessageCount => integer()();
+
+  IntColumn get postponedMessageCount => integer()();
+
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{accountId};
+}
+
 /// Drift persists only explicitly owned durable data. Channel navigation,
 /// posts, threads, and paging state remain volatile.
 @DriftDatabase(
-  tables: <Type>[CachedUserProfiles, RecentEmojis, CachedUserGroups],
+  tables: <Type>[
+    CachedUserProfiles,
+    RecentEmojis,
+    CachedUserGroups,
+    InboxCounters,
+  ],
 )
 final class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
@@ -90,7 +112,7 @@ final class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -135,6 +157,9 @@ final class AppDatabase extends _$AppDatabase {
           'CREATE INDEX IF NOT EXISTS cached_user_groups_account_name_idx '
           'ON cached_user_groups (account_id, name COLLATE NOCASE)',
         );
+      }
+      if (from < 13) {
+        await migrator.createTable(inboxCounters);
       }
     },
   );

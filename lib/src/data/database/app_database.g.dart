@@ -1369,6 +1369,342 @@ class CachedUserGroupsCompanion extends UpdateCompanion<CachedUserGroup> {
   }
 }
 
+class $InboxCountersTable extends InboxCounters
+    with TableInfo<$InboxCountersTable, InboxCounter> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $InboxCountersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<String> accountId = GeneratedColumn<String>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _newMessageCountMeta = const VerificationMeta(
+    'newMessageCount',
+  );
+  @override
+  late final GeneratedColumn<int> newMessageCount = GeneratedColumn<int>(
+    'new_message_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _postponedMessageCountMeta =
+      const VerificationMeta('postponedMessageCount');
+  @override
+  late final GeneratedColumn<int> postponedMessageCount = GeneratedColumn<int>(
+    'postponed_message_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountId,
+    newMessageCount,
+    postponedMessageCount,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'inbox_counters';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<InboxCounter> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('new_message_count')) {
+      context.handle(
+        _newMessageCountMeta,
+        newMessageCount.isAcceptableOrUnknown(
+          data['new_message_count']!,
+          _newMessageCountMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_newMessageCountMeta);
+    }
+    if (data.containsKey('postponed_message_count')) {
+      context.handle(
+        _postponedMessageCountMeta,
+        postponedMessageCount.isAcceptableOrUnknown(
+          data['postponed_message_count']!,
+          _postponedMessageCountMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_postponedMessageCountMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountId};
+  @override
+  InboxCounter map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return InboxCounter(
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_id'],
+      )!,
+      newMessageCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}new_message_count'],
+      )!,
+      postponedMessageCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}postponed_message_count'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $InboxCountersTable createAlias(String alias) {
+    return $InboxCountersTable(attachedDatabase, alias);
+  }
+}
+
+class InboxCounter extends DataClass implements Insertable<InboxCounter> {
+  final String accountId;
+  final int newMessageCount;
+  final int postponedMessageCount;
+  final DateTime updatedAt;
+  const InboxCounter({
+    required this.accountId,
+    required this.newMessageCount,
+    required this.postponedMessageCount,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_id'] = Variable<String>(accountId);
+    map['new_message_count'] = Variable<int>(newMessageCount);
+    map['postponed_message_count'] = Variable<int>(postponedMessageCount);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  InboxCountersCompanion toCompanion(bool nullToAbsent) {
+    return InboxCountersCompanion(
+      accountId: Value(accountId),
+      newMessageCount: Value(newMessageCount),
+      postponedMessageCount: Value(postponedMessageCount),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory InboxCounter.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return InboxCounter(
+      accountId: serializer.fromJson<String>(json['accountId']),
+      newMessageCount: serializer.fromJson<int>(json['newMessageCount']),
+      postponedMessageCount: serializer.fromJson<int>(
+        json['postponedMessageCount'],
+      ),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountId': serializer.toJson<String>(accountId),
+      'newMessageCount': serializer.toJson<int>(newMessageCount),
+      'postponedMessageCount': serializer.toJson<int>(postponedMessageCount),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  InboxCounter copyWith({
+    String? accountId,
+    int? newMessageCount,
+    int? postponedMessageCount,
+    DateTime? updatedAt,
+  }) => InboxCounter(
+    accountId: accountId ?? this.accountId,
+    newMessageCount: newMessageCount ?? this.newMessageCount,
+    postponedMessageCount: postponedMessageCount ?? this.postponedMessageCount,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  InboxCounter copyWithCompanion(InboxCountersCompanion data) {
+    return InboxCounter(
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      newMessageCount: data.newMessageCount.present
+          ? data.newMessageCount.value
+          : this.newMessageCount,
+      postponedMessageCount: data.postponedMessageCount.present
+          ? data.postponedMessageCount.value
+          : this.postponedMessageCount,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('InboxCounter(')
+          ..write('accountId: $accountId, ')
+          ..write('newMessageCount: $newMessageCount, ')
+          ..write('postponedMessageCount: $postponedMessageCount, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(accountId, newMessageCount, postponedMessageCount, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is InboxCounter &&
+          other.accountId == this.accountId &&
+          other.newMessageCount == this.newMessageCount &&
+          other.postponedMessageCount == this.postponedMessageCount &&
+          other.updatedAt == this.updatedAt);
+}
+
+class InboxCountersCompanion extends UpdateCompanion<InboxCounter> {
+  final Value<String> accountId;
+  final Value<int> newMessageCount;
+  final Value<int> postponedMessageCount;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const InboxCountersCompanion({
+    this.accountId = const Value.absent(),
+    this.newMessageCount = const Value.absent(),
+    this.postponedMessageCount = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  InboxCountersCompanion.insert({
+    required String accountId,
+    required int newMessageCount,
+    required int postponedMessageCount,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : accountId = Value(accountId),
+       newMessageCount = Value(newMessageCount),
+       postponedMessageCount = Value(postponedMessageCount),
+       updatedAt = Value(updatedAt);
+  static Insertable<InboxCounter> custom({
+    Expression<String>? accountId,
+    Expression<int>? newMessageCount,
+    Expression<int>? postponedMessageCount,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountId != null) 'account_id': accountId,
+      if (newMessageCount != null) 'new_message_count': newMessageCount,
+      if (postponedMessageCount != null)
+        'postponed_message_count': postponedMessageCount,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  InboxCountersCompanion copyWith({
+    Value<String>? accountId,
+    Value<int>? newMessageCount,
+    Value<int>? postponedMessageCount,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return InboxCountersCompanion(
+      accountId: accountId ?? this.accountId,
+      newMessageCount: newMessageCount ?? this.newMessageCount,
+      postponedMessageCount:
+          postponedMessageCount ?? this.postponedMessageCount,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountId.present) {
+      map['account_id'] = Variable<String>(accountId.value);
+    }
+    if (newMessageCount.present) {
+      map['new_message_count'] = Variable<int>(newMessageCount.value);
+    }
+    if (postponedMessageCount.present) {
+      map['postponed_message_count'] = Variable<int>(
+        postponedMessageCount.value,
+      );
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('InboxCountersCompanion(')
+          ..write('accountId: $accountId, ')
+          ..write('newMessageCount: $newMessageCount, ')
+          ..write('postponedMessageCount: $postponedMessageCount, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1378,6 +1714,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CachedUserGroupsTable cachedUserGroups = $CachedUserGroupsTable(
     this,
   );
+  late final $InboxCountersTable inboxCounters = $InboxCountersTable(this);
   late final Index cachedUserProfilesAccountUsernameIdx = Index(
     'cached_user_profiles_account_username_idx',
     'CREATE INDEX cached_user_profiles_account_username_idx ON cached_user_profiles (account_id, username COLLATE NOCASE)',
@@ -1398,6 +1735,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     cachedUserProfiles,
     recentEmojis,
     cachedUserGroups,
+    inboxCounters,
     cachedUserProfilesAccountUsernameIdx,
     recentEmojisAccountLastUsedAtIdx,
     cachedUserGroupsAccountNameIdx,
@@ -2126,6 +2464,191 @@ typedef $$CachedUserGroupsTableProcessedTableManager =
       CachedUserGroup,
       PrefetchHooks Function()
     >;
+typedef $$InboxCountersTableCreateCompanionBuilder =
+    InboxCountersCompanion Function({
+      required String accountId,
+      required int newMessageCount,
+      required int postponedMessageCount,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$InboxCountersTableUpdateCompanionBuilder =
+    InboxCountersCompanion Function({
+      Value<String> accountId,
+      Value<int> newMessageCount,
+      Value<int> postponedMessageCount,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$InboxCountersTableFilterComposer
+    extends Composer<_$AppDatabase, $InboxCountersTable> {
+  $$InboxCountersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get newMessageCount => $composableBuilder(
+    column: $table.newMessageCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get postponedMessageCount => $composableBuilder(
+    column: $table.postponedMessageCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$InboxCountersTableOrderingComposer
+    extends Composer<_$AppDatabase, $InboxCountersTable> {
+  $$InboxCountersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get newMessageCount => $composableBuilder(
+    column: $table.newMessageCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get postponedMessageCount => $composableBuilder(
+    column: $table.postponedMessageCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$InboxCountersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $InboxCountersTable> {
+  $$InboxCountersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<int> get newMessageCount => $composableBuilder(
+    column: $table.newMessageCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get postponedMessageCount => $composableBuilder(
+    column: $table.postponedMessageCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$InboxCountersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $InboxCountersTable,
+          InboxCounter,
+          $$InboxCountersTableFilterComposer,
+          $$InboxCountersTableOrderingComposer,
+          $$InboxCountersTableAnnotationComposer,
+          $$InboxCountersTableCreateCompanionBuilder,
+          $$InboxCountersTableUpdateCompanionBuilder,
+          (
+            InboxCounter,
+            BaseReferences<_$AppDatabase, $InboxCountersTable, InboxCounter>,
+          ),
+          InboxCounter,
+          PrefetchHooks Function()
+        > {
+  $$InboxCountersTableTableManager(_$AppDatabase db, $InboxCountersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$InboxCountersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$InboxCountersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$InboxCountersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> accountId = const Value.absent(),
+                Value<int> newMessageCount = const Value.absent(),
+                Value<int> postponedMessageCount = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => InboxCountersCompanion(
+                accountId: accountId,
+                newMessageCount: newMessageCount,
+                postponedMessageCount: postponedMessageCount,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountId,
+                required int newMessageCount,
+                required int postponedMessageCount,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => InboxCountersCompanion.insert(
+                accountId: accountId,
+                newMessageCount: newMessageCount,
+                postponedMessageCount: postponedMessageCount,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$InboxCountersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $InboxCountersTable,
+      InboxCounter,
+      $$InboxCountersTableFilterComposer,
+      $$InboxCountersTableOrderingComposer,
+      $$InboxCountersTableAnnotationComposer,
+      $$InboxCountersTableCreateCompanionBuilder,
+      $$InboxCountersTableUpdateCompanionBuilder,
+      (
+        InboxCounter,
+        BaseReferences<_$AppDatabase, $InboxCountersTable, InboxCounter>,
+      ),
+      InboxCounter,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2136,4 +2659,6 @@ class $AppDatabaseManager {
       $$RecentEmojisTableTableManager(_db, _db.recentEmojis);
   $$CachedUserGroupsTableTableManager get cachedUserGroups =>
       $$CachedUserGroupsTableTableManager(_db, _db.cachedUserGroups);
+  $$InboxCountersTableTableManager get inboxCounters =>
+      $$InboxCountersTableTableManager(_db, _db.inboxCounters);
 }

@@ -109,9 +109,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       );
     }
     final bool inboxHasNewItems = ref.watch(
-      inboxProvider.select(
-        (value) => value.value?.snapshot.hasNewItems ?? false,
-      ),
+      inboxProvider.select((value) => value.value?.hasNewItems ?? false),
     );
     final CurrentUserProfile? currentUserProfile = ref
         .watch(currentUserProfileProvider)

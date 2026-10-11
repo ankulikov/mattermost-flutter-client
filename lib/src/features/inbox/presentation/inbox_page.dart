@@ -64,12 +64,12 @@ class _InboxPageState extends ConsumerState<InboxPage>
           tabs: <Widget>[
             _InboxTab(
               label: InboxStrings.newItems,
-              count: value.value?.snapshot.newMessageCount ?? 0,
+              count: value.value?.newMessageCount ?? 0,
               countKey: const ValueKey<String>('inbox-new-count'),
             ),
             _InboxTab(
               label: InboxStrings.postponed,
-              count: value.value?.snapshot.postponedMessageCount ?? 0,
+              count: value.value?.postponedMessageCount ?? 0,
               countKey: const ValueKey<String>('inbox-postponed-count'),
             ),
           ],
@@ -93,36 +93,61 @@ class _InboxPageState extends ConsumerState<InboxPage>
             ],
           ),
         ),
-        data: (InboxViewState state) => Column(
-          children: <Widget>[
-            if (state.refreshStatus is OperationInProgress)
-              const LinearProgressIndicator(minHeight: 2),
-            if (state.refreshStatus is OperationFailed)
-              const MaterialBanner(
-                content: Text(InboxStrings.refreshFailed),
-                actions: <Widget>[SizedBox.shrink()],
+        data: (InboxViewState state) {
+          if (!state.hasLoadedSnapshot) {
+            if (state.initialLoadStatus is OperationFailed) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Text(InboxStrings.loadFailed),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => unawaited(
+                        ref.read(inboxProvider.notifier).retryInitialLoad(),
+                      ),
+                      child: const Text(InboxStrings.retry),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return Semantics(
+              label: InboxStrings.loading,
+              child: const Center(child: CircularProgressIndicator()),
+            );
+          }
+          return Column(
+            children: <Widget>[
+              if (state.refreshStatus is OperationInProgress)
+                const LinearProgressIndicator(minHeight: 2),
+              if (state.refreshStatus is OperationFailed)
+                const MaterialBanner(
+                  content: Text(InboxStrings.refreshFailed),
+                  actions: <Widget>[SizedBox.shrink()],
+                ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabs,
+                  children: <Widget>[
+                    _InboxList(
+                      items: state.snapshot.newItems,
+                      empty: InboxStrings.emptyNew,
+                      onOpenItem: widget.onOpenItem,
+                      isPostponed: false,
+                    ),
+                    _InboxList(
+                      items: state.snapshot.postponedItems,
+                      empty: InboxStrings.emptyPostponed,
+                      onOpenItem: widget.onOpenItem,
+                      isPostponed: true,
+                    ),
+                  ],
+                ),
               ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabs,
-                children: <Widget>[
-                  _InboxList(
-                    items: state.snapshot.newItems,
-                    empty: InboxStrings.emptyNew,
-                    onOpenItem: widget.onOpenItem,
-                    isPostponed: false,
-                  ),
-                  _InboxList(
-                    items: state.snapshot.postponedItems,
-                    empty: InboxStrings.emptyPostponed,
-                    onOpenItem: widget.onOpenItem,
-                    isPostponed: true,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }

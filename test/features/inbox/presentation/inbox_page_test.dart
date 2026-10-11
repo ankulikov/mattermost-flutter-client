@@ -8,6 +8,7 @@ import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_counters.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
@@ -19,6 +20,92 @@ import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
+  testWidgets('shows stored tab counts while the first snapshot is loading', (
+    WidgetTester tester,
+  ) async {
+    final Completer<InboxSnapshot> snapshot = Completer<InboxSnapshot>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(
+            _SequencedInboxRepository(
+              <Future<InboxSnapshot> Function()>[() => snapshot.future],
+              counters: const InboxCounters(
+                newMessages: 7,
+                postponedMessages: 3,
+              ),
+            ),
+          ),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey<String>('inbox-new-count')))
+          .data,
+      '7',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey<String>('inbox-postponed-count')),
+          )
+          .data,
+      '3',
+    );
+
+    snapshot.complete(InboxSnapshot());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('retries an initial Inbox load without discarding tab counts', (
+    WidgetTester tester,
+  ) async {
+    final _SequencedInboxRepository repository = _SequencedInboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => throw StateError('offline'),
+        () async => InboxSnapshot(),
+      ],
+      counters: const InboxCounters(newMessages: 5, postponedMessages: 1),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(repository),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(InboxStrings.loadFailed), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey<String>('inbox-new-count')))
+          .data,
+      '5',
+    );
+
+    await tester.tap(find.text(InboxStrings.retry));
+    await tester.pumpAndSettle();
+
+    expect(repository.loadCalls, 2);
+    expect(find.text(InboxStrings.emptyNew), findsOneWidget);
+  });
+
   testWidgets('shows red, yellow and green realtime connection indicators', (
     WidgetTester tester,
   ) async {
@@ -625,6 +712,31 @@ final class _InboxRepository extends InboxRepository {
   }) async {
     markedRead = item;
   }
+}
+
+final class _SequencedInboxRepository extends InboxRepository {
+  _SequencedInboxRepository(this.results, {required this.counters});
+
+  final List<Future<InboxSnapshot> Function()> results;
+  final InboxCounters counters;
+  var loadCalls = 0;
+
+  @override
+  Future<InboxCounters> loadCounters({required AuthSession session}) async =>
+      counters;
+
+  @override
+  Future<InboxSnapshot> load({required AuthSession session}) {
+    final Future<InboxSnapshot> Function() result = results[loadCalls];
+    loadCalls++;
+    return result();
+  }
+
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required InboxItem item,
+  }) async {}
 }
 
 final class _PostponedRepository extends PostponedRepository {

@@ -5,6 +5,7 @@ import 'package:mattermost_flutter/src/data/api/mattermost_client_factory.dart';
 import 'package:mattermost_flutter/src/data/cache/avatar_cache.dart';
 import 'package:mattermost_flutter/src/data/cache/custom_emoji_cache.dart';
 import 'package:mattermost_flutter/src/data/database/database_provider.dart';
+import 'package:mattermost_flutter/src/data/database/inbox_counter_cache.dart';
 import 'package:mattermost_flutter/src/data/database/recent_emoji_cache.dart';
 import 'package:mattermost_flutter/src/data/database/user_group_membership_cache.dart';
 import 'package:mattermost_flutter/src/data/database/user_profile_cache_dao.dart';
@@ -70,6 +71,11 @@ final Provider<UserGroupMembershipCache> userGroupMembershipCacheProvider =
     Provider<UserGroupMembershipCache>(
       (Ref ref) =>
           DriftUserGroupMembershipCache(ref.watch(appDatabaseProvider)),
+    );
+
+final Provider<InboxCounterCache> inboxCounterCacheProvider =
+    Provider<InboxCounterCache>(
+      (Ref ref) => DriftInboxCounterCache(ref.watch(appDatabaseProvider)),
     );
 
 final Provider<AttachmentFileSaver> attachmentFileSaverProvider =

@@ -21,6 +21,7 @@ import 'package:mattermost_flutter/src/features/channel_members/domain/channel_m
 import 'package:mattermost_flutter/src/features/channel_members/domain/channel_members_repository.dart';
 import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_pane.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_counters.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
@@ -509,6 +510,79 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No postponed messages'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'shows the stored Inbox indicator while the startup load is pending',
+    (WidgetTester tester) async {
+      final _DeferredInboxTestRepository inbox = _DeferredInboxTestRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+            inboxRepositoryProvider.overrideWithValue(inbox),
+            postponedRepositoryProvider.overrideWithValue(
+              _PostponedTestRepository(),
+            ),
+          ],
+          child: const MaterialApp(home: BootstrapPage()),
+        ),
+      );
+      for (var index = 0; index < 10 && inbox.loadCalls == 0; index++) {
+        await tester.pump(const Duration(milliseconds: 1));
+      }
+
+      expect(inbox.loadCalls, 1);
+      expect(
+        find.byKey(const ValueKey<String>('inbox-navigation-indicator')),
+        findsOneWidget,
+      );
+
+      inbox.snapshot.complete(InboxSnapshot());
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('inbox-navigation-indicator')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('reopening Inbox reuses the app-owned snapshot', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _RealtimeInboxTestRepository inbox = _RealtimeInboxTestRepository();
+    addTearDown(inbox.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          inboxRepositoryProvider.overrideWithValue(inbox),
+          postponedRepositoryProvider.overrideWithValue(
+            _PostponedTestRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(inbox.loadCalls, 1);
+
+    await selectInbox(tester);
+    final Finder rail = find.byKey(
+      const ValueKey<String>('shell-navigation-rail'),
+    );
+    await tester.tap(
+      find.descendant(of: rail, matching: find.text('Channels')),
+    );
+    await tester.pumpAndSettle();
+    await selectInbox(tester);
+
+    expect(inbox.loadCalls, 1);
+    expect(inbox.watchCalls, 1);
   });
 
   testWidgets('shows an Inbox notification while Channels stays open', (
@@ -2394,6 +2468,27 @@ final class _RealtimeInboxTestRepository extends InboxRepository {
   }) async {}
 
   Future<void> dispose() => _events.close();
+}
+
+final class _DeferredInboxTestRepository extends InboxRepository {
+  final Completer<InboxSnapshot> snapshot = Completer<InboxSnapshot>();
+  var loadCalls = 0;
+
+  @override
+  Future<InboxCounters> loadCounters({required AuthSession session}) async =>
+      const InboxCounters(newMessages: 2, postponedMessages: 1);
+
+  @override
+  Future<InboxSnapshot> load({required AuthSession session}) {
+    loadCalls++;
+    return snapshot.future;
+  }
+
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required InboxItem item,
+  }) async {}
 }
 
 final class _PostponedTestRepository extends PostponedRepository {

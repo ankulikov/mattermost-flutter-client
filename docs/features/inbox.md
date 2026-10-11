@@ -90,6 +90,14 @@ ranges, referenceable user groups, and required authors. It assembles a
 complete `InboxSnapshot` before replacing the UI state. Initial failure shows
 retry. Refresh failure keeps the old snapshot.
 
+The signed-in app owns that snapshot in memory. Startup performs one complete
+load, and opening or closing the Inbox destination does not trigger another
+load. Until the snapshot completes, account-scoped New and Postponed message
+counts from Drift populate the navigation indicator and both tab badges. Every
+authoritative load, realtime change, and successful local Inbox action replaces
+those two stored integers. No message IDs, bodies, pagination state, or realtime
+sequence metadata are persisted with them.
+
 Unread channel requests run in bounded groups of four. Followed threads page by
 `before=<root_post_id>` until a page has fewer than 60 items or a cursor repeats.
 For followed threads whose CRT projection reports unread mentions, thread posts

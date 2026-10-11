@@ -238,6 +238,7 @@ final Provider<InboxRepository> inboxRepositoryProvider =
         postponed: ref.watch(postponedRepositoryProvider),
         viewedChannelPosts: ref.watch(viewedChannelPostsRepositoryProvider),
         userGroupCache: ref.watch(userGroupMembershipCacheProvider),
+        counterCache: ref.watch(inboxCounterCacheProvider),
         realtime: ref.watch(sessionRealtimeServiceProvider),
       ),
     );
