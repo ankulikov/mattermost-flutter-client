@@ -275,8 +275,9 @@ last-event ordering and unread counters.
 
 Reconnect, an observed sequence gap, or app resume requests an authoritative
 REST refresh. The current snapshot stays visible while recovery runs. A newly
-accepted foreground post can produce an in-app notification; initial load,
-recovery, edits, deletes, and duplicate delivery do not.
+accepted foreground post can produce a five-second in-app notification when
+the Inbox destination is not already open; initial load, recovery, edits,
+deletes, and duplicate delivery do not.
 
 The header shows green for connected, amber for connecting, and red for
 disconnected. System push notifications remain outside this feature.
