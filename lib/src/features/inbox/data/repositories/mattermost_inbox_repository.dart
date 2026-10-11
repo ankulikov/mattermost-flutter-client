@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/database/inbox_counter_cache.dart';
 import 'package:mattermost_flutter/src/data/database/user_group_membership_cache.dart';
 import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/dialog_display_name_mapper.dart';
@@ -17,6 +18,7 @@ import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_counters.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
@@ -40,6 +42,7 @@ final class MattermostInboxRepository extends InboxRepository {
     required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
     required PostponedRepository postponed,
     required UserGroupMembershipCache userGroupCache,
+    InboxCounterCache? counterCache,
     ViewedChannelPostsRepository viewedChannelPosts =
         const _EmptyViewedChannelPostsRepository(),
     WebSocketGateway? webSocketGateway,
@@ -51,6 +54,7 @@ final class MattermostInboxRepository extends InboxRepository {
        _postponed = postponed,
        _viewedChannelPosts = viewedChannelPosts,
        _userGroupCache = userGroupCache,
+       _counterCache = counterCache,
        _realtime =
            realtime ??
            (webSocketGateway != null && credentialStore != null
@@ -70,6 +74,7 @@ final class MattermostInboxRepository extends InboxRepository {
   final PostponedRepository _postponed;
   final ViewedChannelPostsRepository _viewedChannelPosts;
   final UserGroupMembershipCache _userGroupCache;
+  final InboxCounterCache? _counterCache;
   final SessionRealtimeService? _realtime;
   final DateTime Function() _now;
   final Set<String> _pendingViewedPreferenceCleanup = <String>{};
@@ -94,6 +99,17 @@ final class MattermostInboxRepository extends InboxRepository {
     'group_member_add',
     'group_member_delete',
   };
+
+  @override
+  Future<InboxCounters> loadCounters({required AuthSession session}) async =>
+      await _counterCache?.load(session.durableDataScopeId) ??
+      InboxCounters.empty;
+
+  @override
+  Future<void> saveCounters({
+    required AuthSession session,
+    required InboxCounters counters,
+  }) async => _counterCache?.save(session.durableDataScopeId, counters);
 
   @override
   Future<InboxSnapshot> load({required AuthSession session}) async {

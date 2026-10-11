@@ -8,6 +8,7 @@ import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_counters.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
@@ -16,6 +17,46 @@ import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postpo
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 
 void main() {
+  test(
+    'uses persisted counters while loading and retains the loaded snapshot',
+    () async {
+      final Completer<InboxSnapshot> loaded = Completer<InboxSnapshot>();
+      final _InboxRepository repository = _InboxRepository(
+        <Future<InboxSnapshot> Function()>[() => loaded.future],
+        storedCounters: const InboxCounters(
+          newMessages: 4,
+          postponedMessages: 2,
+        ),
+      );
+      final provider = _provider(repository);
+      final ProviderContainer container = ProviderContainer()
+        ..listen(provider, (_, _) {});
+      addTearDown(container.dispose);
+
+      final InboxViewState cached = await container.read(provider.future);
+      expect(cached.hasLoadedSnapshot, isFalse);
+      expect(cached.newMessageCount, 4);
+      expect(cached.postponedMessageCount, 2);
+      await _waitUntil(() => repository.loadCalls == 1);
+
+      loaded.complete(
+        InboxSnapshot(
+          newItems: <InboxItem>[
+            ChannelPostInboxItem(candidate: _candidate('fresh')),
+          ],
+        ),
+      );
+      await _waitForInitialLoad(container, provider);
+
+      expect(container.read(provider).requireValue.newMessageCount, 1);
+      await _waitUntil(() => repository.savedCounters.isNotEmpty);
+      expect(repository.savedCounters.last.newMessages, 1);
+
+      await container.read(provider.notifier).retryInitialLoad();
+      expect(repository.loadCalls, 1);
+    },
+  );
+
   test('merges realtime posts and tracks connection state', () async {
     final StreamController<InboxRealtimeEvent> realtime =
         StreamController<InboxRealtimeEvent>();
@@ -41,7 +82,7 @@ void main() {
     final ProviderContainer container = ProviderContainer()
       ..listen(provider, (_, _) {});
     addTearDown(container.dispose);
-    await container.read(provider.future);
+    await _waitForInitialLoad(container, provider);
 
     realtime.add(const InboxConnectionChanged(InboxConnectionStatus.connected));
     realtime.add(InboxPostChanged(postId: second.post.id, candidate: second));
@@ -79,7 +120,7 @@ void main() {
     final ProviderContainer container = ProviderContainer()
       ..listen(provider, (_, _) {});
     addTearDown(container.dispose);
-    await container.read(provider.future);
+    await _waitForInitialLoad(container, provider);
 
     container.read(provider.notifier).handleAppResumed();
     await _waitUntil(() => repository.loadCalls == 2);
@@ -115,7 +156,7 @@ void main() {
       final ProviderContainer container = ProviderContainer()
         ..listen(provider, (_, _) {});
       addTearDown(container.dispose);
-      await container.read(provider.future);
+      await _waitForInitialLoad(container, provider);
 
       realtime.add(const InboxRefreshRequired());
       await Future<void>.delayed(Duration.zero);
@@ -172,7 +213,8 @@ void main() {
       final ProviderContainer container = ProviderContainer()
         ..listen(provider, (_, _) {});
       addTearDown(container.dispose);
-      final InboxViewState initial = await container.read(provider.future);
+      await _waitForInitialLoad(container, provider);
+      final InboxViewState initial = container.read(provider).requireValue;
       expect(initial.refreshStatus, isA<OperationIdle>());
 
       final Future<void> request = container.read(provider.notifier).refresh();
@@ -202,7 +244,7 @@ void main() {
       final ProviderContainer container = ProviderContainer()
         ..listen(provider, (_, _) {});
       addTearDown(container.dispose);
-      await container.read(provider.future);
+      await _waitForInitialLoad(container, provider);
       await container.read(provider.notifier).refresh();
       expect(container.read(provider).hasValue, isTrue);
       expect(
@@ -237,7 +279,7 @@ void main() {
       final ProviderContainer container = ProviderContainer()
         ..listen(provider, (_, _) {});
       addTearDown(container.dispose);
-      await container.read(provider.future);
+      await _waitForInitialLoad(container, provider);
 
       expect(await container.read(provider.notifier).markRead(bundle), isTrue);
 
@@ -264,7 +306,7 @@ void main() {
       final ProviderContainer container = ProviderContainer()
         ..listen(provider, (_, _) {});
       addTearDown(container.dispose);
-      await container.read(provider.future);
+      await _waitForInitialLoad(container, provider);
 
       expect(await container.read(provider.notifier).markRead(first), isTrue);
 
@@ -303,7 +345,7 @@ void main() {
     final ProviderContainer container = ProviderContainer()
       ..listen(provider, (_, _) {});
     addTearDown(container.dispose);
-    await container.read(provider.future);
+    await _waitForInitialLoad(container, provider);
 
     final Future<bool> request = container
         .read(provider.notifier)
@@ -337,7 +379,7 @@ void main() {
       final ProviderContainer container = ProviderContainer()
         ..listen(provider, (_, _) {});
       addTearDown(container.dispose);
-      await container.read(provider.future);
+      await _waitForInitialLoad(container, provider);
 
       expect(await container.read(provider.notifier).markRead(only), isTrue);
 
@@ -363,7 +405,7 @@ void main() {
       final ProviderContainer container = ProviderContainer()
         ..listen(provider, (_, _) {});
       addTearDown(container.dispose);
-      await container.read(provider.future);
+      await _waitForInitialLoad(container, provider);
 
       expect(await container.read(provider.notifier).markRead(thread), isTrue);
 
@@ -396,7 +438,7 @@ void main() {
     final ProviderContainer container = ProviderContainer()
       ..listen(provider, (_, _) {});
     addTearDown(container.dispose);
-    await container.read(provider.future);
+    await _waitForInitialLoad(container, provider);
     expect(await container.read(provider.notifier).postpone(bundle), isTrue);
 
     final InboxSnapshot snapshot = container.read(provider).value!.snapshot;
@@ -467,9 +509,12 @@ final class _InboxRepository extends InboxRepository {
   _InboxRepository(
     this.results, {
     this.realtime = const Stream<InboxRealtimeEvent>.empty(),
+    this.storedCounters = InboxCounters.empty,
   });
   final List<Future<InboxSnapshot> Function()> results;
   final Stream<InboxRealtimeEvent> realtime;
+  final InboxCounters storedCounters;
+  final List<InboxCounters> savedCounters = <InboxCounters>[];
   var _index = 0;
   var loadCalls = 0;
   var reconnectCalls = 0;
@@ -478,6 +523,16 @@ final class _InboxRepository extends InboxRepository {
   bool? preservedOtherChannelRoots;
   ChannelPostInboxItem? individuallyViewed;
   Completer<void>? markPostViewedGate;
+
+  @override
+  Future<InboxCounters> loadCounters({required AuthSession session}) async =>
+      storedCounters;
+
+  @override
+  Future<void> saveCounters({
+    required AuthSession session,
+    required InboxCounters counters,
+  }) async => savedCounters.add(counters);
 
   @override
   Future<InboxSnapshot> load({required AuthSession session}) {
@@ -525,6 +580,16 @@ Future<void> _waitUntil(bool Function() condition) async {
     await Future<void>.delayed(Duration.zero);
   }
   fail('Condition was not reached');
+}
+
+Future<void> _waitForInitialLoad(
+  ProviderContainer container,
+  AsyncNotifierProvider<InboxController, InboxViewState> provider,
+) async {
+  await container.read(provider.future);
+  await _waitUntil(
+    () => container.read(provider).value?.hasLoadedSnapshot == true,
+  );
 }
 
 final class _PostponedRepository extends PostponedRepository {

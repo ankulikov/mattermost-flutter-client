@@ -5,6 +5,7 @@ import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_counters.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/postponed_reference.dart';
@@ -24,23 +25,44 @@ final class InboxInAppNotification {
 final class InboxViewState {
   const InboxViewState({
     required this.snapshot,
+    this.counters = InboxCounters.empty,
+    this.hasLoadedSnapshot = false,
+    this.initialLoadStatus = const OperationStatus.idle(),
     this.refreshStatus = const OperationStatus.idle(),
     this.connectionStatus = InboxConnectionStatus.disconnected,
     this.inAppNotification,
   });
 
   final InboxSnapshot snapshot;
+  final InboxCounters counters;
+  final bool hasLoadedSnapshot;
+  final OperationStatus initialLoadStatus;
   final OperationStatus refreshStatus;
   final InboxConnectionStatus connectionStatus;
   final InboxInAppNotification? inAppNotification;
 
+  int get newMessageCount =>
+      hasLoadedSnapshot ? snapshot.newMessageCount : counters.newMessages;
+
+  int get postponedMessageCount => hasLoadedSnapshot
+      ? snapshot.postponedMessageCount
+      : counters.postponedMessages;
+
+  bool get hasNewItems => newMessageCount > 0;
+
   InboxViewState copyWith({
     InboxSnapshot? snapshot,
+    InboxCounters? counters,
+    bool? hasLoadedSnapshot,
+    OperationStatus? initialLoadStatus,
     OperationStatus? refreshStatus,
     InboxConnectionStatus? connectionStatus,
     InboxInAppNotification? inAppNotification,
   }) => InboxViewState(
     snapshot: snapshot ?? this.snapshot,
+    counters: counters ?? this.counters,
+    hasLoadedSnapshot: hasLoadedSnapshot ?? this.hasLoadedSnapshot,
+    initialLoadStatus: initialLoadStatus ?? this.initialLoadStatus,
     refreshStatus: refreshStatus ?? this.refreshStatus,
     connectionStatus: connectionStatus ?? this.connectionStatus,
     inAppNotification: inAppNotification ?? this.inAppNotification,
@@ -68,6 +90,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   _InboxOperation _operation = _InboxOperation.idle;
   bool _realtimeRefreshQueued = false;
   var _buildGeneration = 0;
+  Future<void> _counterWrite = Future<void>.value();
 
   @override
   Future<InboxViewState> build() async {
@@ -93,17 +116,29 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     if (session == null) {
       _inbox = null;
       _postponed = null;
-      return InboxViewState(snapshot: InboxSnapshot());
+      return InboxViewState(snapshot: InboxSnapshot(), hasLoadedSnapshot: true);
     }
     final InboxRepository inbox = ref.watch(_inboxProvider);
     final PostponedRepository postponed = ref.watch(_postponedProvider);
     _inbox = inbox;
     _postponed = postponed;
+    InboxCounters counters = InboxCounters.empty;
+    try {
+      counters = await cancellation.run(
+        () => inbox.loadCounters(session: session),
+      );
+    } on Object {
+      if (cancellation.isCancelled) rethrow;
+      // A corrupt or unavailable local count must not block the authoritative
+      // Inbox request. Zero is the safe fallback until that request completes.
+    }
     final InboxViewState result = InboxViewState(
-      snapshot: await cancellation.run(() => inbox.load(session: session)),
+      snapshot: InboxSnapshot(),
+      counters: counters,
+      initialLoadStatus: const OperationStatus.inProgress(),
     );
     unawaited(
-      _listenRealtimeAfterBuild(
+      _loadInitialAfterBuild(
         session: session,
         inbox: inbox,
         generation: generation,
@@ -112,7 +147,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     return result;
   }
 
-  Future<void> _listenRealtimeAfterBuild({
+  Future<void> _loadInitialAfterBuild({
     required AuthSession session,
     required InboxRepository inbox,
     required int generation,
@@ -121,7 +156,66 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     if (_cancellation?.isCancelled != false || generation != _buildGeneration) {
       return;
     }
-    _listenRealtime(session: session, inbox: inbox, generation: generation);
+    await _loadInitial(session: session, inbox: inbox, generation: generation);
+  }
+
+  Future<void> retryInitialLoad() async {
+    final AuthSession? session = _session;
+    final InboxRepository? inbox = _inbox;
+    if (session == null || inbox == null) return;
+    await _loadInitial(
+      session: session,
+      inbox: inbox,
+      generation: _buildGeneration,
+    );
+  }
+
+  Future<void> _loadInitial({
+    required AuthSession session,
+    required InboxRepository inbox,
+    required int generation,
+  }) async {
+    final InboxViewState? current = state.value;
+    if (_operation != _InboxOperation.idle ||
+        current == null ||
+        current.hasLoadedSnapshot ||
+        generation != _buildGeneration) {
+      return;
+    }
+    _operation = _InboxOperation.initialLoad;
+    state = AsyncData(
+      current.copyWith(initialLoadStatus: const OperationStatus.inProgress()),
+    );
+    try {
+      final RequestCancellation? cancellation = _cancellation;
+      if (cancellation == null) return;
+      final InboxSnapshot snapshot = await cancellation.run(
+        () => inbox.load(session: session),
+      );
+      if (generation != _buildGeneration) return;
+      final InboxCounters counters = _countersFor(snapshot);
+      final InboxViewState latest = state.value ?? current;
+      state = AsyncData(
+        latest.copyWith(
+          snapshot: snapshot,
+          counters: counters,
+          hasLoadedSnapshot: true,
+          initialLoadStatus: const OperationStatus.idle(),
+        ),
+      );
+      _persistCounters(counters);
+      _listenRealtime(session: session, inbox: inbox, generation: generation);
+    } on Object catch (error) {
+      if (_cancellation?.isCancelled == false &&
+          generation == _buildGeneration) {
+        final InboxViewState latest = state.value ?? current;
+        state = AsyncData(
+          latest.copyWith(initialLoadStatus: OperationStatus.failed(error)),
+        );
+      }
+    } finally {
+      if (generation == _buildGeneration) _finishBusyOperation();
+    }
   }
 
   void _listenRealtime({
@@ -199,14 +293,17 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         snapshot.newItems.any(
           (InboxItem item) => item.postIds.contains(change.postId),
         );
+    final InboxCounters counters = _countersFor(snapshot);
     state = AsyncData(
       current.copyWith(
         snapshot: snapshot,
+        counters: counters,
         inAppNotification: wasAdded
             ? InboxInAppNotification(candidate: effectiveCandidate)
             : current.inAppNotification,
       ),
     );
+    _persistCounters(counters);
   }
 
   void _setConnectionStatus(InboxConnectionStatus status) {
@@ -231,6 +328,10 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         inbox == null) {
       return;
     }
+    if (!current.hasLoadedSnapshot) {
+      await retryInitialLoad();
+      return;
+    }
     _operation = _InboxOperation.refresh;
     state = AsyncData(
       current.copyWith(refreshStatus: const OperationStatus.inProgress()),
@@ -242,12 +343,15 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         () => inbox.load(session: session),
       );
       final InboxViewState latest = state.value ?? current;
+      final InboxCounters counters = _countersFor(snapshot);
       state = AsyncData(
         latest.copyWith(
           snapshot: snapshot,
+          counters: counters,
           refreshStatus: const OperationStatus.idle(),
         ),
       );
+      _persistCounters(counters);
     } on Object catch (error) {
       if (_cancellation?.isCancelled == false) {
         final InboxViewState latest = state.value ?? current;
@@ -279,22 +383,31 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   void removeUnfollowedThread(String rootPostId) {
     final InboxViewState? current = state.value;
     if (current == null) return;
+    final InboxSnapshot snapshot = _snapshotWithoutThread(
+      current.snapshot,
+      rootPostId,
+    );
+    final InboxCounters counters = _countersFor(snapshot);
+    state = AsyncData(current.copyWith(snapshot: snapshot, counters: counters));
+    _persistCounters(counters);
+  }
+
+  InboxSnapshot _snapshotWithoutThread(
+    InboxSnapshot current,
+    String rootPostId,
+  ) {
     List<InboxItem> withoutThread(Iterable<InboxItem> items) => items
         .where(
           (InboxItem item) =>
               item is! ThreadInboxItem || item.thread.id != rootPostId,
         )
         .toList(growable: false);
-    state = AsyncData(
-      current.copyWith(
-        snapshot: InboxSnapshot(
-          newItems: withoutThread(current.snapshot.newItems),
-          postponedItems: withoutThread(current.snapshot.postponedItems),
-          builtAt: current.snapshot.builtAt,
-          hasIncompleteMentionReconstruction:
-              current.snapshot.hasIncompleteMentionReconstruction,
-        ),
-      ),
+    return InboxSnapshot(
+      newItems: withoutThread(current.newItems),
+      postponedItems: withoutThread(current.postponedItems),
+      builtAt: current.builtAt,
+      hasIncompleteMentionReconstruction:
+          current.hasIncompleteMentionReconstruction,
     );
   }
 
@@ -348,19 +461,23 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
             ),
           )
           .toList(growable: false);
+      final InboxSnapshot snapshot = InboxSnapshot(
+        newItems: newItems,
+        postponedItems: current.snapshot.postponedItems,
+        builtAt: current.snapshot.builtAt,
+        hasIncompleteMentionReconstruction:
+            current.snapshot.hasIncompleteMentionReconstruction,
+      );
+      final InboxCounters counters = _countersFor(snapshot);
       final InboxViewState latest = state.value ?? current;
       state = AsyncData(
         latest.copyWith(
-          snapshot: InboxSnapshot(
-            newItems: newItems,
-            postponedItems: current.snapshot.postponedItems,
-            builtAt: current.snapshot.builtAt,
-            hasIncompleteMentionReconstruction:
-                current.snapshot.hasIncompleteMentionReconstruction,
-          ),
+          snapshot: snapshot,
+          counters: counters,
           refreshStatus: const OperationStatus.idle(),
         ),
       );
+      _persistCounters(counters);
       return true;
     } on Object {
       return false;
@@ -434,19 +551,23 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       } else {
         _removePostIds(postponedItems, item);
       }
+      final InboxSnapshot snapshot = InboxSnapshot(
+        newItems: newItems,
+        postponedItems: postponedItems,
+        builtAt: current.snapshot.builtAt,
+        hasIncompleteMentionReconstruction:
+            current.snapshot.hasIncompleteMentionReconstruction,
+      );
+      final InboxCounters counters = _countersFor(snapshot);
       final InboxViewState latest = state.value ?? current;
       state = AsyncData(
         latest.copyWith(
-          snapshot: InboxSnapshot(
-            newItems: newItems,
-            postponedItems: postponedItems,
-            builtAt: current.snapshot.builtAt,
-            hasIncompleteMentionReconstruction:
-                current.snapshot.hasIncompleteMentionReconstruction,
-          ),
+          snapshot: snapshot,
+          counters: counters,
           refreshStatus: const OperationStatus.idle(),
         ),
       );
+      _persistCounters(counters);
       return true;
     } on Object {
       return false;
@@ -509,6 +630,25 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       postponedAt: at,
     ),
   };
+
+  InboxCounters _countersFor(InboxSnapshot snapshot) => InboxCounters(
+    newMessages: snapshot.newMessageCount,
+    postponedMessages: snapshot.postponedMessageCount,
+  );
+
+  void _persistCounters(InboxCounters counters) {
+    final AuthSession? session = _session;
+    final InboxRepository? inbox = _inbox;
+    if (session == null || inbox == null) return;
+    _counterWrite = _counterWrite.then((_) async {
+      try {
+        await inbox.saveCounters(session: session, counters: counters);
+      } on Object {
+        // Counts are a startup hint. The live in-memory snapshot remains the
+        // source of truth when a local database write is unavailable.
+      }
+    });
+  }
 }
 
-enum _InboxOperation { idle, refresh, markRead, move }
+enum _InboxOperation { idle, initialLoad, refresh, markRead, move }

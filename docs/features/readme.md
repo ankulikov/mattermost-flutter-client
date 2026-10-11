@@ -8,8 +8,10 @@ and the behavior owned by each feature.
 
 Fresh server state takes priority over offline message history. Channels,
 posts, threads, search results, the sidebar, and Inbox snapshots live in
-Riverpod state for the active workflow. Closing that workflow releases its
-state. Opening it again starts from a new server request.
+Riverpod state. Route-local workflows release their state when they close.
+Inbox is app-owned for the signed-in session: its first complete snapshot is
+kept in memory and reconciled after realtime recovery instead of being fetched
+again whenever its destination is opened.
 
 The UI remains useful during background work. An initial failure replaces the
 empty loading state with an explicit retry action. Refresh, pagination, and
@@ -69,8 +71,10 @@ statuses so one cannot overwrite the other.
 Drift stores only data with an owner, a freshness policy, and a reason to
 survive process restarts. Current durable data includes account-scoped user
 profiles, recent emoji, and the expiring user-group membership projection used
-by Inbox classification. Messages, threads, sidebar snapshots, pagination
-cursors, and realtime sync metadata are not stored in Drift.
+by Inbox classification. Inbox also stores only its New and Postponed counts so
+navigation and tab badges are available while the first snapshot loads.
+Messages, threads, sidebar snapshots, pagination cursors, and realtime sync
+metadata are not stored in Drift.
 
 Native database work runs in a background Drift isolate. Web uses Drift WASM
 with a worker. Tokens stay in `flutter_secure_storage` and are never written to

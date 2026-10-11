@@ -217,4 +217,39 @@ void main() {
       }
     },
   );
+
+  test('creates Inbox counters when upgrading schema 12', () async {
+    final Directory directory = await Directory.systemTemp.createTemp(
+      'mattermost-inbox-counters-',
+    );
+    final File file = File('${directory.path}/cache.sqlite');
+    sqlite.sqlite3.open(file.path)
+      ..execute('PRAGMA user_version = 12')
+      ..close();
+
+    final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+    try {
+      final List<String> tables = await database
+          .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(tables, contains('inbox_counters'));
+      final List<String> columns = await database
+          .customSelect('PRAGMA table_info(inbox_counters)')
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(
+        columns,
+        containsAll(<String>[
+          'account_id',
+          'new_message_count',
+          'postponed_message_count',
+          'updated_at',
+        ]),
+      );
+    } finally {
+      await database.close();
+      await directory.delete(recursive: true);
+    }
+  });
 }
