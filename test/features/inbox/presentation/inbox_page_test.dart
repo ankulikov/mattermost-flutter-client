@@ -106,6 +106,87 @@ void main() {
     expect(find.text(InboxStrings.emptyNew), findsOneWidget);
   });
 
+  testWidgets('refresh indicator reloads Inbox and replaces the snapshot', (
+    WidgetTester tester,
+  ) async {
+    final Completer<InboxSnapshot> refresh = Completer<InboxSnapshot>();
+    final InboxItem initialItem = ChannelPostInboxItem(
+      candidate: _candidate('initial', 'Initial message'),
+    );
+    final InboxItem refreshedItem = ChannelPostInboxItem(
+      candidate: _candidate('refreshed', 'Refreshed message'),
+    );
+    final _SequencedInboxRepository repository = _SequencedInboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(newItems: <InboxItem>[initialItem]),
+        () => refresh.future,
+      ],
+      counters: InboxCounters.empty,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(repository),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    unawaited(
+      tester
+          .state<RefreshIndicatorState>(find.byType(RefreshIndicator).first)
+          .show(),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(repository.loadCalls, 2);
+    expect(find.text('Initial message'), findsOneWidget);
+
+    refresh.complete(InboxSnapshot(newItems: <InboxItem>[refreshedItem]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Initial message'), findsNothing);
+    expect(find.text('Refreshed message'), findsOneWidget);
+  });
+
+  testWidgets('pulling down refreshes an empty Inbox', (
+    WidgetTester tester,
+  ) async {
+    final _SequencedInboxRepository repository = _SequencedInboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(),
+        () async => InboxSnapshot(),
+      ],
+      counters: InboxCounters.empty,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(repository),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 300));
+    await tester.pumpAndSettle();
+
+    expect(repository.loadCalls, 2);
+    expect(find.text(InboxStrings.emptyNew), findsOneWidget);
+  });
+
   testWidgets('shows red, yellow and green realtime connection indicators', (
     WidgetTester tester,
   ) async {
