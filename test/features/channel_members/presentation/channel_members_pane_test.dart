@@ -7,11 +7,47 @@ import 'package:mattermost_flutter/src/features/channel_members/domain/channel_m
 import 'package:mattermost_flutter/src/features/channel_members/domain/channel_members_repository.dart';
 import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_member_count_button.dart';
 import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_pane.dart';
+import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_strings.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_avatar_image.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
 void main() {
+  testWidgets('keeps the close button at the trailing edge of the header', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          channelMembersRepositoryProvider.overrideWithValue(
+            _ChannelMembersRepository(),
+          ),
+          userAvatarProvider.overrideWith((ref, request) async => null),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 380,
+              child: ChannelMembersPane(channel: _channel, onClose: _noop),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Rect paneBounds = tester.getRect(find.byType(ChannelMembersPane));
+    final Rect closeBounds = tester.getRect(
+      find.byWidgetPredicate(
+        (Widget widget) =>
+            widget is IconButton &&
+            widget.tooltip == ChannelMembersStrings.close,
+      ),
+    );
+
+    expect(closeBounds.right, paneBounds.right - 8);
+  });
+
   testWidgets('shows compact member rows without usernames', (
     WidgetTester tester,
   ) async {

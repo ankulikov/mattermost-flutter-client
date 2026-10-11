@@ -87,25 +87,35 @@ class _MembersHeader extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(20, 10, 8, 10),
     child: Row(
       children: <Widget>[
-        Flexible(
-          child: Text(
-            ChannelMembersStrings.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Container(width: 1, height: 24, color: Theme.of(context).dividerColor),
-        const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            channelName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge,
+          child: Row(
+            children: <Widget>[
+              Flexible(
+                child: Text(
+                  ChannelMembersStrings.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                width: 1,
+                height: 24,
+                color: Theme.of(context).dividerColor,
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  channelName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ),
+            ],
           ),
         ),
         IconButton(
