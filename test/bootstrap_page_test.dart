@@ -641,6 +641,83 @@ void main() {
     expect(inbox.watchCalls, 1);
   });
 
+  testWidgets('dismisses an Inbox notification after five seconds', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _RealtimeInboxTestRepository inbox = _RealtimeInboxTestRepository();
+    addTearDown(inbox.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          inboxRepositoryProvider.overrideWithValue(inbox),
+          postponedRepositoryProvider.overrideWithValue(
+            _PostponedTestRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    inbox.addPost('timed', 'A timed Inbox message');
+    await tester.pumpAndSettle();
+
+    final Finder notification = find.byKey(
+      const ValueKey<String>('inbox-in-app-notification'),
+    );
+    expect(notification, findsOneWidget);
+    expect(
+      tester.widget<SnackBar>(notification).duration,
+      const Duration(seconds: 5),
+    );
+
+    await tester.pump(const Duration(milliseconds: 4999));
+    expect(notification, findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pumpAndSettle();
+    expect(notification, findsNothing);
+  });
+
+  testWidgets('does not show Inbox notifications while Inbox is open', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _RealtimeInboxTestRepository inbox = _RealtimeInboxTestRepository();
+    addTearDown(inbox.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          inboxRepositoryProvider.overrideWithValue(inbox),
+          postponedRepositoryProvider.overrideWithValue(
+            _PostponedTestRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await selectInbox(tester);
+
+    inbox.addPost('already-open', 'An Inbox message received while open');
+    await tester.pumpAndSettle();
+
+    expect(find.text('An Inbox message received while open'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('inbox-in-app-notification')),
+      findsNothing,
+    );
+  });
+
   testWidgets('resume reconnects and refreshes the app-owned Inbox', (
     WidgetTester tester,
   ) async {

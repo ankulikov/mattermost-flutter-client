@@ -26,6 +26,8 @@ import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart'
 import 'package:mattermost_flutter/src/ui/shell/shell_strings.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
+const Duration _inboxNotificationDuration = Duration(seconds: 5);
+
 class BootstrapPage extends ConsumerStatefulWidget {
   const BootstrapPage({super.key});
 
@@ -429,6 +431,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showInboxNotification(InboxInAppNotification notification) {
+    if (ref.read(shellDestinationProvider) == ShellDestination.inbox) return;
     final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(
       context,
     );
@@ -438,6 +441,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       ..showSnackBar(
         SnackBar(
           key: const ValueKey<String>('inbox-in-app-notification'),
+          duration: _inboxNotificationDuration,
+          persist: false,
           content: Text(
             ShellStrings.inboxNotification(
               author: notification.candidate.post.author.displayName,
