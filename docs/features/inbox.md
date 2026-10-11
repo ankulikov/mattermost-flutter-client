@@ -88,7 +88,8 @@ The repository loads all teams, their channels and memberships, unread followed
 threads, postponed preferences, viewed-post preferences, candidate unread
 ranges, referenceable user groups, and required authors. It assembles a
 complete `InboxSnapshot` before replacing the UI state. Initial failure shows
-retry. Refresh failure keeps the old snapshot.
+retry. Manual refresh is available from the header and by pulling down either
+Inbox queue. Refresh failure keeps the old snapshot.
 
 The signed-in app owns that snapshot in memory. Startup performs one complete
 load, and opening or closing the Inbox destination does not trigger another

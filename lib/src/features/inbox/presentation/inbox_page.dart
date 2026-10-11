@@ -133,12 +133,16 @@ class _InboxPageState extends ConsumerState<InboxPage>
                     _InboxList(
                       items: state.snapshot.newItems,
                       empty: InboxStrings.emptyNew,
+                      onRefresh: () =>
+                          ref.read(inboxProvider.notifier).refresh(),
                       onOpenItem: widget.onOpenItem,
                       isPostponed: false,
                     ),
                     _InboxList(
                       items: state.snapshot.postponedItems,
                       empty: InboxStrings.emptyPostponed,
+                      onRefresh: () =>
+                          ref.read(inboxProvider.notifier).refresh(),
                       onOpenItem: widget.onOpenItem,
                       isPostponed: true,
                     ),
@@ -224,18 +228,19 @@ class _InboxList extends StatelessWidget {
   const _InboxList({
     required this.items,
     required this.empty,
+    required this.onRefresh,
     required this.onOpenItem,
     required this.isPostponed,
   });
 
   final List<InboxItem> items;
   final String empty;
+  final RefreshCallback onRefresh;
   final ValueChanged<InboxItem> onOpenItem;
   final bool isPostponed;
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return Center(child: Text(empty));
     final Iterable<InboxItem> expandedItems = isPostponed
         ? items.expand(_postponedPresentationItems)
         : items;
@@ -246,33 +251,48 @@ class _InboxList extends StatelessWidget {
         );
         return byActivity != 0 ? byActivity : first.key.compareTo(second.key);
       });
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final bool expanded = constraints.maxWidth >= 700;
-        return ListView.builder(
-          padding: EdgeInsets.symmetric(
-            horizontal: expanded ? 24 : 8,
-            vertical: 12,
-          ),
-          itemCount: presentationItems.length,
-          itemBuilder: (BuildContext context, int index) {
-            final InboxItem item = presentationItems[index];
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 760),
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _InboxRow(
-                    item: item,
-                    onOpen: () => onOpenItem(item),
-                    isPostponed: isPostponed,
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          if (presentationItems.isEmpty) {
+            return CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: <Widget>[
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Text(empty)),
+                ),
+              ],
+            );
+          }
+          final bool expanded = constraints.maxWidth >= 700;
+          return ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.symmetric(
+              horizontal: expanded ? 24 : 8,
+              vertical: 12,
+            ),
+            itemCount: presentationItems.length,
+            itemBuilder: (BuildContext context, int index) {
+              final InboxItem item = presentationItems[index];
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _InboxRow(
+                      item: item,
+                      onOpen: () => onOpenItem(item),
+                      isPostponed: isPostponed,
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
