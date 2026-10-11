@@ -50,6 +50,12 @@ messageEditorMarkdownParityFixtures = <MessageEditorMarkdownParityFixture>[
     renderedText: 'strike',
   ),
   MessageEditorMarkdownParityFixture(
+    name: 'labeled link',
+    source: '[link label](https://example.com)',
+    tokenKinds: <MarkdownTokenKind>[MarkdownTokenKind.link],
+    renderedText: 'link label',
+  ),
+  MessageEditorMarkdownParityFixture(
     name: 'inline code',
     source: '`inline code`',
     tokenKinds: <MarkdownTokenKind>[MarkdownTokenKind.inlineCode],

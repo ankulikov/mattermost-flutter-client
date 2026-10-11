@@ -16,6 +16,7 @@ class MarkdownEditingParser {
 
     _parseFencedCode(text, tokens, diagnostics, protectedRanges);
     _parseInlineCode(text, tokens, diagnostics, protectedRanges);
+    _parseLinks(text, tokens, protectedRanges);
     _parseBlocks(text, tokens, protectedRanges);
     _parseInlineFormatting(text, tokens, diagnostics, protectedRanges);
 
@@ -32,6 +33,109 @@ class MarkdownEditingParser {
       diagnostics: diagnostics,
     );
   }
+
+  void _parseLinks(
+    String text,
+    List<MarkdownToken> tokens,
+    List<EditorRange> protectedRanges,
+  ) {
+    var offset = 0;
+    while (offset < text.length) {
+      if (text.codeUnitAt(offset) != _leftBracket ||
+          _isProtected(offset, protectedRanges) ||
+          _isEscaped(text, offset) ||
+          _isImageOpening(text, offset)) {
+        offset += 1;
+        continue;
+      }
+      final int labelEnd = _findClosingBracket(
+        text,
+        offset + 1,
+        protectedRanges,
+      );
+      if (labelEnd < 0 ||
+          labelEnd + 1 >= text.length ||
+          text.codeUnitAt(labelEnd + 1) != _leftParenthesis) {
+        offset += 1;
+        continue;
+      }
+      final int destinationEnd = _findClosingParenthesis(
+        text,
+        labelEnd + 2,
+        protectedRanges,
+      );
+      if (destinationEnd < 0) {
+        offset += 1;
+        continue;
+      }
+      final EditorRange suffix = EditorRange(
+        start: labelEnd,
+        end: destinationEnd + 1,
+      );
+      tokens.add(
+        MarkdownToken(
+          kind: MarkdownTokenKind.link,
+          rawRange: EditorRange(start: offset, end: destinationEnd + 1),
+          contentRange: EditorRange(start: offset + 1, end: labelEnd),
+          openingMarkerRange: EditorRange(start: offset, end: offset + 1),
+          closingMarkerRange: suffix,
+        ),
+      );
+      // Link destinations are source syntax, not editable inline Markdown.
+      // Protecting only the suffix still allows emphasis inside the label.
+      protectedRanges.add(suffix);
+      offset = destinationEnd + 1;
+    }
+  }
+
+  int _findClosingBracket(
+    String text,
+    int start,
+    List<EditorRange> protectedRanges,
+  ) {
+    var depth = 1;
+    for (var offset = start; offset < text.length; offset += 1) {
+      if (_isProtected(offset, protectedRanges) || _isEscaped(text, offset)) {
+        continue;
+      }
+      final int codeUnit = text.codeUnitAt(offset);
+      if (codeUnit == _lineFeed || codeUnit == _carriageReturn) return -1;
+      if (codeUnit == _leftBracket) {
+        depth += 1;
+      } else if (codeUnit == _rightBracket) {
+        depth -= 1;
+        if (depth == 0) return offset;
+      }
+    }
+    return -1;
+  }
+
+  int _findClosingParenthesis(
+    String text,
+    int start,
+    List<EditorRange> protectedRanges,
+  ) {
+    var depth = 1;
+    for (var offset = start; offset < text.length; offset += 1) {
+      if (_isProtected(offset, protectedRanges) || _isEscaped(text, offset)) {
+        continue;
+      }
+      final int codeUnit = text.codeUnitAt(offset);
+      if (codeUnit == _lineFeed || codeUnit == _carriageReturn) return -1;
+      if (codeUnit == _leftParenthesis) {
+        depth += 1;
+      } else if (codeUnit == _rightParenthesis) {
+        depth -= 1;
+        if (depth == 0) return offset;
+      }
+    }
+    return -1;
+  }
+
+  bool _isImageOpening(String text, int offset) =>
+      offset > 0 &&
+      text.codeUnitAt(offset - 1) == _exclamationMark &&
+      !_isEscaped(text, offset - 1);
 
   void _parseFencedCode(
     String text,
@@ -561,4 +665,10 @@ const int _asterisk = 0x2A;
 const int _backslash = 0x5C;
 const int _backtick = 0x60;
 const int _carriageReturn = 0x0D;
+const int _exclamationMark = 0x21;
+const int _leftBracket = 0x5B;
+const int _leftParenthesis = 0x28;
+const int _lineFeed = 0x0A;
+const int _rightBracket = 0x5D;
+const int _rightParenthesis = 0x29;
 const int _underscore = 0x5F;

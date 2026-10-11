@@ -170,6 +170,44 @@ void main() {
     });
   });
 
+  group('MarkdownEditingParser links', () {
+    test('reports the label and complete destination syntax ranges', () {
+      final MarkdownEditingDocument document = parser.parse(
+        'See [link label](https://example.com).',
+      );
+      final MarkdownToken token = _only(document, MarkdownTokenKind.link);
+
+      expect(token.rawRange, const EditorRange(start: 4, end: 37));
+      expect(token.openingMarkerRange, const EditorRange(start: 4, end: 5));
+      expect(token.contentRange, const EditorRange(start: 5, end: 15));
+      expect(token.closingMarkerRange, const EditorRange(start: 15, end: 37));
+      expect(token.isComplete, isTrue);
+      expect(document.diagnostics, isEmpty);
+    });
+
+    test('allows inline formatting in a label but not a destination', () {
+      final MarkdownEditingDocument document = parser.parse(
+        '[**docs**](https://example.com/a_(b)_c)',
+      );
+
+      expect(document.tokensOf(MarkdownTokenKind.link), hasLength(1));
+      expect(document.tokensOf(MarkdownTokenKind.bold), hasLength(1));
+      expect(document.tokensOf(MarkdownTokenKind.italic), isEmpty);
+    });
+
+    test('leaves escaped, image, incomplete, and code syntax literal', () {
+      final MarkdownEditingDocument document = parser.parse(
+        r'\[escaped](https://example.com) '
+        r'![image](https://example.com/image.png) '
+        r'[incomplete](https://example.com '
+        r'`[code](https://example.com)`',
+      );
+
+      expect(document.tokensOf(MarkdownTokenKind.link), isEmpty);
+      expect(document.tokensOf(MarkdownTokenKind.inlineCode), hasLength(1));
+    });
+  });
+
   group('MarkdownEditingParser blocks', () {
     test('recognizes headings, quotes and both list forms', () {
       final MarkdownEditingDocument document = parser.parse(

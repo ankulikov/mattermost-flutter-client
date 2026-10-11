@@ -31,6 +31,7 @@ abstract final class MessageComposerStrings {
   static const String formatItalic = 'Italic';
   static const String formatStrike = 'Strikethrough';
   static const String formatHeading = 'Heading';
+  static const String formatLink = 'Link';
   static const String formatCode = 'Code';
   static const String formatQuote = 'Quote';
   static const String formatBulletedList = 'Bulleted list';

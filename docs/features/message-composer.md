@@ -56,16 +56,18 @@ editor and clears the shared draft through the normal send flow.
 ## Formatting controls
 
 The full-editor toolbar applies source-preserving commands for bold, italic,
-strikethrough, heading, code, quote, bulleted list, and ordered list. Compact
-full-editor layouts wrap the toolbar so every command remains visible. Other
-compact toolbar consumers may move less common block commands into an overflow
-menu. Choosing a command returns focus to the editor and preserves its
-selection.
+strikethrough, heading, labeled links, code, quote, bulleted list, and ordered
+list. Compact full-editor layouts wrap the toolbar so every command remains
+visible. Other compact toolbar consumers may move less common commands into an
+overflow menu. Choosing a command returns focus to the editor and preserves its
+selection. Ctrl/Command+Alt+K applies the labeled-link command.
 
-The tolerant editing parser covers bold, italic, strikethrough, inline and
-fenced code, headings, quotes, and ordered and bulleted lists. The read-only
-renderer supports a wider Mattermost dialect; unsupported editing syntax still
-passes through unchanged.
+The tolerant editing parser covers bold, italic, strikethrough, labeled links,
+inline and fenced code, headings, quotes, and ordered and bulleted lists. In
+Live Preview, a completed `[label](destination)` renders its label in place and
+reveals its source syntax while the selection or IME range touches it. The
+read-only renderer supports a wider Mattermost dialect; unsupported editing
+syntax still passes through unchanged.
 
 ## Inline atoms and suggestions
 

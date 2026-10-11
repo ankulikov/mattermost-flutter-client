@@ -576,6 +576,51 @@ void main() {
     },
   );
 
+  testWidgets('full editor link control formats the selected label', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageComposer(
+            destinationId: 'link-formatting',
+            placeholder: 'Write a message',
+            onSubmit: (_, _) async {},
+          ),
+        ),
+      ),
+    );
+    final Finder quickInput = find.byKey(
+      const ValueKey<String>('message-input-link-formatting'),
+    );
+    await tester.enterText(quickInput, 'Mattermost');
+    await tester.tap(
+      find.byKey(const ValueKey<String>('open-full-editor-link-formatting')),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder fullInput = find.byKey(
+      const ValueKey<String>('full-message-input-link-formatting'),
+    );
+    final TextEditingController controller = tester
+        .widget<TextField>(fullInput)
+        .controller!;
+    controller.selection = const TextSelection(baseOffset: 0, extentOffset: 10);
+    await tester.pump();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('message-formatting-link')),
+    );
+    await tester.pump();
+
+    expect(controller.text, '[Mattermost](url)');
+    expect(
+      controller.selection,
+      const TextSelection(baseOffset: 1, extentOffset: 11),
+    );
+    expect(tester.widget<TextField>(fullInput).focusNode?.hasFocus, isTrue);
+  });
+
   for (final double width in <double>[320, 900]) {
     testWidgets(
       'full editor adapts and keeps every formatting icon visible at $width',

@@ -101,6 +101,38 @@ void main() {
         const EditorSelection(baseOffset: 6, extentOffset: 2),
       );
     });
+
+    test('adds and removes a labeled link while preserving its selection', () {
+      final MarkdownEditCommandResult added = MarkdownEditCommands.link(
+        'Mattermost',
+        const EditorSelection(baseOffset: 0, extentOffset: 10),
+      );
+      final MarkdownEditCommandResult removed = MarkdownEditCommands.link(
+        added.text,
+        added.selection,
+      );
+
+      expect(added.text, '[Mattermost](url)');
+      expect(
+        added.selection,
+        const EditorSelection(baseOffset: 1, extentOffset: 11),
+      );
+      expect(removed.text, 'Mattermost');
+      expect(
+        removed.selection,
+        const EditorSelection(baseOffset: 0, extentOffset: 10),
+      );
+    });
+
+    test('inserts empty link syntax at a collapsed selection', () {
+      final MarkdownEditCommandResult result = MarkdownEditCommands.link(
+        'go',
+        const EditorSelection.collapsed(1),
+      );
+
+      expect(result.text, 'g[](url)o');
+      expect(result.selection, const EditorSelection.collapsed(2));
+    });
   });
 
   group('MarkdownEditCommands block toggles', () {

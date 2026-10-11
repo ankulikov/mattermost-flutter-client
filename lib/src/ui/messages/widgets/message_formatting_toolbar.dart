@@ -11,6 +11,7 @@ enum MessageFormattingCommand {
   italic,
   strike,
   heading,
+  link,
   code,
   quote,
   bulletedList,
@@ -76,6 +77,7 @@ class MessageFormattingToolbar extends StatelessWidget {
           const ExcludeSemantics(
             child: SizedBox(height: 24, child: VerticalDivider(width: 16)),
           ),
+          _commandButton(MessageFormattingCommand.link),
           _commandButton(MessageFormattingCommand.code),
           _commandButton(MessageFormattingCommand.quote),
           _commandButton(MessageFormattingCommand.bulletedList),
@@ -159,6 +161,7 @@ class MessageFormattingToolbar extends StatelessWidget {
 
 const List<MessageFormattingCommand> _overflowCommands =
     <MessageFormattingCommand>[
+      MessageFormattingCommand.link,
       MessageFormattingCommand.code,
       MessageFormattingCommand.quote,
       MessageFormattingCommand.bulletedList,
@@ -185,6 +188,10 @@ final class _FormattingControl {
         MessageFormattingCommand.heading => const _FormattingControl(
           MessageComposerStrings.formatHeading,
           Icons.title,
+        ),
+        MessageFormattingCommand.link => const _FormattingControl(
+          MessageComposerStrings.formatLink,
+          Icons.link,
         ),
         MessageFormattingCommand.code => const _FormattingControl(
           MessageComposerStrings.formatCode,
