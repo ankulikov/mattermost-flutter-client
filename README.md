@@ -7,7 +7,6 @@
 One client for every screen, built for busy Mattermost workdays.
 
 [![CI](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/ci.yml/badge.svg)](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/ci.yml)
-
 [![Release builds](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/release.yml/badge.svg)](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/release.yml)
 
 
@@ -37,10 +36,10 @@ One client for every screen, built for busy Mattermost workdays.
 - 🧭 Searchable sidebar for channels, direct messages, and group messages
 - 🔎 Message search with channel and author filters
 - 😄 Emoji and custom-emoji autocomplete
-- @️⃣ User and user-group mention suggestions
+- 👉 User and user-group mention suggestions
 - 👤 User profile cards with authenticated avatars
 - 🛰️ Real-time updates for messages, edits, deletions, reactions, and threads
-- 🖱️ Quick context actions for mouse, trackpad, touch, and keyboard workflows
+- ⚡️️ Quick context actions for mouse, trackpad, touch, and keyboard workflows
 - 🔐 Password and personal access token sign-in, plus SSO on supported native
   platforms, with tokens kept in secure platform storage
 - 📎 Retryable uploads, authenticated previews, and original-file downloads
