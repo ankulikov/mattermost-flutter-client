@@ -83,6 +83,7 @@ enum MarkdownTokenKind {
   bold,
   italic,
   strike,
+  link,
   inlineCode,
   fencedCode,
   heading,

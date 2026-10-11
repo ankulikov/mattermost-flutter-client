@@ -32,6 +32,42 @@ abstract final class MarkdownEditCommands {
     EditorSelection selection,
   ) => _toggleInline(text, selection, marker: '~~', kind: _InlineKind.strike);
 
+  static MarkdownEditCommandResult link(
+    String text,
+    EditorSelection selection,
+  ) {
+    _validateSelection(text, selection);
+    if (selection.isCollapsed) {
+      return MarkdownEditCommandResult(
+        text: text.replaceRange(selection.start, selection.end, '[](url)'),
+        selection: EditorSelection.collapsed(selection.start + 1),
+      );
+    }
+    final _TrimmedSelection trimmed = _trimSelection(text, selection);
+    if (trimmed.isEmpty) return link(text, trimmed.selection);
+    final EditorSelection contentSelection = trimmed.selection;
+    final int openingStart = contentSelection.start - 1;
+    final int suffixStart = contentSelection.end;
+    if (openingStart >= 0 &&
+        text.codeUnitAt(openingStart) == _leftBracket &&
+        text.startsWith('](', suffixStart)) {
+      final int destinationEnd = _linkDestinationEnd(text, suffixStart + 2);
+      if (destinationEnd >= 0) {
+        final String result = text
+            .replaceRange(suffixStart, destinationEnd + 1, '')
+            .replaceRange(openingStart, contentSelection.start, '');
+        return MarkdownEditCommandResult(
+          text: result,
+          selection: EditorSelection(
+            baseOffset: contentSelection.baseOffset - 1,
+            extentOffset: contentSelection.extentOffset - 1,
+          ),
+        );
+      }
+    }
+    return _wrap(text, contentSelection, '[', '](url)');
+  }
+
   static MarkdownEditCommandResult code(
     String text,
     EditorSelection selection,
@@ -109,6 +145,11 @@ abstract final class MarkdownEditCommands {
     String text,
     EditorSelection selection,
   ) => strike(text, selection);
+
+  static MarkdownEditCommandResult toggleLink(
+    String text,
+    EditorSelection selection,
+  ) => link(text, selection);
 
   static MarkdownEditCommandResult toggleCode(
     String text,
@@ -268,6 +309,25 @@ abstract final class MarkdownEditCommands {
         selection.end + 1 < text.length &&
         text.codeUnitAt(selection.end + 1) == _asterisk;
     return !hasOpeningNeighbor && !hasClosingNeighbor;
+  }
+
+  static int _linkDestinationEnd(String text, int start) {
+    var depth = 1;
+    for (var offset = start; offset < text.length; offset += 1) {
+      final int codeUnit = text.codeUnitAt(offset);
+      if (codeUnit == _lineFeed || codeUnit == _carriageReturn) return -1;
+      if (codeUnit == _backslash) {
+        offset += 1;
+        continue;
+      }
+      if (codeUnit == _leftParenthesis) {
+        depth += 1;
+      } else if (codeUnit == _rightParenthesis) {
+        depth -= 1;
+        if (depth == 0) return offset;
+      }
+    }
+    return -1;
   }
 
   static MarkdownEditCommandResult _toggleLinePrefix(
@@ -474,3 +534,7 @@ bool _isWhitespace(int codeUnit) =>
 const int _carriageReturn = 0x0D;
 const int _lineFeed = 0x0A;
 const int _asterisk = 0x2A;
+const int _backslash = 0x5C;
+const int _leftBracket = 0x5B;
+const int _leftParenthesis = 0x28;
+const int _rightParenthesis = 0x29;

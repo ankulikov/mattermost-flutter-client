@@ -158,6 +158,10 @@ final class MessageEditorController extends TextEditingController {
         text,
         selection,
       ),
+      MessageFormattingCommand.link => MarkdownEditCommands.link(
+        text,
+        selection,
+      ),
       MessageFormattingCommand.code => MarkdownEditCommands.code(
         text,
         selection,
@@ -229,6 +233,9 @@ final class MessageEditorController extends TextEditingController {
       },
       MessageFormattingCommand.heading => <MarkdownTokenKind>{
         MarkdownTokenKind.heading,
+      },
+      MessageFormattingCommand.link => <MarkdownTokenKind>{
+        MarkdownTokenKind.link,
       },
       MessageFormattingCommand.code => <MarkdownTokenKind>{
         MarkdownTokenKind.inlineCode,

@@ -297,6 +297,49 @@ void main() {
     },
   );
 
+  testWidgets('live preview renders an inactive hyperlink label in place', (
+    WidgetTester tester,
+  ) async {
+    final MessageEditorController controller = MessageEditorController(
+      customEmojiBuilder: (_, _) => const SizedBox.shrink(),
+    );
+    addTearDown(controller.dispose);
+    controller.value = const TextEditingValue(
+      text: '[link label](https://example.com) after',
+      selection: TextSelection.collapsed(offset: 39),
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext value) {
+            context = value;
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+
+    TextSpan span = controller.buildTextSpan(
+      context: context,
+      withComposing: true,
+    );
+    final Color primary = Theme.of(context).colorScheme.primary;
+    final TextSpan label = _spans(
+      span,
+    ).singleWhere((TextSpan child) => child.text == 'link label');
+    expect(span.toPlainText(), controller.text);
+    expect(controller.messageText, controller.text);
+    expect(_spans(span).where(_isCollapsedMarker), hasLength(2));
+    expect(label.style?.color, primary);
+    expect(label.style?.decoration, TextDecoration.underline);
+
+    controller.selection = const TextSelection.collapsed(offset: 6);
+    span = controller.buildTextSpan(context: context, withComposing: true);
+    expect(span.toPlainText(), controller.text);
+    expect(_spans(span).where(_isCollapsedMarker), isEmpty);
+  });
+
   testWidgets(
     'inactive bullet and ordered list markers remain visible in live preview',
     (WidgetTester tester) async {

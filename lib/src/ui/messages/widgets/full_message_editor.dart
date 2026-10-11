@@ -252,6 +252,20 @@ class _FullMessageEditorState extends State<FullMessageEditor> {
                   ): () => widget.controller.applyFormattingCommand(
                     MessageFormattingCommand.italic,
                   ),
+                  const SingleActivator(
+                    LogicalKeyboardKey.keyK,
+                    control: true,
+                    alt: true,
+                  ): () => widget.controller.applyFormattingCommand(
+                    MessageFormattingCommand.link,
+                  ),
+                  const SingleActivator(
+                    LogicalKeyboardKey.keyK,
+                    meta: true,
+                    alt: true,
+                  ): () => widget.controller.applyFormattingCommand(
+                    MessageFormattingCommand.link,
+                  ),
                 },
                 child: TextField(
                   key: ValueKey<String>(

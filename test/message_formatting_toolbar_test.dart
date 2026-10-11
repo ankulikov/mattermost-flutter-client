@@ -20,6 +20,7 @@ void main() {
       const ValueKey<String>('message-formatting-italic'),
       const ValueKey<String>('message-formatting-strike'),
       const ValueKey<String>('message-formatting-heading'),
+      const ValueKey<String>('message-formatting-link'),
       const ValueKey<String>('message-formatting-code'),
       const ValueKey<String>('message-formatting-quote'),
       const ValueKey<String>('message-formatting-bulletedList'),
@@ -28,6 +29,13 @@ void main() {
     expect(
       find.byKey(const ValueKey<String>('message-formatting-overflow')),
       findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('message-formatting-link')),
+        matching: find.byIcon(Icons.link),
+      ),
+      findsOneWidget,
     );
   });
 
@@ -64,6 +72,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(MessageComposerStrings.formatCode), findsOneWidget);
+    expect(find.text(MessageComposerStrings.formatLink), findsOneWidget);
     expect(find.text(MessageComposerStrings.formatQuote), findsOneWidget);
     expect(
       find.text(MessageComposerStrings.formatBulletedList),

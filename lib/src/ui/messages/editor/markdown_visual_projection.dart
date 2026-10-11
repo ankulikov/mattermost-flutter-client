@@ -171,6 +171,13 @@ class MarkdownVisualProjection {
         case MarkdownTokenKind.strike:
           style = style.copyWith(decoration: TextDecoration.lineThrough);
           hasStyle = true;
+        case MarkdownTokenKind.link:
+          style = style.copyWith(
+            color: colors.primary,
+            decoration: TextDecoration.underline,
+            decorationColor: colors.primary,
+          );
+          hasStyle = true;
         case MarkdownTokenKind.inlineCode:
         case MarkdownTokenKind.fencedCode:
           style = style.copyWith(
