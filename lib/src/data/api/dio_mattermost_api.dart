@@ -7,7 +7,10 @@ import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 
 final class DioMattermostApi
-    implements MattermostProfileApi, MattermostSessionApi {
+    implements
+        MattermostProfileApi,
+        MattermostSessionApi,
+        MattermostChannelMembersApi {
   DioMattermostApi({required Dio dio}) : _dio = dio;
 
   final Dio _dio;
@@ -46,6 +49,27 @@ final class DioMattermostApi
       '/channels/${Uri.encodeComponent(channelId)}',
     );
     return MattermostChannelDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<MattermostChannelStatsDto> getChannelStats(String channelId) async {
+    final Response<Object?> response = await _get(
+      '/channels/${Uri.encodeComponent(channelId)}/stats',
+    );
+    return MattermostChannelStatsDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<MattermostChannelMemberDto>> getChannelMembers({
+    required String channelId,
+    int page = 0,
+    int perPage = 60,
+  }) async {
+    final Response<Object?> response = await _get(
+      '/channels/${Uri.encodeComponent(channelId)}/members',
+      queryParameters: <String, Object?>{'page': page, 'per_page': perPage},
+    );
+    return _dtoList(response.data, MattermostChannelMemberDto.fromJson);
   }
 
   @override

@@ -17,6 +17,9 @@ import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart'
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
+import 'package:mattermost_flutter/src/features/channel_members/domain/channel_member.dart';
+import 'package:mattermost_flutter/src/features/channel_members/domain/channel_members_repository.dart';
+import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_pane.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
@@ -662,6 +665,96 @@ void main() {
     expect(find.text('Follow-up message 2'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('reaction-👍')), findsOneWidget);
     expect(find.byType(CircleAvatar), findsOneWidget);
+  });
+
+  testWidgets('opens channel members beside messages when width allows', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => appRouter.go('/'));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          postRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          channelMembersRepositoryProvider.overrideWithValue(
+            const _ChannelMembersRepository(),
+          ),
+          userRepositoryProvider.overrideWithValue(FakeUserRepository()),
+        ],
+        child: const MattermostApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('channel-member-count-town-square')),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder pane = find.byType(ChannelMembersPane);
+    expect(pane, findsOneWidget);
+    expect(tester.getSize(pane).width, 380);
+    expect(find.text('Message for town-square'), findsOneWidget);
+    expect(
+      find.descendant(of: pane, matching: find.text('Ada Lovelace')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('opens channel members as a full-size pane on compact width', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => appRouter.go('/'));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          postRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          channelMembersRepositoryProvider.overrideWithValue(
+            const _ChannelMembersRepository(),
+          ),
+          userRepositoryProvider.overrideWithValue(FakeUserRepository()),
+        ],
+        child: const MattermostApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('channel-member-count-town-square')),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder pane = find.byType(ChannelMembersPane);
+    expect(pane, findsOneWidget);
+    expect(tester.getSize(pane).width, 390);
+    expect(
+      find.descendant(of: pane, matching: find.text('Ada Lovelace')),
+      findsOneWidget,
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(ChannelMembersPane), findsNothing);
+    expect(find.text('Message for town-square'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('sends a text message in the selected channel', (
@@ -2384,4 +2477,46 @@ final class _CollapsedMutedSidebarRepository implements ChannelRepository {
           ),
         ],
       );
+}
+
+final class _ChannelMembersRepository implements ChannelMembersRepository {
+  const _ChannelMembersRepository();
+
+  @override
+  Future<int> getCount(String channelId) async => 2;
+
+  @override
+  Future<ChannelMembersPage> loadPage({
+    required String channelId,
+    required int page,
+    required int perPage,
+  }) async => ChannelMembersPage(
+    members: <ChannelMember>[
+      ChannelMember(
+        user: UserSummary(
+          id: 'ada',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          username: 'ada',
+          nickname: '',
+          position: '',
+          email: '',
+          profileImageUpdatedAt: 99,
+        ),
+        isChannelAdmin: true,
+      ),
+      ChannelMember(
+        user: UserSummary(
+          id: 'grace',
+          firstName: 'Grace',
+          lastName: 'Hopper',
+          username: 'grace',
+          nickname: '',
+          position: '',
+          email: '',
+          profileImageUpdatedAt: 99,
+        ),
+      ),
+    ],
+  );
 }

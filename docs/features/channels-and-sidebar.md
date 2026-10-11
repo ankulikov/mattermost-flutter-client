@@ -28,6 +28,24 @@ Mattermost does not expose a separate avatar thumbnail endpoint. The UI limits
 decode size for the rendered control. A failed image request leaves the initials
 in place and does not block navigation.
 
+## Channel members
+
+The channel header loads its member count from
+`GET /channels/{channel_id}/stats`. Activating the count opens a network-first,
+read-only member list backed by paged
+`GET /channels/{channel_id}/members` requests. Membership responses provide
+user IDs and channel roles; each page resolves profile details through the
+shared `UserRepository`, so member rows reuse the account-scoped profile and
+avatar caches.
+
+At content widths of at least 800 px, the member list opens in a 380 px side
+pane. Narrower content opens the same pane as a full-screen route. Closing the
+pane releases its member snapshot. Initial failures show an explicit retry;
+pagination failures preserve already loaded members.
+
+Member rows use the same compact, avatar-led presentation as direct messages,
+omit usernames, and open the shared user profile card when selected.
+
 ## Adaptive shell
 
 Compact layouts show Channels and Inbox as separate destinations with bottom
@@ -55,6 +73,7 @@ window narrows.
 
 ## Relevant code
 
+- `lib/src/features/channel_members/`
 - `lib/src/ui/channels/`
 - `lib/src/ui/shell/shell_page.dart`
 - `lib/src/data/mappers/channel_sidebar_mapper.dart`

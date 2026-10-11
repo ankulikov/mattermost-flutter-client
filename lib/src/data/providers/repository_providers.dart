@@ -27,6 +27,8 @@ import 'package:mattermost_flutter/src/domain/repositories/rich_attachment_optio
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
+import 'package:mattermost_flutter/src/features/channel_members/data/mattermost_channel_members_repository.dart';
+import 'package:mattermost_flutter/src/features/channel_members/domain/channel_members_repository.dart';
 import 'package:mattermost_flutter/src/features/file_upload/data/mattermost_file_upload_repository.dart';
 import 'package:mattermost_flutter/src/features/file_upload/data/system_upload_file_picker.dart';
 import 'package:mattermost_flutter/src/features/file_upload/domain/file_upload.dart';
@@ -145,6 +147,20 @@ final Provider<ChannelRepository> channelRepositoryProvider =
         users: ref.watch(userRepositoryProvider),
       ),
     );
+
+final Provider<ChannelMembersRepository> channelMembersRepositoryProvider =
+    Provider<ChannelMembersRepository>((Ref ref) {
+      final MattermostApi api = ref.watch(activeMattermostApiProvider);
+      if (api is! MattermostChannelMembersApi) {
+        throw StateError(
+          'The active Mattermost API does not support channel members',
+        );
+      }
+      return MattermostChannelMembersRepository(
+        api: api as MattermostChannelMembersApi,
+        users: ref.watch(userRepositoryProvider),
+      );
+    });
 
 final Provider<PostRepository> postRepositoryProvider =
     Provider<PostRepository>(

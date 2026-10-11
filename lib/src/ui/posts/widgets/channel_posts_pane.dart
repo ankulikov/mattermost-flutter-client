@@ -10,6 +10,9 @@ import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/policies/post_permalink.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
+import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_member_count_button.dart';
+import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_pane.dart';
+import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_route.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/resizable_pane_divider.dart';
@@ -51,6 +54,7 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
 
 class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
   String? _selectedRootPostId;
+  bool _showMembers = false;
   double _threadWidth = 380;
   String? _highlightedThreadPostId;
   PostNavigationTarget? _scheduledFocusTarget;
@@ -72,11 +76,13 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.channel.id != widget.channel.id) {
       _selectedRootPostId = null;
+      _showMembers = false;
       _highlightedThreadPostId = null;
     }
     if (!identical(oldWidget.navigationTarget, widget.navigationTarget)) {
       _openedThreadTarget = null;
       _selectedRootPostId = null;
+      _showMembers = false;
       _highlightedThreadPostId = null;
     }
   }
@@ -119,6 +125,21 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                   viewState?.focusStatus is OperationInProgress,
               onBack: widget.onBack,
               onSearchInChannel: widget.onSearchInChannel,
+              onOpenMembers: () {
+                if (showSideThread) {
+                  setState(() {
+                    _selectedRootPostId = null;
+                    _showMembers = true;
+                  });
+                  return;
+                }
+                unawaited(
+                  ChannelMembersRoute.open(
+                    context,
+                    ChannelMembersRouteArguments(channel: channel),
+                  ),
+                );
+              },
             ),
             const Divider(
               key: ValueKey<String>('channel-header-divider'),
@@ -174,7 +195,10 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                         ref.read(_postsProvider.notifier).loadNewer(),
                     onOpenThread: (ChannelPost post) {
                       if (showSideThread) {
-                        setState(() => _selectedRootPostId = post.id);
+                        setState(() {
+                          _showMembers = false;
+                          _selectedRootPostId = post.id;
+                        });
                         return;
                       }
                       unawaited(
@@ -250,6 +274,27 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
               ),
           ],
         );
+        if (_showMembers) {
+          final Widget members = ChannelMembersPane(
+            channel: channel,
+            onClose: () => setState(() => _showMembers = false),
+          );
+          if (showSideThread) {
+            return Row(
+              children: <Widget>[
+                Expanded(child: channelPane),
+                const VerticalDivider(width: 1),
+                SizedBox(width: 380, child: members),
+              ],
+            );
+          }
+          return Stack(
+            children: <Widget>[
+              Positioned.fill(child: channelPane),
+              Positioned.fill(child: members),
+            ],
+          );
+        }
         final String? rootPostId = _selectedRootPostId;
         if (rootPostId == null) return channelPane;
         final Widget thread = ThreadPane(
@@ -349,6 +394,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
       if (!mounted || !identical(widget.navigationTarget, target)) return;
       if (showSideThread) {
         setState(() {
+          _showMembers = false;
           _selectedRootPostId = target.threadRootPostId;
           _highlightedThreadPostId = target.threadHighlightedPostId;
         });
@@ -417,12 +463,14 @@ class _ChannelHeader extends StatelessWidget {
     required this.isLoading,
     required this.onBack,
     required this.onSearchInChannel,
+    required this.onOpenMembers,
   });
 
   final SidebarChannel channel;
   final bool isLoading;
   final VoidCallback? onBack;
   final ValueChanged<SidebarChannel>? onSearchInChannel;
+  final VoidCallback onOpenMembers;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -442,19 +490,30 @@ class _ChannelHeader extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: <Widget>[
-              Text(
-                channel.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      channel.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const _ChannelHeaderMetadataSpacer(),
+                  ],
+                ),
               ),
-              const _ChannelHeaderMetadataSpacer(),
+              const SizedBox(width: 4),
+              ChannelMemberCountButton(
+                channelId: channel.id,
+                onPressed: onOpenMembers,
+              ),
             ],
           ),
         ),
