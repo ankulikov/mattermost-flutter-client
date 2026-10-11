@@ -9,6 +9,45 @@ import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 
 void main() {
+  test('loads channel statistics', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"channel_id":"channel-1","member_count":42}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final MattermostChannelStatsDto stats = await DioMattermostApi(
+      dio: dio,
+    ).getChannelStats('channel 1');
+
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/channels/channel%201/stats');
+    expect(stats.memberCount, 42);
+  });
+
+  test('loads a page of channel memberships', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"channel_id":"channel-1","user_id":"ada",'
+          '"roles":"channel_user channel_admin"}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostChannelMemberDto> members = await DioMattermostApi(
+      dio: dio,
+    ).getChannelMembers(channelId: 'channel 1', page: 2, perPage: 60);
+
+    expect(adapter.request?.method, 'GET');
+    expect(adapter.request?.path, '/channels/channel%201/members');
+    expect(adapter.request?.queryParameters, <String, Object?>{
+      'page': 2,
+      'per_page': 60,
+    });
+    expect(members.single.userId, 'ada');
+    expect(members.single.roles, contains('channel_admin'));
+  });
+
   test('logs out the active Mattermost session', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body: '{"status":"OK"}',

@@ -295,6 +295,20 @@ abstract interface class MattermostApi {
   });
 }
 
+/// Channel membership endpoints used by the read-only members feature.
+///
+/// Kept separate from [MattermostApi] so feature-specific test transports do
+/// not need to implement endpoints they never call.
+abstract interface class MattermostChannelMembersApi {
+  Future<MattermostChannelStatsDto> getChannelStats(String channelId);
+
+  Future<List<MattermostChannelMemberDto>> getChannelMembers({
+    required String channelId,
+    int page = 0,
+    int perPage = 60,
+  });
+}
+
 /// Authenticated profile-status commands layered on the shared API boundary.
 ///
 /// Keeping these commands in a sub-interface lets focused repository fakes

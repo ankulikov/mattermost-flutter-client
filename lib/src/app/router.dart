@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_pane.dart';
+import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_route.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_channel_route.dart';
 import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
@@ -12,6 +14,35 @@ final GoRouter appRouter = GoRouter(
       path: '/',
       builder: (BuildContext context, GoRouterState state) =>
           const BootstrapPage(),
+    ),
+    GoRoute(
+      name: ChannelMembersRoute.name,
+      path: ChannelMembersRoute.path,
+      redirect: (BuildContext context, GoRouterState state) {
+        final Object? extra = state.extra;
+        final String? channelId = state.pathParameters['channelId'];
+        if (extra is! ChannelMembersRouteArguments ||
+            channelId != extra.channel.id) {
+          return '/';
+        }
+        return null;
+      },
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        final ChannelMembersRouteArguments arguments =
+            state.extra! as ChannelMembersRouteArguments;
+        return MaterialPage<void>(
+          key: state.pageKey,
+          child: Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            body: SafeArea(
+              child: ChannelMembersPane(
+                channel: arguments.channel,
+                onClose: context.pop,
+              ),
+            ),
+          ),
+        );
+      },
     ),
     GoRoute(
       name: PostPermalinkRoute.name,

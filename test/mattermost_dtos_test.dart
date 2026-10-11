@@ -32,6 +32,15 @@ void main() {
     expect(group.memberCount, 18);
   });
 
+  test('parses channel statistics', () {
+    final MattermostChannelStatsDto stats = MattermostChannelStatsDto.fromJson(
+      <String, Object?>{'channel_id': 'channel-1', 'member_count': 42},
+    );
+
+    expect(stats.channelId, 'channel-1');
+    expect(stats.memberCount, 42);
+  });
+
   test('decodes profile picture versions for people and bots', () {
     final MattermostUserDto person = MattermostUserDto.fromJson(
       <String, Object?>{

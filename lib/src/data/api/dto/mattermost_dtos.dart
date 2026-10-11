@@ -417,6 +417,23 @@ final class MattermostChannelDto {
   final String creatorId;
 }
 
+/// Aggregate counts returned by `GET /channels/{channel_id}/stats`.
+final class MattermostChannelStatsDto {
+  const MattermostChannelStatsDto({
+    required this.channelId,
+    this.memberCount = 0,
+  });
+
+  factory MattermostChannelStatsDto.fromJson(JsonMap json) =>
+      MattermostChannelStatsDto(
+        channelId: _string(json, 'channel_id'),
+        memberCount: _int(json, 'member_count'),
+      );
+
+  final String channelId;
+  final int memberCount;
+}
+
 /// Membership state returned by
 /// `GET /users/{user_id}/teams/{team_id}/channels/members`.
 final class MattermostChannelMemberDto {
