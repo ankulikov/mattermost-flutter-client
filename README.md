@@ -76,8 +76,7 @@ Set up the project:
 
 ```sh
 flutter pub get
-flutter pub run build_runner build
-dart run tool/generate_mattermost_system_emojis.dart
+dart run build_runner build
 flutter run
 ```
 
