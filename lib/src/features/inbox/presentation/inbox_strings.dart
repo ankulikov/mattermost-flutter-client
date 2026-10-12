@@ -13,7 +13,7 @@ abstract final class InboxStrings {
   static const String disconnected = 'Inbox realtime is disconnected';
   static const String emptyNew = 'No new messages';
   static const String emptyPostponed = 'No postponed messages';
-  static const String read = 'Read';
+  static const String read = 'Done';
   static const String postpone = 'Postpone';
   static const String remove = 'Remove';
   static const String markReadFailed = 'Could not mark this item as read.';

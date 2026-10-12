@@ -641,6 +641,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Done'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey<String>('read-post:mention')));
     await tester.pumpAndSettle();
 
