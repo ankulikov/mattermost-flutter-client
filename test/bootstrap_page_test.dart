@@ -31,6 +31,7 @@ import 'package:mattermost_flutter/src/features/profile/domain/models/current_us
 import 'package:mattermost_flutter/src/features/profile/domain/repositories/current_user_profile_repository.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
+import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -51,23 +52,33 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('uses a drawer on compact screens', (WidgetTester tester) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
+  testWidgets('shows no navigation chrome while signed out', (
+    WidgetTester tester,
+  ) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(_SignedOutRepository()),
-        ],
-        child: const MaterialApp(home: BootstrapPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1120, 800),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedOutRepository()),
+          ],
+          child: const MaterialApp(home: BootstrapPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final Scaffold scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    expect(scaffold.drawer, isA<Drawer>());
-    expect(find.text('Mattermost'), findsOneWidget);
+      final Scaffold scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.appBar, isNull);
+      expect(scaffold.drawer, isNull);
+      expect(find.byType(Drawer), findsNothing);
+      expect(find.byType(ChannelSidebar), findsNothing);
+      expect(find.text(AuthStrings.title), findsOneWidget);
+    }
   });
 
   testWidgets('switches layout on both sides of shared breakpoints', (
