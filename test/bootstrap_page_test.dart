@@ -411,7 +411,19 @@ void main() {
         const ValueKey<String>('channel-search-field'),
       );
       expect(search, findsOneWidget);
-      expect(tester.getSize(search).height, 48);
+      expect(tester.getSize(search).height, 56);
+      final InputDecoration decoration = tester
+          .widget<TextField>(search)
+          .decoration!;
+      expect(decoration.isDense, isNull);
+      expect(decoration.constraints, isNull);
+      expect(decoration.contentPadding, isNull);
+      expect(decoration.filled, isNull);
+      expect(decoration.prefixIconConstraints, isNull);
+      final OutlineInputBorder border =
+          decoration.border! as OutlineInputBorder;
+      expect(border.borderRadius, BorderRadius.circular(10));
+      expect(border.borderSide.width, 1);
       expect(find.text('Public channels'), findsOneWidget);
       expect(find.text('Town Square'), findsNothing);
       expect(find.text('Direct messages'), findsOneWidget);

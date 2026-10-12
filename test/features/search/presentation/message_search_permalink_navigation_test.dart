@@ -94,6 +94,9 @@ void main() {
       );
       await tester.drag(find.byType(ListView), const Offset(0, -900));
       await tester.pumpAndSettle();
+      final AppBar searchHeader = tester.widget<AppBar>(find.byType(AppBar));
+      expect(searchHeader.scrolledUnderElevation, 0);
+      expect(searchHeader.surfaceTintColor, Colors.transparent);
       final ScrollableState resultsScrollable = tester
           .stateList<ScrollableState>(find.byType(Scrollable))
           .firstWhere(
