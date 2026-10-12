@@ -34,6 +34,7 @@ class RichAttachments extends StatelessWidget {
     this.actionScopeId,
     this.onPostUpdated,
     this.onGotoLocation,
+    this.enableTextSelection = true,
     super.key,
   });
 
@@ -49,6 +50,7 @@ class RichAttachments extends StatelessWidget {
   final String? actionScopeId;
   final ValueChanged<ChannelPost>? onPostUpdated;
   final ValueChanged<String>? onGotoLocation;
+  final bool enableTextSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +76,7 @@ class RichAttachments extends StatelessWidget {
                 actionScopeId: actionScopeId,
                 onPostUpdated: onPostUpdated,
                 onGotoLocation: onGotoLocation,
+                enableTextSelection: enableTextSelection,
               ),
             ),
         ],
@@ -96,6 +99,7 @@ class _RichAttachmentCard extends StatelessWidget {
     required this.actionScopeId,
     required this.onPostUpdated,
     required this.onGotoLocation,
+    required this.enableTextSelection,
   });
 
   final RichAttachment attachment;
@@ -110,6 +114,7 @@ class _RichAttachmentCard extends StatelessWidget {
   final String? actionScopeId;
   final ValueChanged<ChannelPost>? onPostUpdated;
   final ValueChanged<String>? onGotoLocation;
+  final bool enableTextSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -197,6 +202,7 @@ class _MarkdownText extends StatelessWidget {
     onSelectChannel: card.onSelectChannel,
     onOpenPostLink: card.onOpenPostLink,
     textStyle: style,
+    enableTextSelection: card.enableTextSelection,
   );
 }
 
