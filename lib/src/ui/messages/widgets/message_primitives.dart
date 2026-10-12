@@ -127,6 +127,7 @@ class MessageBody extends ConsumerWidget {
     this.onOpenPostLink,
     this.onQuoteSelection,
     this.deletedMessage,
+    this.enableTextSelection = true,
     super.key,
   });
 
@@ -136,6 +137,7 @@ class MessageBody extends ConsumerWidget {
   final ValueChanged<String>? onOpenPostLink;
   final ValueChanged<String>? onQuoteSelection;
   final String? deletedMessage;
+  final bool enableTextSelection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -154,6 +156,7 @@ class MessageBody extends ConsumerWidget {
       onSelectChannel: onSelectChannel,
       onOpenPostLink: onOpenPostLink,
       onQuoteSelection: onQuoteSelection,
+      enableTextSelection: enableTextSelection,
     );
   }
 }
@@ -171,6 +174,7 @@ class MessageMarkdown extends ConsumerWidget {
     this.onOpenPostLink,
     this.onQuoteSelection,
     this.textStyle,
+    this.enableTextSelection = true,
     super.key,
   });
 
@@ -181,6 +185,7 @@ class MessageMarkdown extends ConsumerWidget {
   final ValueChanged<String>? onOpenPostLink;
   final ValueChanged<String>? onQuoteSelection;
   final TextStyle? textStyle;
+  final bool enableTextSelection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -218,6 +223,7 @@ class MessageMarkdown extends ConsumerWidget {
       onTapChannel: onSelectChannel,
       onTapPostLink: onOpenPostLink,
       onQuoteSelection: onQuoteSelection,
+      enableTextSelection: enableTextSelection,
       textStyle: bodyStyle,
       inlineParserKey:
           '${resolvedMentionNames.join(',')}|${resolvedGroupNames.join(',')}',

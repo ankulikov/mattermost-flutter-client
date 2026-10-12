@@ -340,13 +340,13 @@ class _InboxRow extends ConsumerWidget {
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: theme.colorScheme.outlineVariant),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            InkWell(
-              key: ValueKey<String>('inbox-item-${item.key}'),
-              onTap: onOpen,
-              child: Padding(
+        child: InkWell(
+          key: ValueKey<String>('inbox-item-${item.key}'),
+          onTap: onOpen,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,6 +370,7 @@ class _InboxRow extends ConsumerWidget {
                           MessageContent(
                             post: preview.post,
                             serverUrl: session?.serverUrl,
+                            enableTextSelection: false,
                           ),
                         ],
                       ),
@@ -377,28 +378,28 @@ class _InboxRow extends ConsumerWidget {
                   ],
                 ),
               ),
-            ),
-            if (_showsUpdates(item)) ...<Widget>[
+              if (_showsUpdates(item)) ...<Widget>[
+                Divider(height: 1, color: theme.colorScheme.outlineVariant),
+                _InboxUpdates(item: item),
+              ],
               Divider(height: 1, color: theme.colorScheme.outlineVariant),
-              _InboxUpdates(item: item),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: isPostponed
+                    ? TextButton.icon(
+                        key: ValueKey<String>('remove-${item.key}'),
+                        onPressed: () => unawaited(_remove(context, ref)),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text(InboxStrings.remove),
+                      )
+                    : _NewItemActions(
+                        itemKey: item.key,
+                        onRead: () => unawaited(_markRead(context, ref)),
+                        onPostpone: () => unawaited(_postpone(context, ref)),
+                      ),
+              ),
             ],
-            Divider(height: 1, color: theme.colorScheme.outlineVariant),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: isPostponed
-                  ? TextButton.icon(
-                      key: ValueKey<String>('remove-${item.key}'),
-                      onPressed: () => unawaited(_remove(context, ref)),
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text(InboxStrings.remove),
-                    )
-                  : _NewItemActions(
-                      itemKey: item.key,
-                      onRead: () => unawaited(_markRead(context, ref)),
-                      onPostpone: () => unawaited(_postpone(context, ref)),
-                    ),
-            ),
-          ],
+          ),
         ),
       ),
     );

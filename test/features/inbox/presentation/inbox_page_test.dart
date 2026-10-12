@@ -440,6 +440,24 @@ void main() {
         find.byKey(const ValueKey<String>('inbox-item-post:mention')),
       );
       expect(opened, same(items[1]));
+
+      opened = null;
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('inbox-updates-post:mention')),
+          matching: find.text('mentioned'),
+        ),
+      );
+      expect(opened, same(items[1]));
+
+      final Finder mentionCard = find.ancestor(
+        of: find.byKey(const ValueKey<String>('inbox-item-post:mention')),
+        matching: find.byType(Card),
+      );
+      expect(
+        find.descendant(of: mentionCard, matching: find.byType(SelectionArea)),
+        findsNothing,
+      );
     },
   );
 

@@ -88,6 +88,7 @@ class MattermostMarkdown extends StatefulWidget {
     this.inlineLinkReplacements = const <MattermostInlineLinkReplacement>[],
     this.inlineParserKey,
     this.onQuoteSelection,
+    this.enableTextSelection = true,
     super.key,
   });
 
@@ -104,6 +105,7 @@ class MattermostMarkdown extends StatefulWidget {
   /// stays the same, forcing the Markdown AST to be parsed again.
   final Object? inlineParserKey;
   final ValueChanged<String>? onQuoteSelection;
+  final bool enableTextSelection;
 
   @override
   State<MattermostMarkdown> createState() => _MattermostMarkdownState();
@@ -248,20 +250,22 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
     );
     final MessageInteractionScope? interactionScope =
         MessageInteractionScope.maybeOf(context);
+    final Widget interactiveBody = interactionScope == null
+        ? body
+        : _TouchMessageInteractionBridge(
+            onTouchStart: _clearSelection,
+            onTap: interactionScope.onTouchTap,
+            onLongPressStart: interactionScope.onTouchLongPressStart,
+            child: body,
+          );
+    if (!widget.enableTextSelection) return interactiveBody;
     return SelectionArea(
       key: _selectionAreaKey,
       onSelectionChanged: (SelectedContent? content) {
         _selectedText = content?.plainText;
       },
       contextMenuBuilder: _buildSelectionContextMenu,
-      child: interactionScope == null
-          ? body
-          : _TouchMessageInteractionBridge(
-              onTouchStart: _clearSelection,
-              onTap: interactionScope.onTouchTap,
-              onLongPressStart: interactionScope.onTouchLongPressStart,
-              child: body,
-            ),
+      child: interactiveBody,
     );
   }
 
