@@ -48,9 +48,11 @@ One client for every screen, built for busy Mattermost workdays.
 
 ## 🗺️ Backlog
 
+- 🔖 Saved messages ("bookmarks")
+- 🤔 Message drafts (started, but not sent yet)
 - 🔔 Push notifications
 - 🏢 Multiple teams per account
-- 🧩 Full interactive messages and dialogs
+- 🧩 Full cover of interactive messages and dialogs
 
 ## 🚧 Out of scope
 

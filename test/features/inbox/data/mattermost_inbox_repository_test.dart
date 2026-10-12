@@ -210,6 +210,51 @@ void main() {
     expect(snapshot.postponedItems.single.postIds, <String>['p1']);
   });
 
+  test('hydrates a specifically postponed reply as its own item', () async {
+    final _InboxApi api = _InboxApi(
+      teams: const <MattermostTeamDto>[
+        MattermostTeamDto(id: 't', name: 'team', displayName: 'Team'),
+      ],
+      channels: const <MattermostChannelDto>[
+        MattermostChannelDto(
+          id: 'channel',
+          teamId: 't',
+          type: 'O',
+          name: 'channel',
+          displayName: 'Channel',
+        ),
+      ],
+      members: const <MattermostChannelMemberDto>[
+        MattermostChannelMemberDto(channelId: 'channel', userId: 'me'),
+      ],
+      unread: const <MattermostPostDto>[
+        MattermostPostDto(
+          id: 'reply',
+          rootId: 'root',
+          userId: 'other',
+          channelId: 'channel',
+          message: 'The selected reply',
+          createAt: 2,
+        ),
+      ],
+    );
+    final InboxSnapshot snapshot = await _repository(
+      api,
+      _Postponed(<PostponedReference>[
+        PostponedReference(
+          postId: 'reply',
+          kind: PostponedReferenceKind.post,
+          addedAt: DateTime.utc(2026),
+        ),
+      ]),
+    ).load(session: session);
+
+    final ChannelPostInboxItem item =
+        snapshot.postponedItems.single as ChannelPostInboxItem;
+    expect(item.post.id, 'reply');
+    expect(item.post.message, 'The selected reply');
+  });
+
   test('restores a postponed group mention source', () async {
     final _InboxApi api = _InboxApi(
       teams: const <MattermostTeamDto>[

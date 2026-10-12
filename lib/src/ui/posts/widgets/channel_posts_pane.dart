@@ -214,6 +214,9 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                         _toggleReaction(context, post, emojiName),
                     onDeletePost: (ChannelPost post) =>
                         _deletePost(context, post),
+                    onPostponePost: (ChannelPost post) => ref
+                        .read(inboxProvider.notifier)
+                        .postponeMessage(post: post, channel: channel),
                     onRichAttachmentPostUpdated: (ChannelPost post) =>
                         ref.read(_postsProvider.notifier).replacePost(post),
                     onRichAttachmentGotoLocation: (String location) =>
@@ -614,6 +617,7 @@ class _PostList extends StatefulWidget {
     required this.onOpenThread,
     required this.onToggleReaction,
     required this.onDeletePost,
+    required this.onPostponePost,
     required this.onRichAttachmentPostUpdated,
     required this.onRichAttachmentGotoLocation,
     required this.actionScopeId,
@@ -638,6 +642,7 @@ class _PostList extends StatefulWidget {
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
   final Future<bool> Function(ChannelPost) onDeletePost;
+  final Future<bool> Function(ChannelPost) onPostponePost;
   final ValueChanged<ChannelPost> onRichAttachmentPostUpdated;
   final ValueChanged<String> onRichAttachmentGotoLocation;
   final String actionScopeId;
@@ -909,6 +914,7 @@ class _PostListState extends State<_PostList> {
       onOpenThread: widget.onOpenThread,
       onToggleReaction: widget.onToggleReaction,
       onDelete: () => widget.onDeletePost(post),
+      onPostpone: () => widget.onPostponePost(post),
       onRichAttachmentPostUpdated: widget.onRichAttachmentPostUpdated,
       onRichAttachmentGotoLocation: widget.onRichAttachmentGotoLocation,
       actionScopeId: widget.actionScopeId,
@@ -931,6 +937,7 @@ class _PostRow extends StatelessWidget {
     required this.onOpenThread,
     required this.onToggleReaction,
     required this.onDelete,
+    required this.onPostpone,
     required this.onRichAttachmentPostUpdated,
     required this.onRichAttachmentGotoLocation,
     required this.actionScopeId,
@@ -950,6 +957,7 @@ class _PostRow extends StatelessWidget {
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
   final Future<bool> Function() onDelete;
+  final Future<bool> Function() onPostpone;
   final ValueChanged<ChannelPost> onRichAttachmentPostUpdated;
   final ValueChanged<String> onRichAttachmentGotoLocation;
   final String actionScopeId;
@@ -965,6 +973,7 @@ class _PostRow extends StatelessWidget {
       onOpenThread: () => onOpenThread(post),
       onToggleReaction: (String emojiName) => onToggleReaction(post, emojiName),
       onDelete: onDelete,
+      onPostpone: onPostpone,
       canDelete: canDelete,
       canEdit: canEdit,
       emojiRepositoryFactory: emojiRepositoryFactory,

@@ -92,6 +92,10 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   Widget build(BuildContext context) {
     ref.watch(realtimeConnectionStatusProvider);
     final AuthState auth = ref.watch(authControllerProvider);
+    if (auth.phase != AuthPhase.signedIn) {
+      return _buildUnauthenticated(auth: auth);
+    }
+
     final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
     final ShellDestination destination = ref.watch(shellDestinationProvider);
     final bool threadsSelected = destination == ShellDestination.inbox;
@@ -102,14 +106,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         .value
         ?.snapshot;
 
-    if (auth.phase != AuthPhase.signedIn) {
-      return _buildUnauthenticated(
-        auth: auth,
-        selectedChannel: selectedChannel,
-        threadsSelected: threadsSelected,
-        sidebar: sidebar,
-      );
-    }
     final bool inboxHasNewItems = ref.watch(
       inboxProvider.select((value) => value.value?.hasNewItems ?? false),
     );
@@ -146,42 +142,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     );
   }
 
-  Widget _buildUnauthenticated({
-    required AuthState auth,
-    required SidebarChannel? selectedChannel,
-    required bool threadsSelected,
-    required ChannelSidebarSnapshot? sidebar,
-  }) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final bool expanded = constraints.maxWidth >= AppBreakpoints.expanded;
-        final Widget content = _MainContent(
-          auth: auth,
-          selectedChannel: selectedChannel,
-          threadsSelected: threadsSelected,
-          sidebar: sidebar,
-          onSelectChannel: _selectChannelNamed,
-          onSearchInChannel: _openSearchInChannel,
-        );
-        if (expanded) {
-          return Scaffold(
-            body: Row(
-              children: <Widget>[
-                const SizedBox(width: 280, child: ChannelSidebar()),
-                const VerticalDivider(width: 1),
-                Expanded(child: content),
-              ],
-            ),
-          );
-        }
-        return Scaffold(
-          appBar: AppBar(title: const Text(ShellStrings.appTitle)),
-          body: content,
-          drawer: const Drawer(child: ChannelSidebar()),
-        );
-      },
-    );
-  }
+  Widget _buildUnauthenticated({required AuthState auth}) =>
+      Scaffold(body: _SignedOutContent(auth: auth));
 
   Widget _buildDesktop({
     required AuthState auth,

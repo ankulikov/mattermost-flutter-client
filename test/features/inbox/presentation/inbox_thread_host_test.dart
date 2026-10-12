@@ -48,6 +48,7 @@ void main() {
       );
 
       expect(target.rootPostId, 'root');
+      expect(target.highlightedPostId, 'reply');
       expect(target.channel, same(publicChannel));
     });
 
@@ -71,6 +72,7 @@ void main() {
       );
 
       expect(target.rootPostId, 'direct-root');
+      expect(target.highlightedPostId, 'direct-reply');
       expect(target.channel, same(directChannel));
     });
 
