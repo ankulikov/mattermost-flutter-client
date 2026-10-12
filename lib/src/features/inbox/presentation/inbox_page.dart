@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realtime_event.dart';
+import 'package:mattermost_flutter/src/features/inbox/domain/policies/reconcile_queues.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
@@ -246,6 +247,7 @@ class _InboxList extends StatelessWidget {
         : items;
     final List<InboxItem> presentationItems = expandedItems.toList()
       ..sort((InboxItem first, InboxItem second) {
+        if (isPostponed) return comparePostponedInboxItems(first, second);
         final int byActivity = second.lastActivityAt.compareTo(
           first.lastActivityAt,
         );
@@ -378,7 +380,7 @@ class _InboxRow extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (_showsUpdates(item)) ...<Widget>[
+              if (!isPostponed && _showsUpdates(item)) ...<Widget>[
                 Divider(height: 1, color: theme.colorScheme.outlineVariant),
                 _InboxUpdates(item: item),
               ],

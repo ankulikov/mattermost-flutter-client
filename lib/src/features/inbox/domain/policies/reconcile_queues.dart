@@ -41,7 +41,9 @@ InboxSnapshot reconcileQueues({
 
   return InboxSnapshot(
     newItems: _sortNewestFirst(reconciledNew),
-    postponedItems: _sortNewestFirst(postponed),
+    postponedItems: List<InboxItem>.unmodifiable(
+      postponed..sort(comparePostponedInboxItems),
+    ),
     builtAt: builtAt,
     hasIncompleteMentionReconstruction: hasIncompleteMentionReconstruction,
   );
@@ -66,13 +68,20 @@ List<InboxItem> _sortNewestFirst(Iterable<InboxItem> items) {
       final int byActivity = second.lastActivityAt.compareTo(
         first.lastActivityAt,
       );
-      if (byActivity != 0) return byActivity;
-      final DateTime firstPostponedAt = first.postponedAt ?? DateTime(0);
-      final DateTime secondPostponedAt = second.postponedAt ?? DateTime(0);
-      final int byPostponedAt = secondPostponedAt.compareTo(firstPostponedAt);
-      return byPostponedAt != 0
-          ? byPostponedAt
-          : first.key.compareTo(second.key);
+      return byActivity != 0 ? byActivity : first.key.compareTo(second.key);
     });
   return List<InboxItem>.unmodifiable(sorted);
+}
+
+/// Orders saved messages by when they entered Postponed, newest first.
+int comparePostponedInboxItems(InboxItem first, InboxItem second) {
+  final DateTime? firstAddedAt = first.postponedAt;
+  final DateTime? secondAddedAt = second.postponedAt;
+  if (firstAddedAt != null && secondAddedAt != null) {
+    final int byAddedAt = secondAddedAt.compareTo(firstAddedAt);
+    if (byAddedAt != 0) return byAddedAt;
+  } else if (firstAddedAt != null || secondAddedAt != null) {
+    return firstAddedAt != null ? -1 : 1;
+  }
+  return first.key.compareTo(second.key);
 }

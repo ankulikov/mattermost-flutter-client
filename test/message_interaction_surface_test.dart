@@ -99,7 +99,7 @@ void main() {
     await _dismissActionsSheet(tester);
   });
 
-  testWidgets('Postpone task invokes the action from the touch sheet', (
+  testWidgets('Postpone invokes the action from the touch sheet', (
     WidgetTester tester,
   ) async {
     var calls = 0;
@@ -122,9 +122,7 @@ void main() {
     expect(find.text(MessageActionsStrings.postponed), findsOneWidget);
   });
 
-  testWidgets('Postpone task reports a failed write', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('Postpone reports a failed write', (WidgetTester tester) async {
     await tester.pumpWidget(
       _app(onOpenThread: () {}, onPostpone: () async => false),
     );

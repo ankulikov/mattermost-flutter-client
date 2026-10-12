@@ -17,6 +17,7 @@ import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postpo
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
@@ -506,6 +507,116 @@ void main() {
           .left,
       greaterThan(tester.getRect(find.text(InboxStrings.newItems)).right),
     );
+  });
+
+  testWidgets('Postponed hides reasons and orders by add time at both widths', (
+    WidgetTester tester,
+  ) async {
+    final DateTime firstSent = DateTime.utc(2026, 8, 1, 10);
+    final DateTime lastSent = DateTime.utc(2026, 8, 2, 10);
+    final InboxItem oldMessage = ChannelPostInboxItem(
+      candidate: _candidate(
+        'old',
+        'Older message saved last',
+        reason: InboxAttentionReason.allMessagesSubscription,
+        sentAt: firstSent,
+      ),
+      postponedAt: DateTime.utc(2026, 9, 2),
+    );
+    final InboxItem newMessage = ChannelPostInboxItem(
+      candidate: _candidate(
+        'new',
+        'Newer message saved first',
+        sentAt: lastSent,
+      ),
+      postponedAt: DateTime.utc(2026, 9, 1),
+    );
+    final InboxSnapshot snapshot = InboxSnapshot(
+      newItems: <InboxItem>[
+        ChannelPostInboxItem(
+          candidate: _candidate(
+            'new-queue',
+            'New queue message',
+            reason: InboxAttentionReason.allMessagesSubscription,
+          ),
+        ),
+      ],
+      postponedItems: <InboxItem>[newMessage, oldMessage],
+    );
+
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final Size size in <Size>[
+      const Size(360, 900),
+      const Size(1200, 900),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authSessionProvider.overrideWithValue(_session),
+            inboxRepositoryProvider.overrideWithValue(
+              _InboxRepository(snapshot),
+            ),
+            postponedRepositoryProvider.overrideWithValue(
+              const _PostponedRepository(),
+            ),
+          ],
+          child: MediaQuery(
+            data: MediaQueryData(size: size, textScaler: TextScaler.linear(2)),
+            child: MaterialApp(
+              home: InboxPage(
+                key: ValueKey<double>(size.width),
+                onOpenItem: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(InboxStrings.newPostInChannel), findsOneWidget);
+      await tester.tap(find.text(InboxStrings.postponed));
+      await tester.pumpAndSettle();
+
+      expect(find.text(InboxStrings.newPostInChannel), findsNothing);
+      expect(find.text(InboxStrings.mentioned), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('inbox-updates-post:old')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('inbox-updates-post:new')),
+        findsNothing,
+      );
+      expect(
+        tester
+            .getTopLeft(
+              find.byKey(const ValueKey<String>('inbox-item-post:old')),
+            )
+            .dy,
+        lessThan(
+          tester
+              .getTopLeft(
+                find.byKey(const ValueKey<String>('inbox-item-post:new')),
+              )
+              .dy,
+        ),
+      );
+      final Finder oldCard = find.ancestor(
+        of: find.byKey(const ValueKey<String>('inbox-item-post:old')),
+        matching: find.byType(Card),
+      );
+      expect(
+        find.descendant(
+          of: oldCard,
+          matching: find.text(
+            formatMessageTimestamp(sentAt: firstSent, locale: 'en-US'),
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('uses only the channel name for non-person channel triggers', (
