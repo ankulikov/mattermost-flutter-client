@@ -1016,9 +1016,7 @@ final class MattermostInboxRepository extends InboxRepository {
     required Map<String, MattermostChannelMemberDto> members,
     required Set<String> groupMentionNames,
   }) {
-    final List<InboxPostCandidate> posts = <InboxPostCandidate>[];
-    final List<InboxItem> threads = <InboxItem>[];
-    final List<InboxItem> replies = <InboxItem>[];
+    final List<InboxItem> items = <InboxItem>[];
     for (final PostponedReference reference in references) {
       final MattermostPostDto? raw = rawPosts[reference.postId];
       final ChannelPost? post = mappedById[reference.postId];
@@ -1031,7 +1029,7 @@ final class MattermostInboxRepository extends InboxRepository {
         continue;
       }
       if (reference.kind == PostponedReferenceKind.thread) {
-        threads.add(
+        items.add(
           ThreadInboxItem(
             channel: channel,
             teamId: channel.teamId,
@@ -1070,45 +1068,17 @@ final class MattermostInboxRepository extends InboxRepository {
           isFromWebhook: _isTrue(raw.props?.values['from_webhook']),
           isFromPlugin: _isTrue(raw.props?.values['from_plugin']),
         );
-        if (post.isReply) {
-          // Explicitly postponed replies are displayed as selected messages.
-          // New-queue canonicalization deliberately excludes replies.
-          replies.add(
-            ChannelPostInboxItem(
-              candidate: candidate,
-              postponedAt: reference.addedAt,
-            ),
-          );
-        } else {
-          posts.add(candidate);
-        }
+        // Each saved reference keeps its own add time, including direct
+        // messages and replies that are not eligible for the New queue.
+        items.add(
+          ChannelPostInboxItem(
+            candidate: candidate,
+            postponedAt: reference.addedAt,
+          ),
+        );
       }
     }
-    final List<InboxItem> grouped = groupDirectMessages(
-      canonicalizeInboxCandidates(InboxSourceSnapshot(posts: posts)),
-    ).map((InboxItem item) => _withPostponedAt(item, references)).toList();
-    return <InboxItem>[...threads, ...grouped, ...replies];
-  }
-
-  InboxItem _withPostponedAt(InboxItem item, List<PostponedReference> refs) {
-    final DateTime addedAt = refs
-        .where((PostponedReference ref) => item.postIds.contains(ref.postId))
-        .map((PostponedReference ref) => ref.addedAt)
-        .reduce((DateTime a, DateTime b) => a.isAfter(b) ? a : b);
-    return switch (item) {
-      ChannelPostInboxItem() => ChannelPostInboxItem(
-        candidate: item.candidate,
-        postponedAt: addedAt,
-      ),
-      DirectMessageBundleInboxItem() => DirectMessageBundleInboxItem(
-        channelId: item.channelId,
-        authorId: item.authorId,
-        automationClass: item.automationClass,
-        messages: item.messages,
-        postponedAt: addedAt,
-      ),
-      ThreadInboxItem() => item,
-    };
+    return items;
   }
 
   @override

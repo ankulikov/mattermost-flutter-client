@@ -15,8 +15,8 @@ written to preferences or Drift.
 `New` is one flat list. It has no Mentions, Group mentions, Bots and
 integrations, Direct Messages, or Threads sections. Items from every source are
 interleaved by `lastActivityAt`, newest first; the stable item key breaks equal-time
-ties. `Postponed` also remains newest-activity first, with `postponedAt` as its
-first tie-breaker.
+ties. `Postponed` shows individual saved messages by `postponedAt`, newest
+addition first, while each card continues to show the message timestamp.
 
 The latest event is source-specific:
 
@@ -43,6 +43,9 @@ Each New item follows the message-search result layout, with more detail:
    zero-elevation surface as the message. Opening the message area navigates to
    the shared thread, channel, or permalink destination without implicitly
    performing either action.
+
+Postponed cards omit the Updates block, since the original attention reason
+does not describe why someone saved a message. New cards retain it.
 
 The rendered post is the root for a thread, the latest unread message for a
 direct-message bundle, and the item post for a channel root. Server-provided

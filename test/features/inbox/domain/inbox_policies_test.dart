@@ -293,6 +293,31 @@ void main() {
   });
 
   group('reconcileQueues', () {
+    test('orders Postponed by add time instead of message time', () {
+      final DateTime start = DateTime.utc(2026, 9);
+      final InboxSnapshot result = reconcileQueues(
+        newItems: const <InboxItem>[],
+        postponedItems: <InboxItem>[
+          ChannelPostInboxItem(
+            candidate: _postCandidate(
+              id: 'new-message',
+              at: start.add(const Duration(days: 2)),
+            ),
+            postponedAt: start.add(const Duration(days: 3)),
+          ),
+          ChannelPostInboxItem(
+            candidate: _postCandidate(id: 'old-message', at: start),
+            postponedAt: start.add(const Duration(days: 4)),
+          ),
+        ],
+      );
+
+      expect(result.postponedItems.map((InboxItem item) => item.key), <String>[
+        'post:old-message',
+        'post:new-message',
+      ]);
+    });
+
     test('sorts every item by its latest event date, newest first', () {
       final DateTime start = DateTime.utc(2026);
       final FollowedThread baseThread = _thread(rootId: 'thread');

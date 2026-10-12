@@ -4,7 +4,7 @@ abstract final class MessageActionsStrings {
   static const String save = 'Save message';
   static const String more = 'More actions';
   static const String markUnread = 'Mark as unread';
-  static const String postpone = 'Postpone task';
+  static const String postpone = 'Postpone';
   static const String postponed = 'Task added to Postponed';
   static const String postponeFailed = 'Could not postpone the task.';
   static const String copyLink = 'Copy link';

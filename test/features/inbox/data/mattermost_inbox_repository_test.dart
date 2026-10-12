@@ -210,6 +210,68 @@ void main() {
     expect(snapshot.postponedItems.single.postIds, <String>['p1']);
   });
 
+  test('keeps each postponed direct message add time after reload', () async {
+    final _InboxApi api = _InboxApi(
+      teams: const <MattermostTeamDto>[
+        MattermostTeamDto(id: 't', name: 't', displayName: 'T'),
+      ],
+      channels: const <MattermostChannelDto>[
+        MattermostChannelDto(
+          id: 'dm',
+          teamId: 't',
+          type: 'D',
+          name: 'dm',
+          displayName: 'DM',
+        ),
+      ],
+      members: const <MattermostChannelMemberDto>[
+        MattermostChannelMemberDto(channelId: 'dm', userId: 'me'),
+      ],
+      unread: const <MattermostPostDto>[
+        MattermostPostDto(
+          id: 'older',
+          userId: 'other',
+          channelId: 'dm',
+          message: 'Older message',
+          createAt: 1,
+        ),
+        MattermostPostDto(
+          id: 'newer',
+          userId: 'other',
+          channelId: 'dm',
+          message: 'Newer message',
+          createAt: 2,
+        ),
+      ],
+    );
+    final DateTime firstAdded = DateTime.utc(2026, 9);
+    final DateTime lastAdded = firstAdded.add(const Duration(days: 1));
+    final InboxSnapshot snapshot = await _repository(
+      api,
+      _Postponed(<PostponedReference>[
+        PostponedReference(
+          postId: 'newer',
+          kind: PostponedReferenceKind.post,
+          addedAt: firstAdded,
+        ),
+        PostponedReference(
+          postId: 'older',
+          kind: PostponedReferenceKind.post,
+          addedAt: lastAdded,
+        ),
+      ]),
+    ).load(session: session);
+
+    expect(
+      snapshot.postponedItems.map((InboxItem item) => item.postIds.single),
+      <String>['older', 'newer'],
+    );
+    expect(
+      snapshot.postponedItems.map((InboxItem item) => item.postponedAt),
+      <DateTime>[lastAdded, firstAdded],
+    );
+  });
+
   test('hydrates a specifically postponed reply as its own item', () async {
     final _InboxApi api = _InboxApi(
       teams: const <MattermostTeamDto>[
