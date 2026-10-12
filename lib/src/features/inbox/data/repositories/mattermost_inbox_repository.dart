@@ -1018,6 +1018,7 @@ final class MattermostInboxRepository extends InboxRepository {
   }) {
     final List<InboxPostCandidate> posts = <InboxPostCandidate>[];
     final List<InboxItem> threads = <InboxItem>[];
+    final List<InboxItem> replies = <InboxItem>[];
     for (final PostponedReference reference in references) {
       final MattermostPostDto? raw = rawPosts[reference.postId];
       final ChannelPost? post = mappedById[reference.postId];
@@ -1059,25 +1060,34 @@ final class MattermostInboxRepository extends InboxRepository {
                 member,
                 groupMentionNames: groupMentionNames,
               );
-        posts.add(
-          InboxPostCandidate(
-            post: post,
-            channel: channel,
-            reason:
-                attention?.reason ??
-                InboxAttentionReason.allMessagesSubscription,
-            groupMentionHandle: attention?.groupMentionHandle,
-            isFromBot: _rawUsersAreBots[raw.userId] == true,
-            isFromWebhook: _isTrue(raw.props?.values['from_webhook']),
-            isFromPlugin: _isTrue(raw.props?.values['from_plugin']),
-          ),
+        final InboxPostCandidate candidate = InboxPostCandidate(
+          post: post,
+          channel: channel,
+          reason:
+              attention?.reason ?? InboxAttentionReason.allMessagesSubscription,
+          groupMentionHandle: attention?.groupMentionHandle,
+          isFromBot: _rawUsersAreBots[raw.userId] == true,
+          isFromWebhook: _isTrue(raw.props?.values['from_webhook']),
+          isFromPlugin: _isTrue(raw.props?.values['from_plugin']),
         );
+        if (post.isReply) {
+          // Explicitly postponed replies are displayed as selected messages.
+          // New-queue canonicalization deliberately excludes replies.
+          replies.add(
+            ChannelPostInboxItem(
+              candidate: candidate,
+              postponedAt: reference.addedAt,
+            ),
+          );
+        } else {
+          posts.add(candidate);
+        }
       }
     }
     final List<InboxItem> grouped = groupDirectMessages(
       canonicalizeInboxCandidates(InboxSourceSnapshot(posts: posts)),
     ).map((InboxItem item) => _withPostponedAt(item, references)).toList();
-    return <InboxItem>[...threads, ...grouped];
+    return <InboxItem>[...threads, ...grouped, ...replies];
   }
 
   InboxItem _withPostponedAt(InboxItem item, List<PostponedReference> refs) {

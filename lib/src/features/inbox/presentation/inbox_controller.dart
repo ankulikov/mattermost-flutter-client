@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_candidate.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_counters.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
@@ -367,6 +369,80 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   Future<bool> postpone(InboxItem item) =>
       _move(_latestDirectMessage(item), toPostponed: true);
   Future<bool> remove(InboxItem item) => _move(item, toPostponed: false);
+
+  /// Adds the selected message to Postponed even when it is not in New.
+  Future<bool> postponeMessage({
+    required Post post,
+    required SidebarChannel channel,
+  }) async {
+    final AuthSession? session = _session;
+    final PostponedRepository? postponed = _postponed;
+    if (session == null ||
+        postponed == null ||
+        post.id.isEmpty ||
+        post.isDeleted ||
+        _operation == _InboxOperation.move) {
+      return false;
+    }
+    final bool ownsOperation = _operation == _InboxOperation.idle;
+    if (ownsOperation) _operation = _InboxOperation.move;
+    final int generation = _buildGeneration;
+    final DateTime now = DateTime.now().toUtc();
+    try {
+      await postponed.save(
+        session: session,
+        references: <PostponedReference>[
+          PostponedReference(
+            postId: post.id,
+            kind: PostponedReferenceKind.post,
+            addedAt: now,
+          ),
+        ],
+      );
+      if (generation != _buildGeneration || _session != session) return true;
+      final InboxViewState? current = state.value;
+      if (ownsOperation && current != null && current.hasLoadedSnapshot) {
+        final ChannelPostInboxItem item = ChannelPostInboxItem(
+          candidate: InboxPostCandidate(
+            post: post,
+            channel: channel,
+            reason: InboxAttentionReason.allMessagesSubscription,
+          ),
+          postponedAt: now,
+        );
+        final List<InboxItem> newItems = List<InboxItem>.of(
+          current.snapshot.newItems,
+        );
+        final List<InboxItem> postponedItems = List<InboxItem>.of(
+          current.snapshot.postponedItems,
+        );
+        _removePostIds(newItems, item);
+        _removePostIds(postponedItems, item);
+        postponedItems.add(item);
+        final InboxSnapshot snapshot = InboxSnapshot(
+          newItems: newItems,
+          postponedItems: postponedItems,
+          builtAt: current.snapshot.builtAt,
+          hasIncompleteMentionReconstruction:
+              current.snapshot.hasIncompleteMentionReconstruction,
+        );
+        final InboxCounters counters = _countersFor(snapshot);
+        state = AsyncData(
+          current.copyWith(snapshot: snapshot, counters: counters),
+        );
+        _persistCounters(counters);
+      } else {
+        _realtimeRefreshQueued = true;
+      }
+      return true;
+    } on Object {
+      return false;
+    } finally {
+      if (ownsOperation && generation == _buildGeneration) {
+        _finishBusyOperation();
+      }
+    }
+  }
 
   InboxItem _latestDirectMessage(InboxItem item) => switch (item) {
     DirectMessageBundleInboxItem(messages: final messages) =>

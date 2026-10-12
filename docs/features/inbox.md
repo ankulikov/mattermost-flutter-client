@@ -254,6 +254,13 @@ user completes it with Remove or Done. For a direct-message bundle, Postpone
 stores the latest displayed message only; its other unread messages remain in
 New and can therefore coexist with that postponed reference after refresh.
 
+The message context menu can postpone any selected post, including a reply or
+a post that was never eligible for `New`. It writes that exact post ID as a
+`post` reference, then adds the message to the live Postponed queue. Reloading
+the queue hydrates selected replies directly instead of filtering them through
+the New-queue root-post eligibility policy. Opening a postponed reply opens its
+thread with that reply highlighted.
+
 ## Realtime and recovery
 
 The authenticated session owns one WebSocket connection. Inbox subscribes to a

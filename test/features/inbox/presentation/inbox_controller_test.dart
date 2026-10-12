@@ -446,6 +446,146 @@ void main() {
     expect(snapshot.postponedItems.single.postIds, <String>['second']);
     expect(postponed.saved.single.postId, 'second');
   });
+
+  test('postpones an arbitrary reply directly into the queue', () async {
+    final _RecordingPostponedRepository postponed =
+        _RecordingPostponedRepository();
+    final provider = _provider(
+      _InboxRepository(<Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(),
+      ]),
+      postponed: postponed,
+    );
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await _waitForInitialLoad(container, provider);
+    final InboxPostCandidate source = _candidate('reply');
+    final Post reply = Post(
+      id: source.post.id,
+      rootId: 'root',
+      channelId: source.post.channelId,
+      author: source.post.author,
+      sentAt: source.post.sentAt,
+      message: source.post.message,
+    );
+
+    expect(
+      await container
+          .read(provider.notifier)
+          .postponeMessage(post: reply, channel: source.channel),
+      isTrue,
+    );
+
+    expect(postponed.saved.single.postId, 'reply');
+    expect(postponed.saved.single.kind, PostponedReferenceKind.post);
+    final InboxSnapshot snapshot = container
+        .read(provider)
+        .requireValue
+        .snapshot;
+    expect(snapshot.postponedItems.single.postIds, <String>['reply']);
+    expect(snapshot.newItems, isEmpty);
+  });
+
+  test('postpones a New message without leaving it in both queues', () async {
+    final InboxPostCandidate source = _candidate('selected');
+    final _RecordingPostponedRepository postponed =
+        _RecordingPostponedRepository();
+    final provider = _provider(
+      _InboxRepository(<Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(
+          newItems: <InboxItem>[ChannelPostInboxItem(candidate: source)],
+        ),
+      ]),
+      postponed: postponed,
+    );
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await _waitForInitialLoad(container, provider);
+
+    expect(
+      await container
+          .read(provider.notifier)
+          .postponeMessage(post: source.post, channel: source.channel),
+      isTrue,
+    );
+
+    final InboxSnapshot snapshot = container
+        .read(provider)
+        .requireValue
+        .snapshot;
+    expect(snapshot.newItems, isEmpty);
+    expect(snapshot.postponedItems.single.postIds, <String>['selected']);
+  });
+
+  test('reconciles a message postponed during initial loading', () async {
+    final Completer<InboxSnapshot> firstLoad = Completer<InboxSnapshot>();
+    final InboxPostCandidate source = _candidate('selected');
+    final _InboxRepository repository = _InboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () => firstLoad.future,
+        () async => InboxSnapshot(
+          postponedItems: <InboxItem>[ChannelPostInboxItem(candidate: source)],
+        ),
+      ],
+    );
+    final _RecordingPostponedRepository postponed =
+        _RecordingPostponedRepository();
+    final provider = _provider(repository, postponed: postponed);
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await container.read(provider.future);
+    await _waitUntil(() => repository.loadCalls == 1);
+
+    expect(
+      await container
+          .read(provider.notifier)
+          .postponeMessage(post: source.post, channel: source.channel),
+      isTrue,
+    );
+    firstLoad.complete(InboxSnapshot());
+    await _waitUntil(() => repository.loadCalls == 2);
+    await _waitUntil(
+      () => container.read(provider).value?.snapshot.postponedItems.length == 1,
+    );
+
+    expect(postponed.saved.single.postId, 'selected');
+    expect(container.read(provider).requireValue.postponedMessageCount, 1);
+  });
+
+  test('failed message postponement leaves the queue unchanged', () async {
+    final _RecordingPostponedRepository postponed =
+        _RecordingPostponedRepository()..failSave = true;
+    final InboxPostCandidate source = _candidate('new');
+    final provider = _provider(
+      _InboxRepository(<Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(
+          newItems: <InboxItem>[ChannelPostInboxItem(candidate: source)],
+        ),
+      ]),
+      postponed: postponed,
+    );
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await _waitForInitialLoad(container, provider);
+
+    expect(
+      await container
+          .read(provider.notifier)
+          .postponeMessage(post: source.post, channel: source.channel),
+      isFalse,
+    );
+
+    final InboxSnapshot snapshot = container
+        .read(provider)
+        .requireValue
+        .snapshot;
+    expect(snapshot.newItems.single.postIds, <String>['new']);
+    expect(snapshot.postponedItems, isEmpty);
+  });
 }
 
 InboxPostCandidate _candidate(String id, {bool direct = true}) =>
@@ -612,6 +752,7 @@ final class _PostponedRepository extends PostponedRepository {
 
 final class _RecordingPostponedRepository extends PostponedRepository {
   List<PostponedReference> saved = <PostponedReference>[];
+  bool failSave = false;
 
   @override
   Future<PostponedReferencesSnapshot> load({
@@ -629,6 +770,7 @@ final class _RecordingPostponedRepository extends PostponedRepository {
     required AuthSession session,
     required List<PostponedReference> references,
   }) async {
+    if (failSave) throw StateError('Preference write failed');
     saved = List<PostponedReference>.of(references);
   }
 }

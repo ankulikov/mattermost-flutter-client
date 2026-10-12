@@ -21,6 +21,7 @@ final class InboxThreadTarget {
     required this.rootPostId,
     required this.channel,
     required this.teamId,
+    this.highlightedPostId,
     this.unreadReplies = 0,
     this.positionAtEndWhenRead = false,
   });
@@ -46,12 +47,14 @@ final class InboxThreadTarget {
         ),
       ChannelPostInboxItem(candidate: final candidate) => InboxThreadTarget(
         rootPostId: _rootPostId(candidate.post),
+        highlightedPostId: candidate.post.isReply ? candidate.post.id : null,
         channel: candidate.channel,
         teamId: candidate.channel.teamId,
       ),
       DirectMessageBundleInboxItem(messages: [final message]) =>
         InboxThreadTarget(
           rootPostId: _rootPostId(message.post),
+          highlightedPostId: message.post.isReply ? message.post.id : null,
           channel: message.channel,
           teamId: message.channel.teamId,
         ),
@@ -64,6 +67,7 @@ final class InboxThreadTarget {
   }
 
   final String rootPostId;
+  final String? highlightedPostId;
   final SidebarChannel channel;
   final String teamId;
   final int unreadReplies;
@@ -177,6 +181,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
                 ThreadPane(
                   key: ValueKey<String>('inbox-thread-${target.rootPostId}'),
                   rootPostId: target.rootPostId,
+                  highlightedPostId: target.highlightedPostId,
                   channel: target.channel,
                   serverUrl: serverUrl,
                   teamId: target.teamId,
@@ -213,6 +218,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
     context,
     ThreadRouteArguments(
       rootPostId: target.rootPostId,
+      highlightedPostId: target.highlightedPostId,
       channel: target.channel,
       serverUrl: serverUrl,
       teamId: target.teamId,

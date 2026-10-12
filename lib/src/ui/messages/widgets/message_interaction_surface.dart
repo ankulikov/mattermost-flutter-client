@@ -60,6 +60,7 @@ class MessageInteractionSurface extends StatefulWidget {
     required this.child,
     this.onToggleReaction,
     this.onDelete,
+    this.onPostpone,
     this.canDelete = false,
     this.canEdit = false,
     this.emojiRepositoryFactory,
@@ -73,6 +74,7 @@ class MessageInteractionSurface extends StatefulWidget {
   final Widget child;
   final Future<bool> Function(String emojiName)? onToggleReaction;
   final Future<bool> Function()? onDelete;
+  final Future<bool> Function()? onPostpone;
   final bool canDelete;
   final bool canEdit;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
@@ -184,6 +186,7 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
             builder: (BuildContext context) => _MessageActionsBottomSheet(
               canCopyLink: widget.postPermalink != null,
               canDelete: widget.canDelete,
+              canPostpone: widget.onPostpone != null,
             ),
           );
       if (!mounted || result == null) return;
@@ -247,6 +250,23 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
   }
 
   Future<void> _handleAction(_MessageAction action) async {
+    if (action == _MessageAction.postpone) {
+      final bool postponed =
+          await (widget.onPostpone?.call() ?? Future<bool>.value(false));
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              postponed
+                  ? MessageActionsStrings.postponed
+                  : MessageActionsStrings.postponeFailed,
+            ),
+          ),
+        );
+      return;
+    }
     if (action == _MessageAction.delete) {
       final bool deleted =
           await (widget.onDelete?.call() ?? Future<bool>.value(false));
@@ -317,6 +337,7 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
                         onEmojiSelected: _submitReaction,
                         onOpenPicker: _openPointerPicker,
                         canCopyLink: widget.postPermalink != null,
+                        canPostpone: widget.onPostpone != null,
                         canDelete: widget.canDelete,
                         canEdit: widget.canEdit,
                         onActionSelected: _handleAction,
@@ -406,6 +427,7 @@ class _QuickMessageActions extends StatelessWidget {
     required this.onEmojiSelected,
     required this.onOpenPicker,
     required this.canCopyLink,
+    required this.canPostpone,
     required this.canDelete,
     required this.canEdit,
     required this.onActionSelected,
@@ -417,6 +439,7 @@ class _QuickMessageActions extends StatelessWidget {
   final Future<void> Function(String) onEmojiSelected;
   final Future<void> Function(BuildContext) onOpenPicker;
   final bool canCopyLink;
+  final bool canPostpone;
   final bool canDelete;
   final bool canEdit;
   final Future<void> Function(_MessageAction) onActionSelected;
@@ -455,11 +478,6 @@ class _QuickMessageActions extends StatelessWidget {
               onPressed: _mockAction,
               icon: const Icon(Icons.bookmark_border),
             ),
-          IconButton(
-            tooltip: MessageActionsStrings.reply,
-            onPressed: _mockAction,
-            icon: const Icon(Icons.reply),
-          ),
           PopupMenuButton<_MessageAction>(
             key: const ValueKey<String>('more-message-actions'),
             tooltip: MessageActionsStrings.more,
@@ -471,7 +489,9 @@ class _QuickMessageActions extends StatelessWidget {
               unawaited(onActionSelected(action));
             },
             itemBuilder: (BuildContext context) => _menuItems(
+              context: context,
               canCopyLink: canCopyLink,
+              canPostpone: canPostpone,
               canDelete: canDelete,
               canEdit: canEdit,
             ),
@@ -500,10 +520,12 @@ class _MessageActionsBottomSheet extends StatelessWidget {
   const _MessageActionsBottomSheet({
     required this.canCopyLink,
     required this.canDelete,
+    required this.canPostpone,
   });
 
   final bool canCopyLink;
   final bool canDelete;
+  final bool canPostpone;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -552,17 +574,21 @@ class _MessageActionsBottomSheet extends StatelessWidget {
             ListTile(
               leading: Icon(action.icon),
               title: Text(action.label),
-              enabled: action != _MessageAction.copyLink || canCopyLink,
-              onTap: switch (action) {
-                _MessageAction.copyLink when canCopyLink => () => Navigator.of(
-                  context,
-                ).pop(_MessageSheetResult.action(action)),
-                _MessageAction.copyLink => null,
-                _MessageAction.delete => () => Navigator.of(
-                  context,
-                ).pop(_MessageSheetResult.action(action)),
-                _ => _mockAction,
-              },
+              enabled: _actionEnabled(
+                action,
+                canCopyLink: canCopyLink,
+                canPostpone: canPostpone,
+              ),
+              onTap:
+                  !_actionEnabled(
+                    action,
+                    canCopyLink: canCopyLink,
+                    canPostpone: canPostpone,
+                  )
+                  ? null
+                  : () => Navigator.of(
+                      context,
+                    ).pop(_MessageSheetResult.action(action)),
               minTileHeight: 48,
             ),
         ],
@@ -591,12 +617,9 @@ final class _MessageSheetResult {
 }
 
 enum _MessageAction {
-  reply(Icons.reply, MessageActionsStrings.reply),
-  forward(Icons.forward, MessageActionsStrings.forward),
-  follow(Icons.add_comment_outlined, MessageActionsStrings.followThread),
   unread(Icons.mark_chat_unread_outlined, MessageActionsStrings.markUnread),
   save(Icons.bookmark_border, MessageActionsStrings.save),
-  remind(Icons.alarm_outlined, MessageActionsStrings.remindLater),
+  postpone(Icons.schedule_outlined, MessageActionsStrings.postpone),
   pin(Icons.push_pin_outlined, MessageActionsStrings.pinToChannel),
   copyText(Icons.copy_outlined, MessageActionsStrings.copyText),
   copyLink(Icons.link, MessageActionsStrings.copyLink),
@@ -610,10 +633,8 @@ enum _MessageAction {
 }
 
 const List<_MessageAction> _bottomSheetActions = <_MessageAction>[
-  _MessageAction.reply,
-  _MessageAction.follow,
   _MessageAction.unread,
-  _MessageAction.remind,
+  _MessageAction.postpone,
   _MessageAction.copyLink,
   _MessageAction.save,
   _MessageAction.copyText,
@@ -622,17 +643,16 @@ const List<_MessageAction> _bottomSheetActions = <_MessageAction>[
 ];
 
 List<PopupMenuEntry<_MessageAction>> _menuItems({
+  required BuildContext context,
   required bool canCopyLink,
+  required bool canPostpone,
   required bool canDelete,
   required bool canEdit,
 }) =>
     <_MessageAction>[
-          _MessageAction.reply,
-          _MessageAction.forward,
-          _MessageAction.follow,
           _MessageAction.unread,
           _MessageAction.save,
-          _MessageAction.remind,
+          _MessageAction.postpone,
           _MessageAction.pin,
           _MessageAction.copyText,
           _MessageAction.copyLink,
@@ -641,24 +661,42 @@ List<PopupMenuEntry<_MessageAction>> _menuItems({
         ]
         .map((action) {
           final bool destructive = action == _MessageAction.delete;
+          final bool enabled = _actionEnabled(
+            action,
+            canCopyLink: canCopyLink,
+            canPostpone: canPostpone,
+          );
+          final Color? color = destructive
+              ? Colors.red
+              : enabled
+              ? null
+              : Theme.of(context).disabledColor;
           return PopupMenuItem<_MessageAction>(
             value: action,
-            enabled: action != _MessageAction.copyLink || canCopyLink,
+            enabled: enabled,
             child: Row(
               children: <Widget>[
-                Icon(action.icon, color: destructive ? Colors.red : null),
+                Icon(action.icon, color: color),
                 const SizedBox(width: 12),
-                Text(
-                  action.label,
-                  style: destructive
-                      ? const TextStyle(color: Colors.red)
-                      : null,
-                ),
+                Text(action.label, style: TextStyle(color: color)),
               ],
             ),
           );
         })
         .toList(growable: false);
+
+bool _actionEnabled(
+  _MessageAction action, {
+  required bool canCopyLink,
+  required bool canPostpone,
+}) => switch (action) {
+  _MessageAction.unread ||
+  _MessageAction.pin ||
+  _MessageAction.copyText => false,
+  _MessageAction.copyLink => canCopyLink,
+  _MessageAction.postpone => canPostpone,
+  _ => true,
+};
 
 void _mockAction() {}
 

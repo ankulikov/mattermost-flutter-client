@@ -74,8 +74,67 @@ void main() {
       find.byKey(const ValueKey<String>('message-actions-bottom-sheet')),
       findsOneWidget,
     );
-    expect(find.text(MessageActionsStrings.followThread), findsOneWidget);
+    expect(find.text(MessageActionsStrings.postpone), findsOneWidget);
+    expect(find.text('Reply'), findsNothing);
+    expect(find.text('Forward'), findsNothing);
+    expect(find.text('Follow thread'), findsNothing);
+    expect(find.text('Remind later'), findsNothing);
+    for (final String label in <String>[
+      MessageActionsStrings.markUnread,
+      MessageActionsStrings.pinToChannel,
+      MessageActionsStrings.copyText,
+    ]) {
+      expect(
+        tester
+            .widget<ListTile>(
+              find.ancestor(
+                of: find.text(label),
+                matching: find.byType(ListTile),
+              ),
+            )
+            .enabled,
+        isFalse,
+      );
+    }
     await _dismissActionsSheet(tester);
+  });
+
+  testWidgets('Postpone task invokes the action from the touch sheet', (
+    WidgetTester tester,
+  ) async {
+    var calls = 0;
+    await tester.pumpWidget(
+      _app(
+        onOpenThread: () {},
+        onPostpone: () async {
+          calls++;
+          return true;
+        },
+      ),
+    );
+
+    await tester.longPress(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(MessageActionsStrings.postpone));
+    await tester.pumpAndSettle();
+
+    expect(calls, 1);
+    expect(find.text(MessageActionsStrings.postponed), findsOneWidget);
+  });
+
+  testWidgets('Postpone task reports a failed write', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(onOpenThread: () {}, onPostpone: () async => false),
+    );
+
+    await tester.longPress(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(MessageActionsStrings.postpone));
+    await tester.pumpAndSettle();
+
+    expect(find.text(MessageActionsStrings.postponeFailed), findsOneWidget);
   });
 
   testWidgets('copies the post permalink from the touch actions sheet', (
@@ -463,7 +522,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(openCount, 0);
-    expect(find.text(MessageActionsStrings.forward), findsOneWidget);
+    expect(find.text(MessageActionsStrings.postpone), findsOneWidget);
+    expect(find.text('Forward'), findsNothing);
+    for (final String label in <String>[
+      MessageActionsStrings.markUnread,
+      MessageActionsStrings.pinToChannel,
+      MessageActionsStrings.copyText,
+    ]) {
+      expect(
+        tester
+            .widget<PopupMenuItem<Object>>(
+              find.ancestor(
+                of: find.text(label),
+                matching: find.byWidgetPredicate(
+                  (Widget widget) => widget is PopupMenuItem,
+                ),
+              ),
+            )
+            .enabled,
+        isFalse,
+      );
+    }
     expect(find.text(MessageActionsStrings.delete), findsOneWidget);
     expect(find.text(MessageActionsStrings.edit), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -524,6 +603,41 @@ void main() {
     expect(find.text(MessageActionsStrings.linkCopied), findsOneWidget);
   });
 
+  testWidgets('mouse popup postpones the selected message', (
+    WidgetTester tester,
+  ) async {
+    var calls = 0;
+    await tester.pumpWidget(
+      _app(
+        onOpenThread: () {},
+        onPostpone: () async {
+          calls++;
+          return true;
+        },
+      ),
+    );
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: tester.getCenter(find.text('Message')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('more-message-actions')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.text(MessageActionsStrings.postpone),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+
+    expect(calls, 1);
+    expect(find.text(MessageActionsStrings.postponed), findsOneWidget);
+  });
+
   testWidgets('mouse popup hides owner-only actions for another author', (
     WidgetTester tester,
   ) async {
@@ -581,6 +695,31 @@ void main() {
       find.byKey(const ValueKey<String>('quick-message-actions')),
       findsOneWidget,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('expanded width shows the updated pointer menu', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_app(onOpenThread: () {}, width: 900));
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: tester.getCenter(find.text('Message')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('more-message-actions')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(MessageActionsStrings.postpone), findsOneWidget);
+    expect(find.text(MessageActionsStrings.markUnread), findsOneWidget);
+    expect(find.text('Reply'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -672,6 +811,7 @@ Widget _app({
   CustomEmojiRepository? repository,
   Future<bool> Function(String emojiName)? onToggleReaction,
   Future<bool> Function()? onDelete,
+  Future<bool> Function()? onPostpone,
   bool canDelete = false,
   bool canEdit = false,
   Uri? postPermalink,
@@ -698,6 +838,7 @@ Widget _app({
               accountId: repository == null ? '' : 'account-a',
               onToggleReaction: onToggleReaction,
               onDelete: onDelete,
+              onPostpone: onPostpone,
               canDelete: canDelete,
               canEdit: canEdit,
               postPermalink: postPermalink,

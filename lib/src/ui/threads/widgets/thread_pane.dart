@@ -220,6 +220,12 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                             onAddReaction: (String emojiName) =>
                                 _toggleReaction(root, emojiName),
                             onDelete: () => _deletePost(root),
+                            onPostpone: () => ref
+                                .read(inboxProvider.notifier)
+                                .postponeMessage(
+                                  post: root,
+                                  channel: widget.channel,
+                                ),
                             canDelete: root.author.id == session?.userId,
                             canEdit: root.author.id == session?.userId,
                             emojiRepositoryFactory: session == null
@@ -296,6 +302,12 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                     ),
                                 onDelete: () =>
                                     _deletePost(state.thread.replies[index]),
+                                onPostpone: () => ref
+                                    .read(inboxProvider.notifier)
+                                    .postponeMessage(
+                                      post: state.thread.replies[index],
+                                      channel: widget.channel,
+                                    ),
                                 canDelete:
                                     state.thread.replies[index].author.id ==
                                     session?.userId,
@@ -647,6 +659,7 @@ class _ThreadPost extends StatelessWidget {
     required this.onToggleReaction,
     required this.onAddReaction,
     required this.onDelete,
+    required this.onPostpone,
     required this.canDelete,
     required this.canEdit,
     required this.emojiRepositoryFactory,
@@ -666,6 +679,7 @@ class _ThreadPost extends StatelessWidget {
   final Future<void> Function(PostReaction reaction) onToggleReaction;
   final Future<bool> Function(String emojiName) onAddReaction;
   final Future<bool> Function() onDelete;
+  final Future<bool> Function() onPostpone;
   final bool canDelete;
   final bool canEdit;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
@@ -681,6 +695,7 @@ class _ThreadPost extends StatelessWidget {
       touchBehavior: MessageTouchBehavior.actionsOnTap,
       onToggleReaction: onAddReaction,
       onDelete: onDelete,
+      onPostpone: onPostpone,
       canDelete: canDelete,
       canEdit: canEdit,
       emojiRepositoryFactory: emojiRepositoryFactory,
