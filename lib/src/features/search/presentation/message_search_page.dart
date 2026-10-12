@@ -269,7 +269,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                           icon: const Icon(Icons.clear),
                           onPressed: () => _syncText('', focus: true),
                         ),
-                  border: const OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(width: 1),
+                  ),
                 ),
               ),
             ),

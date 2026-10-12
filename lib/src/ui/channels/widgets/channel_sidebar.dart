@@ -149,7 +149,7 @@ class _SidebarContentState extends State<_SidebarContent> {
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: TextField(
             key: const ValueKey<String>('channel-search-field'),
             controller: _searchController,
@@ -160,15 +160,8 @@ class _SidebarContentState extends State<_SidebarContent> {
             onSubmitted: (_) => _searchFocusNode.unfocus(),
             onTapOutside: (_) => _searchFocusNode.unfocus(),
             decoration: InputDecoration(
-              isDense: true,
-              constraints: const BoxConstraints(minHeight: 48),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
               hintText: ChannelSidebarStrings.searchHint,
               prefixIcon: const Icon(Icons.search),
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 48,
-                minHeight: 48,
-              ),
               suffixIcon: _hasSearchText
                   ? IconButton(
                       tooltip: ChannelSidebarStrings.clearSearch,
@@ -176,10 +169,9 @@ class _SidebarContentState extends State<_SidebarContent> {
                       icon: const Icon(Icons.close),
                     )
                   : null,
-              filled: true,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(width: 1),
               ),
             ),
           ),
