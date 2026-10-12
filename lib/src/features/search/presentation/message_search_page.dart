@@ -226,6 +226,9 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     if (_textController.text != state.draftQuery) _syncText(state.draftQuery);
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: const Text(MessageSearchStrings.title),
         actions: <Widget>[
           IconButton(
