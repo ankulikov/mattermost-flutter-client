@@ -51,21 +51,21 @@ One client for every screen, built for busy Mattermost workdays.
 <details>
     <summary>View posts and threads</summary>
 
-    ![view_channels.gif](docs/img/view_channels.gif)
+![view_channels.gif](docs/img/view_channels.gif)
 
 </details>
 
 <details>
     <summary>Inbox</summary>
     
-    ![inbox.gif](docs/img/inbox.gif)
+![inbox.gif](docs/img/inbox.gif)
 
 </details>
 
 <details>
     <summary>Live Markdown editor</summary>
 
-    ![message_editor.gif](docs/img/message_editor.gif)
+![message_editor.gif](docs/img/message_editor.gif)
 
 </details>
 
