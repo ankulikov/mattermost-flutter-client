@@ -48,14 +48,26 @@ One client for every screen, built for busy Mattermost workdays.
 
 ## 🎬 See it in action
 
-Inbox
-![inbox.gif](docs/img/inbox.gif)
+<details>
+    <summary>View posts and threads</summary>
 
-Find channels, scroll messages, open threads
-![view_channels.gif](docs/img/view_channels.gif)
+    ![view_channels.gif](docs/img/view_channels.gif)
 
-Live Markdown editor
-![message_editor.gif](docs/img/message_editor.gif)
+</details>
+
+<details>
+    <summary>Inbox</summary>
+    
+    ![inbox.gif](docs/img/inbox.gif)
+
+</details>
+
+<details>
+    <summary>Live Markdown editor</summary>
+
+    ![message_editor.gif](docs/img/message_editor.gif)
+
+</details>
 
 ## 🗺️ Backlog
 
