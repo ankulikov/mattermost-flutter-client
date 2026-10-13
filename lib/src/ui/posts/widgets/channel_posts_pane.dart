@@ -477,67 +477,59 @@ class _ChannelHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
+    key: const ValueKey<String>('channel-header'),
     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-    child: Row(
-      children: <Widget>[
-        if (onBack != null) ...<Widget>[
-          BackButton(onPressed: onBack),
-          const SizedBox(width: 4),
-        ],
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(_channelIcon(channel.kind), size: 20),
-            const _ChannelHeaderMetadataSpacer(),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 44),
+      child: Row(
+        children: <Widget>[
+          if (onBack != null) ...<Widget>[
+            BackButton(onPressed: onBack),
+            const SizedBox(width: 4),
           ],
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      channel.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+          Icon(_channelIcon(channel.kind), size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    channel.displayName,
+                    key: const ValueKey<String>('channel-header-title'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
-                    const _ChannelHeaderMetadataSpacer(),
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              ChannelMemberCountButton(
-                channelId: channel.id,
-                onPressed: onOpenMembers,
-              ),
-            ],
-          ),
-        ),
-        if (onSearchInChannel != null)
-          IconButton(
-            key: const ValueKey<String>('search-in-channel'),
-            tooltip: ChannelPostsStrings.searchInChannel,
-            onPressed: () => onSearchInChannel!(channel),
-            icon: const Icon(Icons.search),
-          ),
-        if (isLoading) ...<Widget>[
-          const SizedBox(width: 12),
-          Semantics(
-            label: ChannelPostsStrings.loading,
-            child: const SizedBox.square(
-              dimension: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+                const SizedBox(width: 4),
+                ChannelMemberCountButton(
+                  channelId: channel.id,
+                  onPressed: onOpenMembers,
+                ),
+              ],
             ),
           ),
+          if (onSearchInChannel != null)
+            IconButton(
+              key: const ValueKey<String>('search-in-channel'),
+              tooltip: ChannelPostsStrings.searchInChannel,
+              onPressed: () => onSearchInChannel!(channel),
+              icon: const Icon(Icons.search),
+            ),
+          if (isLoading) ...<Widget>[
+            const SizedBox(width: 12),
+            Semantics(
+              label: ChannelPostsStrings.loading,
+              child: const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     ),
   );
 
@@ -547,18 +539,6 @@ class _ChannelHeader extends StatelessWidget {
     ChannelKind.directMessage => Icons.person_outline,
     ChannelKind.groupMessage => Icons.group_outlined,
   };
-}
-
-class _ChannelHeaderMetadataSpacer extends StatelessWidget {
-  const _ChannelHeaderMetadataSpacer();
-
-  @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: Opacity(
-      opacity: 0,
-      child: Text(' ', style: Theme.of(context).textTheme.bodySmall),
-    ),
-  );
 }
 
 class _PostsLoading extends StatelessWidget {
