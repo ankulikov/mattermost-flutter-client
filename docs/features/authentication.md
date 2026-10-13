@@ -45,6 +45,13 @@ Logout first attempts `POST /users/logout`. It removes the local token and
 closes the API client even when that request fails, so a network outage cannot
 leave the account signed in locally.
 
+On macOS, credentials use the file-based Keychain. An item created under an
+older app signing identity can remain readable but reject deletion with
+`errSecInvalidOwnerEdit` (`-25244`). Credential cleanup then asks the system
+`security` utility to delete only the affected Mattermost key and verifies that
+the plugin can no longer read it. If the item remains, logout reports a storage
+failure instead of claiming that the credential was removed.
+
 ## Security rules
 
 - Tokens belong only in `flutter_secure_storage`.
