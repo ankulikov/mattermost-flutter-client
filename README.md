@@ -69,6 +69,13 @@ One client for every screen, built for busy Mattermost workdays.
 
 </details>
 
+<details>
+    <summary>Profile status</summary>
+
+![profile_status.gif](docs/img/profile_status.gif)
+
+</details>
+
 ## 🗺️ Backlog
 
 - 🔖 Saved messages ("bookmarks")
