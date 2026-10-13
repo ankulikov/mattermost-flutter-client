@@ -24,8 +24,8 @@ abstract final class ProfileStrings {
   static const String inAMeeting = 'In a meeting';
   static const String outForLunch = 'Out for lunch';
   static const String commuting = 'Commuting';
-  static const String onVacation = 'On vacation';
-  static const String oneWeek = '1 week';
+  static const String dayOff = 'Day off';
+  static const String oneDay = '1 day';
 
   static String untilTime(String time) => 'Until $time';
 
@@ -49,6 +49,6 @@ abstract final class ProfileStrings {
   static String customDuration(CustomStatusDuration duration) =>
       switch (duration) {
         CustomStatusDuration.oneHour => oneHour,
-        CustomStatusDuration.oneWeek => oneWeek,
+        CustomStatusDuration.oneDay => oneDay,
       };
 }

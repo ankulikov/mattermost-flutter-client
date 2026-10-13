@@ -2,7 +2,7 @@ import 'package:mattermost_flutter/src/domain/models/user.dart';
 
 enum AvailabilityExpiry { thirtyMinutes, oneHour, tomorrowMorning, unlimited }
 
-enum CustomStatusDuration { oneHour, oneWeek }
+enum CustomStatusDuration { oneHour, oneDay }
 
 final class Availability {
   const Availability({required this.presence, this.expiresAt});

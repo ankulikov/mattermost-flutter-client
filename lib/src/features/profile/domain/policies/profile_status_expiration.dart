@@ -16,5 +16,5 @@ DateTime? availabilityExpiration(AvailabilityExpiry expiry, DateTime now) =>
 DateTime customStatusExpiration(CustomStatusDuration duration, DateTime now) =>
     switch (duration) {
       CustomStatusDuration.oneHour => now.add(const Duration(hours: 1)),
-      CustomStatusDuration.oneWeek => now.add(const Duration(days: 7)),
+      CustomStatusDuration.oneDay => now.add(const Duration(days: 1)),
     };

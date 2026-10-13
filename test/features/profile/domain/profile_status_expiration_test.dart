@@ -27,8 +27,8 @@ void main() {
       DateTime(2026, 9, 10, 23, 15),
     );
     expect(
-      customStatusExpiration(CustomStatusDuration.oneWeek, now),
-      DateTime(2026, 9, 17, 22, 15),
+      customStatusExpiration(CustomStatusDuration.oneDay, now),
+      DateTime(2026, 9, 11, 22, 15),
     );
   });
 

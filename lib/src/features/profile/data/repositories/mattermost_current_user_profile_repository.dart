@@ -68,7 +68,7 @@ final class MattermostCurrentUserProfileRepository
       text: text,
       duration: switch (duration) {
         CustomStatusDuration.oneHour => 'one_hour',
-        CustomStatusDuration.oneWeek => 'date_and_time',
+        CustomStatusDuration.oneDay => 'date_and_time',
       },
       expiresAt: expiresAt,
     ),

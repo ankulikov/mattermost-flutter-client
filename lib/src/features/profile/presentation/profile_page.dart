@@ -120,8 +120,8 @@ class _ProfileBody extends StatelessWidget {
     ),
     QuickCustomStatus(
       emoji: 'palm_tree',
-      text: ProfileStrings.onVacation,
-      duration: CustomStatusDuration.oneWeek,
+      text: ProfileStrings.dayOff,
+      duration: CustomStatusDuration.oneDay,
     ),
   ];
 
