@@ -32,7 +32,7 @@ The profile page requests `GET /users/me` and
 because Mattermost does not auto-expire them.
 
 Quick custom statuses provide one-tap choices for "In a meeting", "Out for
-lunch", "Commuting", and "On vacation". Set and clear use `PUT` and `DELETE`
+lunch", "Commuting", and "Day off". Set and clear use `PUT` and `DELETE`
 on `/users/{user_id}/status/custom`. Mattermost has no separate read endpoint;
 the mapper reads `user.props.customStatus` and ignores malformed or expired
 values.

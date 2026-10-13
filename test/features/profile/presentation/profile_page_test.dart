@@ -234,6 +234,17 @@ void main() {
     expect(repository.lastCustomDuration, CustomStatusDuration.oneHour);
     expect(find.text('Commuting'), findsWidgets);
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey<String>('quick-status-palm_tree')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('quick-status-palm_tree')),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.lastCustomText, 'Day off');
+    expect(repository.lastCustomDuration, CustomStatusDuration.oneDay);
+    expect(find.text('1 day'), findsOneWidget);
+
     final Finder profileScrollable = find.descendant(
       of: find.byKey(const ValueKey<String>('profile-scroll-view')),
       matching: find.byType(Scrollable),
