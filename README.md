@@ -46,6 +46,36 @@ One client for every screen, built for busy Mattermost workdays.
 - 🧩 Initial support for legacy interactive messages, including buttons and
   select menus
 
+## 🎬 See it in action
+
+<details>
+    <summary>View posts and threads</summary>
+
+![view_channels.gif](docs/img/view_channels.gif)
+
+</details>
+
+<details>
+    <summary>Inbox</summary>
+    
+![inbox.gif](docs/img/inbox.gif)
+
+</details>
+
+<details>
+    <summary>Live Markdown editor</summary>
+
+![message_editor.gif](docs/img/message_editor.gif)
+
+</details>
+
+<details>
+    <summary>Profile status</summary>
+
+![profile_status.gif](docs/img/profile_status.gif)
+
+</details>
+
 ## 🗺️ Backlog
 
 - 🔖 Saved messages ("bookmarks")
