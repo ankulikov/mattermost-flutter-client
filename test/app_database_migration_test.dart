@@ -252,4 +252,31 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test('creates user preferences when upgrading schema 13', () async {
+    final Directory directory = await Directory.systemTemp.createTemp(
+      'mattermost-user-preferences-',
+    );
+    final File file = File('${directory.path}/cache.sqlite');
+    sqlite.sqlite3.open(file.path)
+      ..execute('PRAGMA user_version = 13')
+      ..close();
+
+    final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+    try {
+      final List<String> tables = await database
+          .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(tables, contains('user_preferences'));
+      final List<String> columns = await database
+          .customSelect('PRAGMA table_info(user_preferences)')
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(columns, containsAll(<String>['account_id', 'preferences_json']));
+    } finally {
+      await database.close();
+      await directory.delete(recursive: true);
+    }
+  });
 }

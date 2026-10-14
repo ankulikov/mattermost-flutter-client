@@ -273,6 +273,36 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('opens Display settings from the enabled profile tile', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpProfile(tester, _ProfileRepository());
+
+    final Finder displaySettings = find.byKey(
+      const ValueKey<String>('profile-display-settings'),
+    );
+    await tester.drag(
+      find.byKey(const ValueKey<String>('profile-scroll-view')),
+      const Offset(0, -800),
+    );
+    await tester.pumpAndSettle();
+    final ListTile displayTile = tester.widget<ListTile>(displaySettings);
+    expect(displayTile.enabled, isTrue);
+
+    await tester.tap(displaySettings);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('display-settings-page')),
+      findsOneWidget,
+    );
+    expect(find.text('Light'), findsOneWidget);
+    expect(find.text('Dark'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows an initial retry state without profile data', (
     WidgetTester tester,
   ) async {
