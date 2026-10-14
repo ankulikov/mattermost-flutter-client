@@ -1705,6 +1705,233 @@ class InboxCountersCompanion extends UpdateCompanion<InboxCounter> {
   }
 }
 
+class $UserPreferencesRowsTable extends UserPreferencesRows
+    with TableInfo<$UserPreferencesRowsTable, UserPreferencesRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UserPreferencesRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<String> accountId = GeneratedColumn<String>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _preferencesJsonMeta = const VerificationMeta(
+    'preferencesJson',
+  );
+  @override
+  late final GeneratedColumn<String> preferencesJson = GeneratedColumn<String>(
+    'preferences_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [accountId, preferencesJson];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'user_preferences';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UserPreferencesRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('preferences_json')) {
+      context.handle(
+        _preferencesJsonMeta,
+        preferencesJson.isAcceptableOrUnknown(
+          data['preferences_json']!,
+          _preferencesJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_preferencesJsonMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountId};
+  @override
+  UserPreferencesRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UserPreferencesRow(
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_id'],
+      )!,
+      preferencesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}preferences_json'],
+      )!,
+    );
+  }
+
+  @override
+  $UserPreferencesRowsTable createAlias(String alias) {
+    return $UserPreferencesRowsTable(attachedDatabase, alias);
+  }
+}
+
+class UserPreferencesRow extends DataClass
+    implements Insertable<UserPreferencesRow> {
+  final String accountId;
+  final String preferencesJson;
+  const UserPreferencesRow({
+    required this.accountId,
+    required this.preferencesJson,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_id'] = Variable<String>(accountId);
+    map['preferences_json'] = Variable<String>(preferencesJson);
+    return map;
+  }
+
+  UserPreferencesRowsCompanion toCompanion(bool nullToAbsent) {
+    return UserPreferencesRowsCompanion(
+      accountId: Value(accountId),
+      preferencesJson: Value(preferencesJson),
+    );
+  }
+
+  factory UserPreferencesRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UserPreferencesRow(
+      accountId: serializer.fromJson<String>(json['accountId']),
+      preferencesJson: serializer.fromJson<String>(json['preferencesJson']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountId': serializer.toJson<String>(accountId),
+      'preferencesJson': serializer.toJson<String>(preferencesJson),
+    };
+  }
+
+  UserPreferencesRow copyWith({String? accountId, String? preferencesJson}) =>
+      UserPreferencesRow(
+        accountId: accountId ?? this.accountId,
+        preferencesJson: preferencesJson ?? this.preferencesJson,
+      );
+  UserPreferencesRow copyWithCompanion(UserPreferencesRowsCompanion data) {
+    return UserPreferencesRow(
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      preferencesJson: data.preferencesJson.present
+          ? data.preferencesJson.value
+          : this.preferencesJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserPreferencesRow(')
+          ..write('accountId: $accountId, ')
+          ..write('preferencesJson: $preferencesJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(accountId, preferencesJson);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UserPreferencesRow &&
+          other.accountId == this.accountId &&
+          other.preferencesJson == this.preferencesJson);
+}
+
+class UserPreferencesRowsCompanion extends UpdateCompanion<UserPreferencesRow> {
+  final Value<String> accountId;
+  final Value<String> preferencesJson;
+  final Value<int> rowid;
+  const UserPreferencesRowsCompanion({
+    this.accountId = const Value.absent(),
+    this.preferencesJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UserPreferencesRowsCompanion.insert({
+    required String accountId,
+    required String preferencesJson,
+    this.rowid = const Value.absent(),
+  }) : accountId = Value(accountId),
+       preferencesJson = Value(preferencesJson);
+  static Insertable<UserPreferencesRow> custom({
+    Expression<String>? accountId,
+    Expression<String>? preferencesJson,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountId != null) 'account_id': accountId,
+      if (preferencesJson != null) 'preferences_json': preferencesJson,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UserPreferencesRowsCompanion copyWith({
+    Value<String>? accountId,
+    Value<String>? preferencesJson,
+    Value<int>? rowid,
+  }) {
+    return UserPreferencesRowsCompanion(
+      accountId: accountId ?? this.accountId,
+      preferencesJson: preferencesJson ?? this.preferencesJson,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountId.present) {
+      map['account_id'] = Variable<String>(accountId.value);
+    }
+    if (preferencesJson.present) {
+      map['preferences_json'] = Variable<String>(preferencesJson.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserPreferencesRowsCompanion(')
+          ..write('accountId: $accountId, ')
+          ..write('preferencesJson: $preferencesJson, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1715,6 +1942,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $InboxCountersTable inboxCounters = $InboxCountersTable(this);
+  late final $UserPreferencesRowsTable userPreferencesRows =
+      $UserPreferencesRowsTable(this);
   late final Index cachedUserProfilesAccountUsernameIdx = Index(
     'cached_user_profiles_account_username_idx',
     'CREATE INDEX cached_user_profiles_account_username_idx ON cached_user_profiles (account_id, username COLLATE NOCASE)',
@@ -1736,6 +1965,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     recentEmojis,
     cachedUserGroups,
     inboxCounters,
+    userPreferencesRows,
     cachedUserProfilesAccountUsernameIdx,
     recentEmojisAccountLastUsedAtIdx,
     cachedUserGroupsAccountNameIdx,
@@ -2649,6 +2879,167 @@ typedef $$InboxCountersTableProcessedTableManager =
       InboxCounter,
       PrefetchHooks Function()
     >;
+typedef $$UserPreferencesRowsTableCreateCompanionBuilder =
+    UserPreferencesRowsCompanion Function({
+      required String accountId,
+      required String preferencesJson,
+      Value<int> rowid,
+    });
+typedef $$UserPreferencesRowsTableUpdateCompanionBuilder =
+    UserPreferencesRowsCompanion Function({
+      Value<String> accountId,
+      Value<String> preferencesJson,
+      Value<int> rowid,
+    });
+
+class $$UserPreferencesRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $UserPreferencesRowsTable> {
+  $$UserPreferencesRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get preferencesJson => $composableBuilder(
+    column: $table.preferencesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$UserPreferencesRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $UserPreferencesRowsTable> {
+  $$UserPreferencesRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get preferencesJson => $composableBuilder(
+    column: $table.preferencesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$UserPreferencesRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UserPreferencesRowsTable> {
+  $$UserPreferencesRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<String> get preferencesJson => $composableBuilder(
+    column: $table.preferencesJson,
+    builder: (column) => column,
+  );
+}
+
+class $$UserPreferencesRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $UserPreferencesRowsTable,
+          UserPreferencesRow,
+          $$UserPreferencesRowsTableFilterComposer,
+          $$UserPreferencesRowsTableOrderingComposer,
+          $$UserPreferencesRowsTableAnnotationComposer,
+          $$UserPreferencesRowsTableCreateCompanionBuilder,
+          $$UserPreferencesRowsTableUpdateCompanionBuilder,
+          (
+            UserPreferencesRow,
+            BaseReferences<
+              _$AppDatabase,
+              $UserPreferencesRowsTable,
+              UserPreferencesRow
+            >,
+          ),
+          UserPreferencesRow,
+          PrefetchHooks Function()
+        > {
+  $$UserPreferencesRowsTableTableManager(
+    _$AppDatabase db,
+    $UserPreferencesRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UserPreferencesRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UserPreferencesRowsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$UserPreferencesRowsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> accountId = const Value.absent(),
+                Value<String> preferencesJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UserPreferencesRowsCompanion(
+                accountId: accountId,
+                preferencesJson: preferencesJson,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountId,
+                required String preferencesJson,
+                Value<int> rowid = const Value.absent(),
+              }) => UserPreferencesRowsCompanion.insert(
+                accountId: accountId,
+                preferencesJson: preferencesJson,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$UserPreferencesRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $UserPreferencesRowsTable,
+      UserPreferencesRow,
+      $$UserPreferencesRowsTableFilterComposer,
+      $$UserPreferencesRowsTableOrderingComposer,
+      $$UserPreferencesRowsTableAnnotationComposer,
+      $$UserPreferencesRowsTableCreateCompanionBuilder,
+      $$UserPreferencesRowsTableUpdateCompanionBuilder,
+      (
+        UserPreferencesRow,
+        BaseReferences<
+          _$AppDatabase,
+          $UserPreferencesRowsTable,
+          UserPreferencesRow
+        >,
+      ),
+      UserPreferencesRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2661,4 +3052,6 @@ class $AppDatabaseManager {
       $$CachedUserGroupsTableTableManager(_db, _db.cachedUserGroups);
   $$InboxCountersTableTableManager get inboxCounters =>
       $$InboxCountersTableTableManager(_db, _db.inboxCounters);
+  $$UserPreferencesRowsTableTableManager get userPreferencesRows =>
+      $$UserPreferencesRowsTableTableManager(_db, _db.userPreferencesRows);
 }

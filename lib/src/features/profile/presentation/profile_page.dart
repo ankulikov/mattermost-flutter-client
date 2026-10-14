@@ -6,6 +6,7 @@ import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/features/profile/domain/models/current_user_profile.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/current_user_profile_controller.dart';
+import 'package:mattermost_flutter/src/features/profile/presentation/display_settings_page.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/profile_strings.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/widgets/profile_navigation_avatar.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
@@ -54,6 +55,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         onClearCustomStatus: () => unawaited(
           ref.read(currentUserProfileProvider.notifier).clearCustomStatus(),
         ),
+        onDisplaySettings: () => unawaited(
+          Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(
+              builder: (BuildContext context) => const DisplaySettingsPage(),
+            ),
+          ),
+        ),
         onLogout: _loggingOut ? null : () => unawaited(_logout()),
         isLoggingOut: _loggingOut,
       ),
@@ -91,6 +99,7 @@ class _ProfileBody extends StatelessWidget {
     required this.onAvailabilitySelected,
     required this.onCustomStatusSelected,
     required this.onClearCustomStatus,
+    required this.onDisplaySettings,
     required this.onLogout,
     required this.isLoggingOut,
   });
@@ -99,6 +108,7 @@ class _ProfileBody extends StatelessWidget {
   final ValueChanged<UserPresence> onAvailabilitySelected;
   final ValueChanged<QuickCustomStatus> onCustomStatusSelected;
   final VoidCallback onClearCustomStatus;
+  final VoidCallback onDisplaySettings;
   final VoidCallback? onLogout;
   final bool isLoggingOut;
 
@@ -176,6 +186,7 @@ class _ProfileBody extends StatelessWidget {
                         ),
                         const SizedBox(height: 32),
                         _SettingsMenu(
+                          onDisplaySettings: onDisplaySettings,
                           onLogout: onLogout,
                           isLoggingOut: isLoggingOut,
                         ),
@@ -416,8 +427,13 @@ class _QuickStatusChoices extends StatelessWidget {
 }
 
 class _SettingsMenu extends StatelessWidget {
-  const _SettingsMenu({required this.onLogout, required this.isLoggingOut});
+  const _SettingsMenu({
+    required this.onDisplaySettings,
+    required this.onLogout,
+    required this.isLoggingOut,
+  });
 
+  final VoidCallback onDisplaySettings;
   final VoidCallback? onLogout;
   final bool isLoggingOut;
 
@@ -430,26 +446,28 @@ class _SettingsMenu extends StatelessWidget {
         Card.outlined(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
-          child: const Column(
+          child: Column(
             children: <Widget>[
-              _SettingsTile(
+              const _SettingsTile(
                 icon: Icons.person_outline,
                 label: ProfileStrings.profileSettings,
               ),
-              Divider(height: 1),
-              _SettingsTile(
+              const Divider(height: 1),
+              const _SettingsTile(
                 icon: Icons.lock_outline,
                 label: ProfileStrings.security,
               ),
-              Divider(height: 1),
-              _SettingsTile(
+              const Divider(height: 1),
+              const _SettingsTile(
                 icon: Icons.notifications_outlined,
                 label: ProfileStrings.notifications,
               ),
-              Divider(height: 1),
+              const Divider(height: 1),
               _SettingsTile(
+                tileKey: const ValueKey<String>('profile-display-settings'),
                 icon: Icons.visibility_outlined,
                 label: ProfileStrings.display,
+                onTap: onDisplaySettings,
               ),
             ],
           ),
@@ -484,14 +502,23 @@ class _SettingsMenu extends StatelessWidget {
 }
 
 class _SettingsTile extends StatelessWidget {
-  const _SettingsTile({required this.icon, required this.label});
+  const _SettingsTile({
+    required this.icon,
+    required this.label,
+    this.tileKey,
+    this.onTap,
+  });
 
   final IconData icon;
   final String label;
+  final Key? tileKey;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => ListTile(
-    enabled: false,
+    key: tileKey,
+    enabled: onTap != null,
+    onTap: onTap,
     leading: Icon(icon),
     title: Text(label),
     trailing: const Icon(Icons.chevron_right),

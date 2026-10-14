@@ -379,7 +379,7 @@ class _UnreadIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = Theme.of(context).colorScheme.primary;
+    final ColorScheme colors = Theme.of(context).colorScheme;
     if (thread.unreadReplies > 0) {
       return Container(
         key: ValueKey<String>('thread-unread-count-${thread.id}'),
@@ -387,13 +387,13 @@ class _UnreadIndicator extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: color,
+          color: colors.primary,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
           '${thread.unreadReplies}',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: colors.onPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),

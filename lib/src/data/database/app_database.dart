@@ -96,6 +96,22 @@ class InboxCounters extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId};
 }
 
+/// The complete durable preferences document for one account/server scope.
+///
+/// Individual settings remain JSON fields so adding a setting does not require
+/// a database migration. Repository mapping owns defaults and compatibility.
+class UserPreferencesRows extends Table {
+  TextColumn get accountId => text()();
+
+  TextColumn get preferencesJson => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{accountId};
+
+  @override
+  String get tableName => 'user_preferences';
+}
+
 /// Drift persists only explicitly owned durable data. Channel navigation,
 /// posts, threads, and paging state remain volatile.
 @DriftDatabase(
@@ -104,6 +120,7 @@ class InboxCounters extends Table {
     RecentEmojis,
     CachedUserGroups,
     InboxCounters,
+    UserPreferencesRows,
   ],
 )
 final class AppDatabase extends _$AppDatabase {
@@ -112,7 +129,7 @@ final class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -160,6 +177,9 @@ final class AppDatabase extends _$AppDatabase {
       }
       if (from < 13) {
         await migrator.createTable(inboxCounters);
+      }
+      if (from < 14) {
+        await migrator.createTable(userPreferencesRows);
       }
     },
   );

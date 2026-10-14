@@ -61,6 +61,12 @@ closable API client and one `WebSocketGateway`. Feature repositories receive an
 authenticated API instance but never receive the access token. Analyzer import
 rules in `analysis_options.yaml` enforce the main boundaries.
 
+The app composition root owns the active `ThemeData` through a Riverpod
+notifier. Widgets read inherited theme values with `Theme.of(context)`; they do
+not depend on theme-selection state or construct application themes locally.
+The current choices are the Mattermost light and dark themes, with light as the
+safe default.
+
 ## State and data ownership
 
 Initial asynchronous state uses `AsyncValue`. Work performed after useful data
@@ -70,9 +76,10 @@ statuses so one cannot overwrite the other.
 
 Drift stores only data with an owner, a freshness policy, and a reason to
 survive process restarts. Current durable data includes account-scoped user
-profiles, recent emoji, and the expiring user-group membership projection used
-by Inbox classification. Inbox also stores only its New and Postponed counts so
-navigation and tab badges are available while the first snapshot loads.
+profiles, user preferences, recent emoji, and the expiring user-group
+membership projection used by Inbox classification. Inbox also stores only its
+New and Postponed counts so navigation and tab badges are available while the
+first snapshot loads.
 Messages, threads, sidebar snapshots, pagination cursors, and realtime sync
 metadata are not stored in Drift.
 
@@ -107,6 +114,7 @@ Drift, logs, analytics, fixtures, or screenshots.
 - [Markdown rendering](markdown.md)
 - [Mentions, reactions, and emoji](mentions-and-emoji.md)
 - [Profiles and statuses](profiles-and-statuses.md)
+- [User preferences](preferences.md)
 - [Attachments and interactive messages](attachments-and-actions.md)
 
 Operational release details remain in [the release guide](../RELEASES.md).

@@ -19,6 +19,13 @@ abstract final class ProfileStrings {
   static const String security = 'Security';
   static const String notifications = 'Notifications';
   static const String display = 'Display';
+  static const String theme = 'Theme';
+  static const String themeDescription =
+      'Choose how Mattermost looks on this device.';
+  static const String lightTheme = 'Light';
+  static const String darkTheme = 'Dark';
+  static const String updatingTheme = 'Updating theme';
+  static const String themeUpdateFailed = 'Could not save your theme.';
   static const String logout = 'Log out';
   static const String doNotDisturbShort = 'DnD';
   static const String inAMeeting = 'In a meeting';
