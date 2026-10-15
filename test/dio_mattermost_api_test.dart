@@ -862,6 +862,23 @@ void main() {
     expect(adapter.request?.data, <Map<String, Object?>>[preference.toJson()]);
   });
 
+  test('patches only message text when editing a post', () async {
+    final adapter = _RecordingAdapter(
+      body:
+          '{"id":"post+1","user_id":"me","channel_id":"channel-1",'
+          '"message":"New **text**","create_at":1000}',
+    );
+    final dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final post = await DioMattermostApi(
+      dio: dio,
+    ).updatePostMessage(postId: 'post+1', message: 'New **text**');
+    expect(adapter.request?.method, 'PUT');
+    expect(adapter.request?.path, '/posts/post%2B1/patch');
+    expect(adapter.request?.data, <String, Object?>{'message': 'New **text**'});
+    expect(post.message, 'New **text**');
+  });
+
   test('views a channel and changes CRT following state', () async {
     final _RecordingAdapter adapter = _RecordingAdapter();
     final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))

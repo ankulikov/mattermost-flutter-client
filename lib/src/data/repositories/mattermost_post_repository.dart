@@ -260,6 +260,36 @@ final class MattermostPostRepository extends PostRepository {
   }) => _api.deletePost(postId);
 
   @override
+  Future<ChannelPost> updateMessage({
+    required AuthSession session,
+    required String postId,
+    required String message,
+  }) async {
+    final MattermostPostDto post = await _api.updatePostMessage(
+      postId: postId,
+      message: message,
+    );
+    final List<ChannelPost> mapped = _messageMapper.map(
+      posts: <MattermostPostDto>[post],
+      users: <UserSummary>[
+        UserSummary(
+          id: session.userId,
+          username: session.username,
+          firstName: '',
+          lastName: '',
+          nickname: '',
+          position: '',
+          email: '',
+        ),
+      ],
+      currentUserId: session.userId,
+      includeDeleted: true,
+    );
+    if (mapped case <ChannelPost>[final ChannelPost result]) return result;
+    throw const FormatException('Updated post response could not be mapped');
+  }
+
+  @override
   Future<void> addReaction({
     required AuthSession session,
     required String postId,

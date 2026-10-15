@@ -24,6 +24,23 @@ Enter sends the message. Shift+Enter inserts a line break. The draft clears
 only after a successful REST response. A failure leaves the draft and shows a
 non-blocking error.
 
+## Edit behavior
+
+The author can choose Edit from a message's pointer menu or touch action sheet
+in a channel or thread. The shared composer swaps in that post's raw Markdown,
+retaining the previous unsent draft and uploaded file tiles for restoration.
+Quick mode and the full editor use the same edit buffer. Cancel and a successful
+save restore the draft; a failed save keeps the attempted text for retry.
+Attachments cannot be changed through this text-edit flow.
+
+Edits use `PUT /api/v4/posts/{post_id}/patch` with only `message`. The partial
+update preserves server-owned fields and existing attachments; the full post
+update endpoint treats omitted fields as blank. The server enforces `edit_post`
+permission and may reject an edit based on its configured edit time limit.
+Mattermost does not send new mention or desktop notifications for an edit.
+The returned post replaces the open channel or thread projection by revision;
+realtime `post_edited` continues to reconcile other open views.
+
 ## Live Markdown editing
 
 The composer stores raw Markdown in one `TextEditingValue`. That value is the

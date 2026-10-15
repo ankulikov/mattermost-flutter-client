@@ -5,6 +5,11 @@ abstract final class MessageComposerStrings {
   static const String sending = 'Sending message';
   static const String sendFailed =
       'Message could not be sent. Your draft has been kept.';
+  static const String editing = 'Editing message';
+  static const String saveEdit = 'Save changes';
+  static const String cancelEdit = 'Cancel editing';
+  static const String editFailed =
+      'Message could not be updated. Your changes have been kept.';
   static const String attach = 'Attach files';
   static const String openFullEditor = 'Open full message editor';
   static const String closeFullEditor = 'Close full message editor';

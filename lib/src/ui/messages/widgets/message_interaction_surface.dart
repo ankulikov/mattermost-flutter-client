@@ -60,6 +60,7 @@ class MessageInteractionSurface extends StatefulWidget {
     required this.child,
     this.onToggleReaction,
     this.onDelete,
+    this.onEdit,
     this.onPostpone,
     this.canDelete = false,
     this.canEdit = false,
@@ -74,6 +75,7 @@ class MessageInteractionSurface extends StatefulWidget {
   final Widget child;
   final Future<bool> Function(String emojiName)? onToggleReaction;
   final Future<bool> Function()? onDelete;
+  final VoidCallback? onEdit;
   final Future<bool> Function()? onPostpone;
   final bool canDelete;
   final bool canEdit;
@@ -186,6 +188,7 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
             builder: (BuildContext context) => _MessageActionsBottomSheet(
               canCopyLink: widget.postPermalink != null,
               canDelete: widget.canDelete,
+              canEdit: widget.canEdit && widget.onEdit != null,
               canPostpone: widget.onPostpone != null,
             ),
           );
@@ -250,6 +253,10 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
   }
 
   Future<void> _handleAction(_MessageAction action) async {
+    if (action == _MessageAction.edit) {
+      widget.onEdit?.call();
+      return;
+    }
     if (action == _MessageAction.postpone) {
       final bool postponed =
           await (widget.onPostpone?.call() ?? Future<bool>.value(false));
@@ -339,7 +346,7 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
                         canCopyLink: widget.postPermalink != null,
                         canPostpone: widget.onPostpone != null,
                         canDelete: widget.canDelete,
-                        canEdit: widget.canEdit,
+                        canEdit: widget.canEdit && widget.onEdit != null,
                         onActionSelected: _handleAction,
                         onMoreMenuOpened: _handleMoreActionsMenuOpen,
                         onMoreMenuClosed: _handleMoreActionsMenuClosed,
@@ -520,11 +527,13 @@ class _MessageActionsBottomSheet extends StatelessWidget {
   const _MessageActionsBottomSheet({
     required this.canCopyLink,
     required this.canDelete,
+    required this.canEdit,
     required this.canPostpone,
   });
 
   final bool canCopyLink;
   final bool canDelete;
+  final bool canEdit;
   final bool canPostpone;
 
   @override
@@ -569,7 +578,8 @@ class _MessageActionsBottomSheet extends StatelessWidget {
           const Divider(),
           for (final _MessageAction action in _bottomSheetActions.where(
             (_MessageAction action) =>
-                action != _MessageAction.delete || canDelete,
+                (action != _MessageAction.delete || canDelete) &&
+                (action != _MessageAction.edit || canEdit),
           ))
             ListTile(
               leading: Icon(action.icon),
@@ -636,6 +646,7 @@ const List<_MessageAction> _bottomSheetActions = <_MessageAction>[
   _MessageAction.unread,
   _MessageAction.postpone,
   _MessageAction.copyLink,
+  _MessageAction.edit,
   _MessageAction.save,
   _MessageAction.copyText,
   _MessageAction.pin,

@@ -78,6 +78,7 @@ final class ChannelPostsController
   String? _requestedFocusPostId;
   final Set<String> _reactionRequests = <String>{};
   final Set<String> _deleteRequests = <String>{};
+  final Set<String> _editRequests = <String>{};
   StreamSubscription<PostRealtimeEvent>? _realtimeSubscription;
   final List<_VersionedPostRealtimeEvent> _realtimeEvents =
       <_VersionedPostRealtimeEvent>[];
@@ -367,6 +368,33 @@ final class ChannelPostsController
       return sent;
     } finally {
       _sendRunning = false;
+    }
+  }
+
+  Future<ChannelPost> editMessage({
+    required String postId,
+    required String message,
+  }) async {
+    final AuthSession? session = _session;
+    final PostRepository? repository = _repository;
+    if (session == null || repository == null || state.value == null) {
+      throw StateError('Channel messages are not ready');
+    }
+    if (!_editRequests.add(postId)) {
+      throw StateError('This message is already being edited');
+    }
+    try {
+      final ChannelPost updated = await _cancellation.run(
+        () => repository.updateMessage(
+          session: session,
+          postId: postId,
+          message: message,
+        ),
+      );
+      replacePost(updated);
+      return updated;
+    } finally {
+      _editRequests.remove(postId);
     }
   }
 
