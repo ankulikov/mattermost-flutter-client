@@ -6,11 +6,14 @@ the lifetime of the realtime connection.
 ## Server addresses
 
 The sign-in form accepts full `http://` or `https://` origins as well as a
-schemeless host (with an optional deployment path). Explicit schemes are used
-as entered. For a schemeless address, discovery tries HTTPS and then HTTP;
-`localhost`, `127.0.0.1`, `.lan`, and `.local` hosts try HTTP first. The origin
-that responds successfully becomes the session origin for API, SSO, and
-realtime traffic.
+schemeless host (with an optional deployment path). Schemeless addresses always
+try HTTPS first, then fall back to HTTP only for explicitly allowed local hosts.
+Explicit HTTP is rejected for other hosts. HTTP is allowed for `localhost`,
+`.lan` and `.local` domains, plus IPv4 private (`10/8`, `172.16/12`,
+`192.168/16`), loopback (`127/8`), link-local (`169.254/16`), CGNAT
+(`100.64/10`), and IPv6 unique-local (`fc00::/7`) addresses. The origin that
+responds successfully becomes the session origin for API, SSO, and realtime
+traffic.
 
 ## Sign-in methods
 

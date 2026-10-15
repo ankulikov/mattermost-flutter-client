@@ -110,7 +110,7 @@ void main() {
   });
 
   test(
-    'falls back to HTTP after HTTPS discovery fails for a bare host',
+    'does not fall back to HTTP after HTTPS discovery fails for a remote host',
     () async {
       final _RecordingAuthRepository repository = _RecordingAuthRepository(
         discoveryFailures: <Uri, AuthFailure>{
@@ -127,29 +127,37 @@ void main() {
           .discoverServer('chat.example.com');
 
       final AuthState state = container.read(authControllerProvider);
-      expect(state.phase, AuthPhase.choosingSso);
-      expect(state.serverUrl, Uri.parse('http://chat.example.com'));
+      expect(state.failure, AuthFailureKind.network);
+      expect(state.serverUrl, Uri.parse('https://chat.example.com'));
       expect(repository.discoveredServerUrls, <Uri>[
         Uri.parse('https://chat.example.com'),
-        Uri.parse('http://chat.example.com'),
       ]);
     },
   );
 
-  test('tries HTTP first for a bare local host', () async {
-    final _RecordingAuthRepository repository = _RecordingAuthRepository();
-    final ProviderContainer container = _container(repository: repository);
-    addTearDown(container.dispose);
+  test(
+    'falls back to HTTP after HTTPS discovery fails for a local host',
+    () async {
+      final _RecordingAuthRepository repository = _RecordingAuthRepository(
+        discoveryFailures: <Uri, AuthFailure>{
+          Uri.parse('https://mattermost.local'): const AuthFailure(
+            AuthFailureKind.network,
+          ),
+        },
+      );
+      final ProviderContainer container = _container(repository: repository);
+      addTearDown(container.dispose);
 
-    await container
-        .read(authControllerProvider.notifier)
-        .discoverServer('mattermost.local');
+      await container
+          .read(authControllerProvider.notifier)
+          .discoverServer('mattermost.local');
 
-    expect(
-      repository.discoveredServerUrls.single,
-      Uri.parse('http://mattermost.local'),
-    );
-  });
+      expect(repository.discoveredServerUrls, <Uri>[
+        Uri.parse('https://mattermost.local'),
+        Uri.parse('http://mattermost.local'),
+      ]);
+    },
+  );
 
   test('authenticates with password when the server enables it', () async {
     final _RecordingAuthRepository repository = _RecordingAuthRepository(

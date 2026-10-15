@@ -5,10 +5,33 @@ import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
+import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
+  testWidgets('explains why an HTTP public server address is rejected', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_AuthRepository()),
+        ],
+        child: const MaterialApp(home: SsoLoginDialog()),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('sso-server-url')),
+      'http://chat.example.com',
+    );
+    await tester.tap(find.text(AuthStrings.continueLabel));
+    await tester.pumpAndSettle();
+
+    expect(find.text(AuthStrings.insecureProtocol), findsOneWidget);
+  });
+
   testWidgets(
     'shows server-provided SSO methods on compact layout at large text',
     (WidgetTester tester) async {

@@ -33,6 +33,8 @@ abstract final class AuthStrings {
   static const String networkError =
       'Не удалось связаться с сервером. Проверьте адрес и подключение.';
   static const String invalidInput = 'Укажите корректный адрес сервера.';
+  static const String insecureProtocol =
+      'Незащищённый HTTP разрешён только для локальных и частных адресов. Используйте HTTPS.';
   static const String storageError = 'Не удалось безопасно сохранить сессию.';
   static const String ssoUnavailable =
       'На этом сервере не включены поддерживаемые способы единого входа.';

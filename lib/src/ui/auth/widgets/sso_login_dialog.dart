@@ -498,6 +498,7 @@ class _FailureMessage extends StatelessWidget {
     AuthFailureKind.invalidCredentials => AuthStrings.invalidCredentials,
     AuthFailureKind.network => AuthStrings.networkError,
     AuthFailureKind.invalidServer => AuthStrings.invalidInput,
+    AuthFailureKind.insecureProtocol => AuthStrings.insecureProtocol,
     AuthFailureKind.storage => AuthStrings.storageError,
     AuthFailureKind.ssoUnavailable => AuthStrings.ssoUnavailable,
     AuthFailureKind.browserUnavailable => AuthStrings.browserUnavailable,

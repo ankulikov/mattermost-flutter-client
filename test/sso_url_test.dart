@@ -18,7 +18,7 @@ void main() {
       );
     });
 
-    test('preserves explicit HTTP origins', () {
+    test('preserves explicit HTTP origins for allowed hosts', () {
       expect(
         tryNormalizeMattermostServerUrl('http://localhost:8065/mattermost'),
         Uri.parse('http://localhost:8065/mattermost'),
@@ -26,10 +26,6 @@ void main() {
       expect(
         tryNormalizeMattermostServerUrl('http://127.0.0.1:8065'),
         Uri.parse('http://127.0.0.1:8065'),
-      );
-      expect(
-        tryNormalizeMattermostServerUrl('http://chat.example.com'),
-        Uri.parse('http://chat.example.com'),
       );
     });
 
@@ -41,6 +37,7 @@ void main() {
           'https://chat.example.com/?next=/login',
           'https://chat.example.com/#section',
           'ftp://chat.example.com',
+          'http://chat.example.com',
           'https://',
         ]) {
           expect(tryNormalizeMattermostServerUrl(value), isNull, reason: value);
