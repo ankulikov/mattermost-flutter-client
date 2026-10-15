@@ -784,6 +784,7 @@ class _SignedOutContent extends ConsumerWidget {
     AuthFailureKind.network => AuthStrings.restoreFailed,
     AuthFailureKind.storage => AuthStrings.storageError,
     AuthFailureKind.invalidServer => AuthStrings.invalidInput,
+    AuthFailureKind.insecureProtocol => AuthStrings.insecureProtocol,
     AuthFailureKind.ssoUnavailable => AuthStrings.ssoUnavailable,
     AuthFailureKind.browserUnavailable => AuthStrings.browserUnavailable,
     AuthFailureKind.cancelled => '',

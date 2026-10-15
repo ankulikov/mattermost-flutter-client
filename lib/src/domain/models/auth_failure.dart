@@ -1,5 +1,6 @@
 enum AuthFailureKind {
   invalidServer,
+  insecureProtocol,
   ssoUnavailable,
   browserUnavailable,
   cancelled,
