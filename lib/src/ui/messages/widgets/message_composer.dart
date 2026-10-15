@@ -150,7 +150,7 @@ class _MessageComposerState extends State<MessageComposer> {
     _focusNode.requestFocus();
   }
 
-  void _finishEdit() {
+  void _finishEdit({bool restoreFocus = true}) {
     final TextEditingValue? draft = _savedDraft;
     setState(() {
       _editingPostId = null;
@@ -159,7 +159,11 @@ class _MessageComposerState extends State<MessageComposer> {
       _failed = false;
       _controller.value = draft ?? TextEditingValue.empty;
     });
-    _focusNode.requestFocus();
+    if (restoreFocus) {
+      _focusNode.requestFocus();
+    } else {
+      _focusNode.unfocus();
+    }
   }
 
   void _onUploadsChanged() {
@@ -471,7 +475,7 @@ class _MessageComposerState extends State<MessageComposer> {
       try {
         await widget.onEdit!(editingPostId, message);
         if (!mounted || _editingPostId != editingPostId) return false;
-        _finishEdit();
+        _finishEdit(restoreFocus: false);
         return true;
       } on Object {
         if (mounted && _editingPostId == editingPostId) {
@@ -541,8 +545,9 @@ class _MessageComposerState extends State<MessageComposer> {
     final bool compact =
         MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
     _fullEditorOpen = true;
+    bool? submitted;
     try {
-      await showDialog<void>(
+      submitted = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (BuildContext dialogContext) {
@@ -593,7 +598,7 @@ class _MessageComposerState extends State<MessageComposer> {
     } finally {
       _fullEditorOpen = false;
     }
-    if (mounted && !_sending) _focusNode.requestFocus();
+    if (mounted && !_sending && submitted != true) _focusNode.requestFocus();
   }
 
   void _insertNewLine() {

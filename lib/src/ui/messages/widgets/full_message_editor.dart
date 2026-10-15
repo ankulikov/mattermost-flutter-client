@@ -84,7 +84,7 @@ class _FullMessageEditorState extends State<FullMessageEditor> {
       _failed = !sent;
     });
     if (sent) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
     } else {
       _focusNode.requestFocus();
     }

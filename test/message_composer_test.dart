@@ -101,6 +101,7 @@ void main() {
       expect(edits, <String>['root-1:New **text**', 'root-1:New **text**']);
       expect(tester.widget<TextField>(input).controller?.text, 'Unsent draft');
       expect(find.text(MessageComposerStrings.editing), findsNothing);
+      expect(tester.widget<TextField>(input).focusNode?.hasFocus, isFalse);
     },
   );
 
@@ -142,6 +143,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(edited, 'root-1:**Updated**');
     expect(tester.widget<TextField>(input).controller?.text, 'Reply draft');
+    expect(tester.widget<TextField>(input).focusNode?.hasFocus, isFalse);
 
     controller.editPost(postId: 'root-2', message: 'Another');
     await tester.pump();
