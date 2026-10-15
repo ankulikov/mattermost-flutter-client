@@ -39,6 +39,10 @@ final class MessageComposerController {
   /// Inserts [text] as a Markdown block quote and focuses the composer.
   void insertQuote(String text) => _state?._insertQuote(text);
 
+  /// Starts editing a post while preserving the current unsent draft.
+  void editPost({required String postId, required String message}) =>
+      _state?._beginEdit(postId, message);
+
   void _attach(_MessageComposerState state) => _state = state;
 
   void _detach(_MessageComposerState state) {
@@ -67,6 +71,7 @@ class MessageComposer extends StatefulWidget {
     this.accountId = '',
     this.composerController,
     this.onSubmitWithFiles,
+    this.onEdit,
     this.uploadFilePickerFactory,
     this.fileUploadRepositoryFactory,
     super.key,
@@ -76,6 +81,7 @@ class MessageComposer extends StatefulWidget {
   final String placeholder;
   final SubmitMessage onSubmit;
   final SubmitPost? onSubmitWithFiles;
+  final Future<void> Function(String postId, String message)? onEdit;
   final UploadFilePicker Function()? uploadFilePickerFactory;
   final FileUploadRepository Function()? fileUploadRepositoryFactory;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
@@ -109,16 +115,56 @@ class _MessageComposerState extends State<MessageComposer> {
   ComposerUploadController? _uploads;
   String? _pendingPostId;
   String? _pendingDraft;
+  String? _editingPostId;
+  String? _originalMessage;
+  TextEditingValue? _savedDraft;
   String? _dismissedEmojiQuery;
   String? _dismissedMentionQuery;
 
   bool get _canSend =>
       !_sending &&
+      (_editingPostId == null || widget.onEdit != null) &&
       !_picking &&
-      (_uploads?.ready ?? true) &&
-      ((_uploads?.tiles.isEmpty ?? true) || widget.onSubmitWithFiles != null) &&
-      (_controller.messageText.trim().isNotEmpty ||
-          (_uploads?.tiles.isNotEmpty ?? false));
+      (_editingPostId != null || (_uploads?.ready ?? true)) &&
+      (_editingPostId != null ||
+          (_uploads?.tiles.isEmpty ?? true) ||
+          widget.onSubmitWithFiles != null) &&
+      (_editingPostId != null
+          ? _controller.messageText.trim().isNotEmpty &&
+                _controller.messageText != _originalMessage
+          : _controller.messageText.trim().isNotEmpty ||
+                (_uploads?.tiles.isNotEmpty ?? false));
+
+  void _beginEdit(String postId, String message) {
+    if (_sending || widget.onEdit == null || postId.isEmpty) return;
+    _savedDraft ??= _controller.value;
+    setState(() {
+      _editingPostId = postId;
+      _originalMessage = message;
+      _failed = false;
+      _controller.value = TextEditingValue(
+        text: message,
+        selection: TextSelection.collapsed(offset: message.length),
+      );
+    });
+    _focusNode.requestFocus();
+  }
+
+  void _finishEdit({bool restoreFocus = true}) {
+    final TextEditingValue? draft = _savedDraft;
+    setState(() {
+      _editingPostId = null;
+      _originalMessage = null;
+      _savedDraft = null;
+      _failed = false;
+      _controller.value = draft ?? TextEditingValue.empty;
+    });
+    if (restoreFocus) {
+      _focusNode.requestFocus();
+    } else {
+      _focusNode.unfocus();
+    }
+  }
 
   void _onUploadsChanged() {
     if (mounted) setState(() {});
@@ -311,6 +357,9 @@ class _MessageComposerState extends State<MessageComposer> {
       _controller.clear();
       _pendingPostId = null;
       _pendingDraft = null;
+      _editingPostId = null;
+      _originalMessage = null;
+      _savedDraft = null;
       _failed = false;
       _pickFailed = false;
       _dismissedMentionQuery = null;
@@ -417,6 +466,26 @@ class _MessageComposerState extends State<MessageComposer> {
     }
 
     final String message = _controller.messageText;
+    final String? editingPostId = _editingPostId;
+    if (editingPostId != null) {
+      setState(() {
+        _sending = true;
+        _failed = false;
+      });
+      try {
+        await widget.onEdit!(editingPostId, message);
+        if (!mounted || _editingPostId != editingPostId) return false;
+        _finishEdit(restoreFocus: false);
+        return true;
+      } on Object {
+        if (mounted && _editingPostId == editingPostId) {
+          setState(() => _failed = true);
+        }
+        return false;
+      } finally {
+        if (mounted) setState(() => _sending = false);
+      }
+    }
     final String draft = _controller.messageText;
     final List<String> fileIds = _uploads?.uploadedIds ?? const <String>[];
     final ComposerUploadController? uploads = _uploads;
@@ -471,13 +540,14 @@ class _MessageComposerState extends State<MessageComposer> {
 
   Future<void> _openFullEditor() async {
     if (_sending) return;
-    _initUploads();
+    if (_editingPostId == null) _initUploads();
     _focusNode.unfocus();
     final bool compact =
         MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
     _fullEditorOpen = true;
+    bool? submitted;
     try {
-      await showDialog<void>(
+      submitted = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (BuildContext dialogContext) {
@@ -486,21 +556,26 @@ class _MessageComposerState extends State<MessageComposer> {
             destinationId: widget.destinationId,
             placeholder: widget.placeholder,
             controller: _controller,
-            uploads: _uploads,
+            uploads: _editingPostId == null ? _uploads : null,
+            editing: _editingPostId != null,
             canSend: () => _canSend,
             canAttach: () =>
                 (_uploads?.canAdd ?? true) && !_sending && !_picking,
             onAttach:
-                widget.fileUploadRepositoryFactory != null &&
+                _editingPostId == null &&
+                    widget.fileUploadRepositoryFactory != null &&
                     widget.uploadFilePickerFactory != null &&
                     widget.accountId.isNotEmpty
                 ? _pickFiles
                 : null,
             onSubmit: () => _submit(finalizeComposing: true),
             onInsertNewLine: _insertNewLine,
-            uploadTilesBuilder: () =>
-                _uploads?.tiles.map(_buildUploadTile).toList(growable: false) ??
-                const <Widget>[],
+            uploadTilesBuilder: () => _editingPostId == null
+                ? _uploads?.tiles
+                          .map(_buildUploadTile)
+                          .toList(growable: false) ??
+                      const <Widget>[]
+                : const <Widget>[],
             contextMenuBuilder: _buildContextMenu,
           );
           if (compact) {
@@ -523,7 +598,7 @@ class _MessageComposerState extends State<MessageComposer> {
     } finally {
       _fullEditorOpen = false;
     }
-    if (mounted && !_sending) _focusNode.requestFocus();
+    if (mounted && !_sending && submitted != true) _focusNode.requestFocus();
   }
 
   void _insertNewLine() {
@@ -852,6 +927,22 @@ class _MessageComposerState extends State<MessageComposer> {
                   ),
                 ),
               ],
+              if (_editingPostId != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: <Widget>[
+                      const Text(MessageComposerStrings.editing),
+                      TextButton(
+                        key: const ValueKey<String>('cancel-message-edit'),
+                        onPressed: _sending ? null : _finishEdit,
+                        child: const Text(MessageComposerStrings.cancelEdit),
+                      ),
+                    ],
+                  ),
+                ),
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: colors.surface,
@@ -868,7 +959,8 @@ class _MessageComposerState extends State<MessageComposer> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      if (_uploads?.tiles.isNotEmpty ?? false)
+                      if (_editingPostId == null &&
+                          (_uploads?.tiles.isNotEmpty ?? false))
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           child: Wrap(
@@ -882,7 +974,8 @@ class _MessageComposerState extends State<MessageComposer> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: <Widget>[
-                          if (widget.fileUploadRepositoryFactory != null &&
+                          if (_editingPostId == null &&
+                              widget.fileUploadRepositoryFactory != null &&
                               widget.uploadFilePickerFactory != null &&
                               widget.accountId.isNotEmpty) ...<Widget>[
                             IconButton(
@@ -1038,14 +1131,18 @@ class _MessageComposerState extends State<MessageComposer> {
                           const SizedBox(width: 4),
                           Semantics(
                             button: true,
-                            label: _sending
+                            label: _editingPostId != null
+                                ? MessageComposerStrings.saveEdit
+                                : _sending
                                 ? MessageComposerStrings.sending
                                 : MessageComposerStrings.send,
                             child: IconButton.filled(
                               key: ValueKey<String>(
                                 'send-message-${widget.destinationId}',
                               ),
-                              tooltip: MessageComposerStrings.send,
+                              tooltip: _editingPostId != null
+                                  ? MessageComposerStrings.saveEdit
+                                  : MessageComposerStrings.send,
                               onPressed: _canSend
                                   ? () => unawaited(
                                       _submit(finalizeComposing: true),
@@ -1072,7 +1169,9 @@ class _MessageComposerState extends State<MessageComposer> {
                 Semantics(
                   liveRegion: true,
                   child: Text(
-                    MessageComposerStrings.sendFailed,
+                    _editingPostId != null
+                        ? MessageComposerStrings.editFailed
+                        : MessageComposerStrings.sendFailed,
                     key: ValueKey<String>(
                       'message-send-error-${widget.destinationId}',
                     ),

@@ -102,6 +102,13 @@ abstract class PostRepository {
     );
   }
 
+  /// Updates text and returns the server's complete post projection.
+  Future<ChannelPost> updateMessage({
+    required AuthSession session,
+    required String postId,
+    required String message,
+  }) => throw UnimplementedError();
+
   /// Deletes a post. Presentation owns removing it from its volatile snapshot
   /// after this command succeeds.
   Future<void> deletePost({

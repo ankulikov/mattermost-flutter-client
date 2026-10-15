@@ -53,6 +53,8 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
 }
 
 class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
+  final MessageComposerController _composerController =
+      MessageComposerController();
   String? _selectedRootPostId;
   bool _showMembers = false;
   double _threadWidth = 380;
@@ -214,6 +216,8 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                         _toggleReaction(context, post, emojiName),
                     onDeletePost: (ChannelPost post) =>
                         _deletePost(context, post),
+                    onEditPost: (ChannelPost post) => _composerController
+                        .editPost(postId: post.id, message: post.message),
                     onPostponePost: (ChannelPost post) => ref
                         .read(inboxProvider.notifier)
                         .postponeMessage(post: post, channel: channel),
@@ -242,6 +246,12 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
               MessageComposer(
                 key: ValueKey<String>('channel-composer-${channel.id}'),
                 destinationId: channel.id,
+                composerController: _composerController,
+                onEdit: (String postId, String message) async {
+                  await ref
+                      .read(_postsProvider.notifier)
+                      .editMessage(postId: postId, message: message);
+                },
                 placeholder: MessageComposerStrings.channelPlaceholder(
                   channel.displayName,
                 ),
@@ -597,6 +607,7 @@ class _PostList extends StatefulWidget {
     required this.onOpenThread,
     required this.onToggleReaction,
     required this.onDeletePost,
+    required this.onEditPost,
     required this.onPostponePost,
     required this.onRichAttachmentPostUpdated,
     required this.onRichAttachmentGotoLocation,
@@ -622,6 +633,7 @@ class _PostList extends StatefulWidget {
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
   final Future<bool> Function(ChannelPost) onDeletePost;
+  final ValueChanged<ChannelPost> onEditPost;
   final Future<bool> Function(ChannelPost) onPostponePost;
   final ValueChanged<ChannelPost> onRichAttachmentPostUpdated;
   final ValueChanged<String> onRichAttachmentGotoLocation;
@@ -894,6 +906,7 @@ class _PostListState extends State<_PostList> {
       onOpenThread: widget.onOpenThread,
       onToggleReaction: widget.onToggleReaction,
       onDelete: () => widget.onDeletePost(post),
+      onEdit: () => widget.onEditPost(post),
       onPostpone: () => widget.onPostponePost(post),
       onRichAttachmentPostUpdated: widget.onRichAttachmentPostUpdated,
       onRichAttachmentGotoLocation: widget.onRichAttachmentGotoLocation,
@@ -917,6 +930,7 @@ class _PostRow extends StatelessWidget {
     required this.onOpenThread,
     required this.onToggleReaction,
     required this.onDelete,
+    required this.onEdit,
     required this.onPostpone,
     required this.onRichAttachmentPostUpdated,
     required this.onRichAttachmentGotoLocation,
@@ -937,6 +951,7 @@ class _PostRow extends StatelessWidget {
   final ValueChanged<ChannelPost> onOpenThread;
   final Future<bool> Function(ChannelPost, String) onToggleReaction;
   final Future<bool> Function() onDelete;
+  final VoidCallback onEdit;
   final Future<bool> Function() onPostpone;
   final ValueChanged<ChannelPost> onRichAttachmentPostUpdated;
   final ValueChanged<String> onRichAttachmentGotoLocation;
@@ -953,6 +968,7 @@ class _PostRow extends StatelessWidget {
       onOpenThread: () => onOpenThread(post),
       onToggleReaction: (String emojiName) => onToggleReaction(post, emojiName),
       onDelete: onDelete,
+      onEdit: onEdit,
       onPostpone: onPostpone,
       canDelete: canDelete,
       canEdit: canEdit,

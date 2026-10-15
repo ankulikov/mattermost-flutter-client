@@ -179,6 +179,12 @@ abstract interface class MattermostApi {
   /// Creates a channel post or a threaded reply through the REST API.
   Future<MattermostPostDto> createPost(MattermostCreatePostRequestDto post);
 
+  /// Patches only the message, preserving files, props, and other post fields.
+  Future<MattermostPostDto> updatePostMessage({
+    required String postId,
+    required String message,
+  }) => throw UnimplementedError();
+
   /// Uploads one file and returns its server-confirmed ID.
   Future<String> uploadFile({
     required String channelId,

@@ -10,7 +10,7 @@ One client for every screen, built for busy Mattermost workdays.
 [![Release builds](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/release.yml/badge.svg)](https://github.com/ankulikov/mattermost-flutter-client/actions/workflows/release.yml)
 
 
-## ✨ What sets it apart
+## ✨ Primary features
 
 - 📱 One codebase, every screen. The interface adapts to compact, medium,
   and expanded widths instead of treating mobile and desktop as separate apps.

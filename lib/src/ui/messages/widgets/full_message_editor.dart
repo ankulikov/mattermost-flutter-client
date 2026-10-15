@@ -24,6 +24,7 @@ class FullMessageEditor extends StatefulWidget {
     required this.onInsertNewLine,
     required this.uploadTilesBuilder,
     required this.contextMenuBuilder,
+    this.editing = false,
     super.key,
   });
 
@@ -38,6 +39,7 @@ class FullMessageEditor extends StatefulWidget {
   final VoidCallback onInsertNewLine;
   final List<Widget> Function() uploadTilesBuilder;
   final ComposerContextMenuBuilder contextMenuBuilder;
+  final bool editing;
 
   @override
   State<FullMessageEditor> createState() => _FullMessageEditorState();
@@ -82,7 +84,7 @@ class _FullMessageEditorState extends State<FullMessageEditor> {
       _failed = !sent;
     });
     if (sent) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
     } else {
       _focusNode.requestFocus();
     }
@@ -121,7 +123,9 @@ class _FullMessageEditorState extends State<FullMessageEditor> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    MessageComposerStrings.fullEditorTitle,
+                    widget.editing
+                        ? MessageComposerStrings.editing
+                        : MessageComposerStrings.fullEditorTitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium,
@@ -134,7 +138,9 @@ class _FullMessageEditorState extends State<FullMessageEditor> {
                         key: ValueKey<String>(
                           'full-editor-send-${widget.destinationId}',
                         ),
-                        tooltip: MessageComposerStrings.send,
+                        tooltip: widget.editing
+                            ? MessageComposerStrings.saveEdit
+                            : MessageComposerStrings.send,
                         onPressed: !_submitting && widget.canSend()
                             ? _submit
                             : null,
@@ -203,7 +209,9 @@ class _FullMessageEditorState extends State<FullMessageEditor> {
               child: Semantics(
                 liveRegion: true,
                 child: Text(
-                  MessageComposerStrings.sendFailed,
+                  widget.editing
+                      ? MessageComposerStrings.editFailed
+                      : MessageComposerStrings.sendFailed,
                   key: ValueKey<String>(
                     'full-editor-send-error-${widget.destinationId}',
                   ),

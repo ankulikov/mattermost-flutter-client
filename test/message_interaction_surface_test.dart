@@ -227,6 +227,21 @@ void main() {
     expect(find.text(MessageActionsStrings.edit), findsNothing);
   });
 
+  testWidgets('touch Edit invokes the post callback', (
+    WidgetTester tester,
+  ) async {
+    var edits = 0;
+    await tester.pumpWidget(
+      _app(onOpenThread: () {}, canEdit: true, onEdit: () => edits += 1),
+    );
+    await tester.longPress(find.text('Message'), kind: PointerDeviceKind.touch);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text(MessageActionsStrings.edit));
+    await tester.tap(find.text(MessageActionsStrings.edit));
+    await tester.pumpAndSettle();
+    expect(edits, 1);
+  });
+
   testWidgets(
     'touch long press on Markdown text opens one sheet, not a thread',
     (WidgetTester tester) async {
@@ -809,6 +824,7 @@ Widget _app({
   CustomEmojiRepository? repository,
   Future<bool> Function(String emojiName)? onToggleReaction,
   Future<bool> Function()? onDelete,
+  VoidCallback? onEdit,
   Future<bool> Function()? onPostpone,
   bool canDelete = false,
   bool canEdit = false,
@@ -836,6 +852,7 @@ Widget _app({
               accountId: repository == null ? '' : 'account-a',
               onToggleReaction: onToggleReaction,
               onDelete: onDelete,
+              onEdit: onEdit ?? (canEdit ? () {} : null),
               onPostpone: onPostpone,
               canDelete: canDelete,
               canEdit: canEdit,

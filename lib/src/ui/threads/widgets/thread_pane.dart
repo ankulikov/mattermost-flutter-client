@@ -220,6 +220,10 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                             onAddReaction: (String emojiName) =>
                                 _toggleReaction(root, emojiName),
                             onDelete: () => _deletePost(root),
+                            onEdit: () => _composerController.editPost(
+                              postId: root.id,
+                              message: root.message,
+                            ),
                             onPostpone: () => ref
                                 .read(inboxProvider.notifier)
                                 .postponeMessage(
@@ -302,6 +306,10 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                                     ),
                                 onDelete: () =>
                                     _deletePost(state.thread.replies[index]),
+                                onEdit: () => _composerController.editPost(
+                                  postId: state.thread.replies[index].id,
+                                  message: state.thread.replies[index].message,
+                                ),
                                 onPostpone: () => ref
                                     .read(inboxProvider.notifier)
                                     .postponeMessage(
@@ -368,6 +376,11 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                           ? null
                           : () => ref.read(fileUploadRepositoryProvider),
                       onSubmit: _sendReply,
+                      onEdit: (String postId, String message) async {
+                        await ref
+                            .read(_threadStateProvider.notifier)
+                            .editMessage(postId: postId, message: message);
+                      },
                       onSubmitWithFiles: _sendReplyWithFiles,
                     ),
                   ],
@@ -659,6 +672,7 @@ class _ThreadPost extends StatelessWidget {
     required this.onToggleReaction,
     required this.onAddReaction,
     required this.onDelete,
+    required this.onEdit,
     required this.onPostpone,
     required this.canDelete,
     required this.canEdit,
@@ -679,6 +693,7 @@ class _ThreadPost extends StatelessWidget {
   final Future<void> Function(PostReaction reaction) onToggleReaction;
   final Future<bool> Function(String emojiName) onAddReaction;
   final Future<bool> Function() onDelete;
+  final VoidCallback onEdit;
   final Future<bool> Function() onPostpone;
   final bool canDelete;
   final bool canEdit;
@@ -695,6 +710,7 @@ class _ThreadPost extends StatelessWidget {
       touchBehavior: MessageTouchBehavior.actionsOnTap,
       onToggleReaction: onAddReaction,
       onDelete: onDelete,
+      onEdit: onEdit,
       onPostpone: onPostpone,
       canDelete: canDelete,
       canEdit: canEdit,

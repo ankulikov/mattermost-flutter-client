@@ -56,6 +56,144 @@ void main() {
     expect(field.focusNode?.hasFocus, isTrue);
   });
 
+  testWidgets(
+    'edits a post, preserves the draft, and keeps changes on failure',
+    (WidgetTester tester) async {
+      final controller = MessageComposerController();
+      final edits = <String>[];
+      var attempts = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessageComposer(
+              destinationId: 'channel-1',
+              placeholder: 'Message channel',
+              composerController: controller,
+              onSubmit: (_, _) async {},
+              onEdit: (postId, message) async {
+                edits.add('$postId:$message');
+                attempts += 1;
+                if (attempts == 1) throw StateError('offline');
+              },
+            ),
+          ),
+        ),
+      );
+      final input = find.byKey(
+        const ValueKey<String>('message-input-channel-1'),
+      );
+      final save = find.byKey(const ValueKey<String>('send-message-channel-1'));
+      await tester.enterText(input, 'Unsent draft');
+      controller.editPost(postId: 'root-1', message: 'Old **text**');
+      await tester.pump();
+      expect(tester.widget<TextField>(input).controller?.text, 'Old **text**');
+      expect(find.text(MessageComposerStrings.editing), findsOneWidget);
+
+      await tester.enterText(input, 'New **text**');
+      await tester.pump();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(find.text(MessageComposerStrings.editFailed), findsOneWidget);
+      expect(tester.widget<TextField>(input).controller?.text, 'New **text**');
+
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(edits, <String>['root-1:New **text**', 'root-1:New **text**']);
+      expect(tester.widget<TextField>(input).controller?.text, 'Unsent draft');
+      expect(find.text(MessageComposerStrings.editing), findsNothing);
+      expect(tester.widget<TextField>(input).focusNode?.hasFocus, isFalse);
+    },
+  );
+
+  testWidgets('rich editor saves an edited message and cancel restores draft', (
+    WidgetTester tester,
+  ) async {
+    final controller = MessageComposerController();
+    String? edited;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageComposer(
+            destinationId: 'thread-1',
+            placeholder: 'Reply',
+            composerController: controller,
+            onSubmit: (_, _) async {},
+            onEdit: (postId, message) async => edited = '$postId:$message',
+          ),
+        ),
+      ),
+    );
+    final input = find.byKey(const ValueKey<String>('message-input-thread-1'));
+    await tester.enterText(input, 'Reply draft');
+    controller.editPost(postId: 'root-1', message: 'Original');
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('open-full-editor-thread-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(MessageComposerStrings.editing), findsWidgets);
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('full-message-input-thread-1')),
+      '**Updated**',
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('full-editor-send-thread-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(edited, 'root-1:**Updated**');
+    expect(tester.widget<TextField>(input).controller?.text, 'Reply draft');
+    expect(tester.widget<TextField>(input).focusNode?.hasFocus, isFalse);
+
+    controller.editPost(postId: 'root-2', message: 'Another');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey<String>('cancel-message-edit')));
+    await tester.pump();
+    expect(tester.widget<TextField>(input).controller?.text, 'Reply draft');
+  });
+
+  for (final width in <double>[320, 1200]) {
+    testWidgets('edit composer fits ${width.toInt()}px with large text', (
+      WidgetTester tester,
+    ) async {
+      await tester.binding.setSurfaceSize(Size(width, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final controller = MessageComposerController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(1.7)),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: MessageComposer(
+                  destinationId: 'channel-1',
+                  placeholder: 'Message channel',
+                  composerController: controller,
+                  onSubmit: (_, _) async {},
+                  onEdit: (_, _) async {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      controller.editPost(postId: 'root-1', message: 'Original text');
+      await tester.pump();
+      expect(find.text(MessageComposerStrings.editing), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey<String>('message-input-channel-1')),
+            )
+            .controller
+            ?.text,
+        'Original text',
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('keeps a failed draft and reuses its pending post id', (
     WidgetTester tester,
   ) async {

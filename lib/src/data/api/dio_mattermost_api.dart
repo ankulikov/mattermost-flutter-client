@@ -542,6 +542,18 @@ final class DioMattermostApi
   }
 
   @override
+  Future<MattermostPostDto> updatePostMessage({
+    required String postId,
+    required String message,
+  }) async {
+    final Response<Object?> response = await _put(
+      '/posts/${Uri.encodeComponent(postId)}/patch',
+      data: <String, Object?>{'message': message},
+    );
+    return MattermostPostDto.fromJson(_object(response.data));
+  }
+
+  @override
   Future<String> uploadFile({
     required String channelId,
     required String name,
