@@ -35,7 +35,9 @@ cancels its subscription.
 
 After the first frame of a complete followed thread, the client updates the
 thread read timestamp to the time captured before loading began. The timestamp
-cannot jump past replies that arrived during the request.
+cannot jump past replies that arrived during the request. Inbox is the
+exception: opening an Inbox thread positions the unread boundary but leaves it
+unread until the user selects Done on its Inbox card.
 
 ## Presentation
 

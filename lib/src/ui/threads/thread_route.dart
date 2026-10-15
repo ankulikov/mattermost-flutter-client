@@ -16,6 +16,7 @@ final class ThreadRouteArguments {
     this.teamId,
     this.unreadReplies = 0,
     this.positionAtEndWhenRead = false,
+    this.markReadOnOpen = true,
     this.onSelectChannel,
     this.onReplySent,
     this.onThreadRead,
@@ -29,6 +30,7 @@ final class ThreadRouteArguments {
   final String? teamId;
   final int unreadReplies;
   final bool positionAtEndWhenRead;
+  final bool markReadOnOpen;
   final ValueChanged<String>? onSelectChannel;
   final ValueChanged<ChannelPost>? onReplySent;
   final ValueChanged<DateTime>? onThreadRead;

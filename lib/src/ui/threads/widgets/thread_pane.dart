@@ -30,6 +30,7 @@ class ThreadPane extends ConsumerStatefulWidget {
     this.teamId,
     this.unreadReplies = 0,
     this.positionAtEndWhenRead = false,
+    this.markReadOnOpen = true,
     this.onSelectChannel,
     this.stateScopeId,
     this.onReplySent,
@@ -47,6 +48,13 @@ class ThreadPane extends ConsumerStatefulWidget {
   final String? teamId;
   final int unreadReplies;
   final bool positionAtEndWhenRead;
+
+  /// Whether reaching the initial unread-reply position completes the thread.
+  ///
+  /// Inbox keeps completion explicit through its Done action, so its thread
+  /// host disables this while other thread entry points retain their normal
+  /// read-on-open behavior.
+  final bool markReadOnOpen;
   final ValueChanged<String>? onSelectChannel;
   final String? stateScopeId;
   final ValueChanged<ChannelPost>? onReplySent;
@@ -470,7 +478,9 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
         if (dividerContext != null) {
           unawaited(Scrollable.ensureVisible(dividerContext, alignment: 0));
         }
-        if (_request.teamId.isNotEmpty) unawaited(_markRead(state));
+        if (widget.markReadOnOpen && _request.teamId.isNotEmpty) {
+          unawaited(_markRead(state));
+        }
         return;
       }
       if (widget.positionAtEndWhenRead && _scrollController.hasClients) {
@@ -581,9 +591,8 @@ class _UnreadMessagesDivider extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Text(
                 ThreadStrings.unreadMessages,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelMedium?.copyWith(color: color),
+                style: Theme.of(context).textTheme.labelMedium
+                    ?.copyWith(color: color),
               ),
             ),
             Expanded(child: Divider(color: color)),
@@ -622,9 +631,8 @@ class _ThreadHeader extends StatelessWidget {
             children: <Widget>[
               Text(
                 ThreadStrings.title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
               Text(
                 '#${channel.displayName}',
