@@ -63,6 +63,24 @@ final class MattermostPostRepository extends PostRepository {
                   event.channelId != channelId) {
                 return null;
               }
+              if (event.name == 'reaction_added' ||
+                  event.name == 'reaction_removed') {
+                final MattermostReactionDto? reaction = _reactionFromEvent(
+                  event.data,
+                );
+                if (reaction == null ||
+                    reaction.postId.isEmpty ||
+                    reaction.userId.isEmpty ||
+                    reaction.emojiName.isEmpty) {
+                  return const PostRealtimeRecoveryRequired();
+                }
+                return PostRealtimeReactionChanged(
+                  postId: reaction.postId,
+                  userId: reaction.userId,
+                  emojiName: reaction.emojiName,
+                  added: event.name == 'reaction_added',
+                );
+              }
               final MattermostPostDto? raw = _postFromEvent(event.data);
               if (raw == null || raw.id.isEmpty) {
                 return const PostRealtimeRecoveryRequired();
@@ -338,6 +356,25 @@ final class MattermostPostRepository extends PostRepository {
     }
     if (decoded is! Map<Object?, Object?>) return null;
     return MattermostPostDto.fromJson(
+      decoded.map(
+        (Object? key, Object? value) => MapEntry<String, Object?>(
+          key is String ? key : key.toString(),
+          value,
+        ),
+      ),
+    );
+  }
+
+  static MattermostReactionDto? _reactionFromEvent(Map<String, Object?> data) {
+    final Object? encoded = data['reaction'];
+    final Object? decoded;
+    try {
+      decoded = encoded is String ? jsonDecode(encoded) : encoded;
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map<Object?, Object?>) return null;
+    return MattermostReactionDto.fromJson(
       decoded.map(
         (Object? key, Object? value) => MapEntry<String, Object?>(
           key is String ? key : key.toString(),

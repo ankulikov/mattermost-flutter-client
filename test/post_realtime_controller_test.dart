@@ -136,6 +136,127 @@ void main() {
         <String>{'root', 'live'},
       );
     });
+
+    test('applies reaction updates to the matching open post', () async {
+      final _RealtimePostRepository posts = _RealtimePostRepository(
+        loads: <Future<ChannelPostPage> Function()>[
+          () async => ChannelPostPage(
+            posts: <ChannelPost>[
+              _post(
+                'root',
+                'initial',
+                reactions: const <PostReaction>[
+                  PostReaction(
+                    emoji: '👋',
+                    emojiName: 'wave',
+                    count: 1,
+                    userIds: <String>['ada'],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final (:container, :provider) = _channelContainer(posts);
+      addTearDown(container.dispose);
+      await container.read(provider.future);
+
+      posts.add(
+        const PostRealtimeReactionChanged(
+          postId: 'root',
+          userId: 'me',
+          emojiName: 'wave',
+          added: true,
+        ),
+      );
+      await _waitUntil(
+        () =>
+            container
+                .read(provider)
+                .value
+                ?.posts
+                .single
+                .reactions
+                .single
+                .count ==
+            2,
+      );
+      PostReaction reaction = container
+          .read(provider)
+          .requireValue
+          .posts
+          .single
+          .reactions
+          .single;
+      expect(reaction.userIds, <String>['ada', 'me']);
+      expect(reaction.reactedByCurrentUser, isTrue);
+
+      posts.add(
+        const PostRealtimeReactionChanged(
+          postId: 'root',
+          userId: 'me',
+          emojiName: 'wave',
+          added: true,
+        ),
+      );
+      await pumpEventQueue();
+      expect(
+        container
+            .read(provider)
+            .requireValue
+            .posts
+            .single
+            .reactions
+            .single
+            .count,
+        2,
+      );
+
+      posts.add(
+        const PostRealtimeReactionChanged(
+          postId: 'root',
+          userId: 'ada',
+          emojiName: 'wave',
+          added: false,
+        ),
+      );
+      await _waitUntil(
+        () =>
+            container
+                .read(provider)
+                .value
+                ?.posts
+                .single
+                .reactions
+                .single
+                .count ==
+            1,
+      );
+      reaction = container
+          .read(provider)
+          .requireValue
+          .posts
+          .single
+          .reactions
+          .single;
+      expect(reaction.userIds, <String>['me']);
+      expect(reaction.reactedByCurrentUser, isTrue);
+
+      posts.add(
+        const PostRealtimeReactionChanged(
+          postId: 'root',
+          userId: 'me',
+          emojiName: 'wave',
+          added: false,
+        ),
+      );
+      await _waitUntil(
+        () =>
+            container.read(provider).value?.posts.single.reactions.isEmpty ==
+            true,
+      );
+    });
   });
 
   test('open thread adds, edits, and removes matching replies', () async {
@@ -185,6 +306,30 @@ void main() {
           'edited',
       reason: 'edited thread reply',
     );
+
+    posts.add(
+      const PostRealtimeReactionChanged(
+        postId: 'existing',
+        userId: 'grace',
+        emojiName: 'wave',
+        added: true,
+      ),
+    );
+    await _waitUntil(() {
+      final List<ChannelPost> matching =
+          container
+              .read(provider)
+              .value
+              ?.thread
+              .replies
+              .where((ChannelPost post) => post.id == 'existing')
+              .toList(growable: false) ??
+          const <ChannelPost>[];
+      return matching.length == 1 &&
+          matching.single.reactions.length == 1 &&
+          matching.single.reactions.single.userIds.length == 1 &&
+          matching.single.reactions.single.userIds.single == 'grace';
+    }, reason: 'thread reaction update');
 
     posts.add(PostRealtimeDeleted(_deleted(existing, revision: 4)));
     await _waitUntil(
@@ -273,6 +418,7 @@ ChannelPost _post(
   String rootId = '',
   int replyCount = 0,
   int revision = 1,
+  List<PostReaction> reactions = const <PostReaction>[],
 }) => ChannelPost(
   id: id,
   channelId: 'channel-1',
@@ -282,6 +428,7 @@ ChannelPost _post(
   message: message,
   rootId: rootId,
   replyCount: replyCount,
+  reactions: reactions,
 );
 
 ChannelPost _deleted(ChannelPost post, {int revision = 10}) => ChannelPost(

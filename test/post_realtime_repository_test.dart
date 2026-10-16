@@ -104,6 +104,60 @@ void main() {
     await _waitUntil(() => events.length == 1);
     expect((events.single as PostRealtimeUpserted).post.id, 'reply-1');
   });
+
+  test('maps reaction websocket events into post reaction deltas', () async {
+    final _Gateway gateway = _Gateway();
+    final SessionRealtimeService realtime = SessionRealtimeService(
+      gateway: gateway,
+      credentialStore: _Credentials(_session.serverUrl),
+    );
+    final MattermostPostRepository repository = MattermostPostRepository(
+      api: _Api(),
+      messageMapper: const MattermostMessageMapper(),
+      users: FakeUserRepository(),
+      realtime: realtime,
+    );
+    final List<PostRealtimeEvent> events = <PostRealtimeEvent>[];
+    final StreamSubscription<PostRealtimeEvent> subscription = repository
+        .watchRealtime(session: _session, channelId: 'channel-1')
+        .listen(events.add);
+    addTearDown(() async {
+      await subscription.cancel();
+      await realtime.dispose();
+      await gateway.close();
+    });
+    await _waitUntil(() => gateway.started);
+
+    gateway.add(_reactionSignal('reaction_added'));
+    gateway.add(_reactionSignal('reaction_removed'));
+
+    await _waitUntil(() => events.length == 2);
+    expect(
+      events[0],
+      isA<PostRealtimeReactionChanged>()
+          .having(
+            (PostRealtimeReactionChanged event) => event.postId,
+            'post',
+            'post-1',
+          )
+          .having(
+            (PostRealtimeReactionChanged event) => event.userId,
+            'user',
+            'grace',
+          )
+          .having(
+            (PostRealtimeReactionChanged event) => event.emojiName,
+            'emoji',
+            'wave',
+          )
+          .having(
+            (PostRealtimeReactionChanged event) => event.added,
+            'added',
+            isTrue,
+          ),
+    );
+    expect((events[1] as PostRealtimeReactionChanged).added, isFalse);
+  });
 }
 
 final AuthSession _session = AuthSession(
@@ -146,6 +200,22 @@ WebSocketEventSignal _postSignal(
     ),
   );
 }
+
+WebSocketEventSignal _reactionSignal(String name) => WebSocketEventSignal(
+  MattermostWebSocketEvent(
+    name: name,
+    sequence: name == 'reaction_added' ? 1 : 2,
+    data: <String, Object?>{
+      'reaction': jsonEncode(<String, Object?>{
+        'user_id': 'grace',
+        'post_id': 'post-1',
+        'emoji_name': 'wave',
+        'create_at': 1,
+      }),
+    },
+    broadcast: const <String, Object?>{'channel_id': 'channel-1'},
+  ),
+);
 
 Future<void> _waitUntil(bool Function() condition) async {
   for (var attempt = 0; attempt < 100; attempt += 1) {

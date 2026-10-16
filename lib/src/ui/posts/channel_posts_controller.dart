@@ -768,6 +768,27 @@ final class ChannelPostsController
       ),
     PostRealtimeDeleted(:final post) when post.channelId == channelId =>
       _withoutPost(current, postId: post.id, reply: post),
+    PostRealtimeReactionChanged(
+      :final postId,
+      :final userId,
+      :final emojiName,
+      :final added,
+    ) =>
+      current.copyWith(
+        posts: current.posts
+            .map(
+              (ChannelPost post) => post.id == postId
+                  ? applyRealtimeReaction(
+                      post,
+                      emojiName: emojiName,
+                      userId: userId,
+                      added: added,
+                      currentUserId: _session?.userId ?? '',
+                    )
+                  : post,
+            )
+            .toList(growable: false),
+      ),
     _ => current,
   };
 
