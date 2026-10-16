@@ -12,10 +12,8 @@ import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
-typedef InboxPaneBuilder = Widget Function(
-  BuildContext context,
-  ValueChanged<InboxItem> onOpenItem,
-);
+typedef InboxPaneBuilder =
+    Widget Function(BuildContext context, ValueChanged<InboxItem> onOpenItem);
 
 /// The thread and channel context reached from an Inbox item.
 final class InboxThreadTarget {
@@ -117,8 +115,9 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
       ),
     );
     final Widget inbox = widget.inboxBuilder(context, (InboxItem item) {
-      if (item case DirectMessageBundleInboxItem(messages: final messages)
-          when messages.length > 1) {
+      if (item case DirectMessageBundleInboxItem(
+        messages: final messages,
+      ) when messages.length > 1) {
         final SidebarChannel channel = messages.last.channel;
         if (widget.showAdjacentWorkspace) {
           setState(() {

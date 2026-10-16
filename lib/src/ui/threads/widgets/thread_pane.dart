@@ -591,8 +591,9 @@ class _UnreadMessagesDivider extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Text(
                 ThreadStrings.unreadMessages,
-                style: Theme.of(context).textTheme.labelMedium
-                    ?.copyWith(color: color),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium?.copyWith(color: color),
               ),
             ),
             Expanded(child: Divider(color: color)),
@@ -631,8 +632,9 @@ class _ThreadHeader extends StatelessWidget {
             children: <Widget>[
               Text(
                 ThreadStrings.title,
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
               ),
               Text(
                 '#${channel.displayName}',
