@@ -1827,6 +1827,47 @@ void main() {
     );
   });
 
+  testWidgets('highlights unread channels at compact and expanded widths', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1000, 800),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _UnreadSidebarRepository(),
+            ),
+          ],
+          child: MaterialApp(
+            theme: size.width < 700
+                ? ThemeData.light(useMaterial3: true)
+                : ThemeData.dark(useMaterial3: true),
+            home: const BootstrapPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Text unread = tester.widget<Text>(find.text('Unread channel'));
+      final Text read = tester.widget<Text>(find.text('Read channel'));
+      final Text mutedUnread = tester.widget<Text>(
+        find.text('Muted unread channel'),
+      );
+
+      expect(unread.style?.fontWeight, FontWeight.w600);
+      expect(unread.semanticsLabel, 'Unread channel, unread');
+      expect(read.style?.fontWeight, FontWeight.w300);
+      expect(mutedUnread.style?.fontWeight, FontWeight.w300);
+    }
+  });
+
   testWidgets('applies collapsed and muted category presentation', (
     WidgetTester tester,
   ) async {
@@ -2667,6 +2708,53 @@ final class _CollapsedMutedSidebarRepository implements ChannelRepository {
                 name: 'quiet',
                 displayName: 'Quiet channel',
                 kind: ChannelKind.publicChannel,
+              ),
+            ],
+          ),
+        ],
+      );
+}
+
+final class _UnreadSidebarRepository implements ChannelRepository {
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      const ChannelSidebarSnapshot(
+        team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'channels',
+            displayName: 'Channels',
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'unread',
+                teamId: 'team-1',
+                name: 'unread',
+                displayName: 'Unread channel',
+                kind: ChannelKind.publicChannel,
+                isUnread: true,
+              ),
+              SidebarChannel(
+                id: 'read',
+                teamId: 'team-1',
+                name: 'read',
+                displayName: 'Read channel',
+                kind: ChannelKind.publicChannel,
+              ),
+              SidebarChannel(
+                id: 'muted-unread',
+                teamId: 'team-1',
+                name: 'muted-unread',
+                displayName: 'Muted unread channel',
+                kind: ChannelKind.publicChannel,
+                isUnread: true,
+                muted: true,
               ),
             ],
           ),

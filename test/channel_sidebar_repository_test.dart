@@ -26,7 +26,11 @@ void main() {
       expect(api.calls.first, 'teams');
       expect(
         api.calls,
-        containsAll(<String>['channels:team-1', 'categories:team-1']),
+        containsAll(<String>[
+          'channels:team-1',
+          'memberships:team-1',
+          'categories:team-1',
+        ]),
       );
       expect(snapshot.team?.displayName, 'Example team');
       expect(snapshot.sections.first.displayName, 'Work');
@@ -42,6 +46,8 @@ void main() {
         snapshot.sections.first.channels.first.profileImage?.updatedAt,
         99,
       );
+      expect(snapshot.sections.first.channels.first.isUnread, isTrue);
+      expect(snapshot.sections.first.channels.first.muted, isFalse);
     },
   );
 }
@@ -175,6 +181,7 @@ final class _FakeMattermostApi implements MattermostApi {
         name: 'me__ada',
         displayName: '',
         type: 'D',
+        totalMessageCount: 2,
       ),
       MattermostChannelDto(
         id: 'town-square',
@@ -183,6 +190,23 @@ final class _FakeMattermostApi implements MattermostApi {
         displayName: 'Town Square',
         type: 'O',
       ),
+    ];
+  }
+
+  @override
+  Future<List<MattermostChannelMemberDto>> getChannelMembersForUser({
+    required String userId,
+    required String teamId,
+  }) async {
+    calls.add('memberships:$teamId');
+    return const <MattermostChannelMemberDto>[
+      MattermostChannelMemberDto(
+        channelId: 'direct-1',
+        userId: 'me',
+        msgCount: 1,
+        notifyProps: MattermostChannelNotifyPropsDto(markUnread: 'all'),
+      ),
+      MattermostChannelMemberDto(channelId: 'town-square', userId: 'me'),
     ];
   }
 

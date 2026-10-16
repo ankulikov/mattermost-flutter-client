@@ -160,6 +160,7 @@ final Provider<ChannelRepository> channelRepositoryProvider =
       (Ref ref) => MattermostChannelRepository(
         api: ref.watch(activeMattermostApiProvider),
         users: ref.watch(userRepositoryProvider),
+        realtime: ref.watch(sessionRealtimeServiceProvider),
       ),
     );
 

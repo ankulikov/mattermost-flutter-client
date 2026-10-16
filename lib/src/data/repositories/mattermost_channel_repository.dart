@@ -1,23 +1,38 @@
+import 'dart:convert';
+
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/dialog_display_name_mapper.dart';
 import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
+import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
+import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 
-final class MattermostChannelRepository implements ChannelRepository {
+final class MattermostChannelRepository
+    implements ChannelRepository, ChannelSidebarRealtimeRepository {
   const MattermostChannelRepository({
     required MattermostApi api,
     required UserRepository users,
+    SessionRealtimeService? realtime,
   }) : _api = api,
-       _users = users;
+       _users = users,
+       _realtime = realtime;
+
+  static const Set<String> _sidebarEventNames = <String>{
+    'posted',
+    'channel_viewed',
+    'post_unread',
+    'channel_member_updated',
+  };
 
   final MattermostApi _api;
   final UserRepository _users;
+  final SessionRealtimeService? _realtime;
 
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async {
@@ -28,14 +43,34 @@ final class MattermostChannelRepository implements ChannelRepository {
         .getChannelsForUser(userId: session.userId, teamId: team.id);
     final Future<MattermostChannelCategoriesDto> categoriesFuture = _api
         .getChannelCategories(userId: session.userId, teamId: team.id);
-    final List<MattermostChannelDto> rawChannels = await channelsFuture;
-    final MattermostChannelCategoriesDto categoryResponse =
-        await categoriesFuture;
+    final Future<List<MattermostChannelMemberDto>> membershipsFuture = _api
+        .getChannelMembersForUser(userId: session.userId, teamId: team.id);
+    final (
+      List<MattermostChannelDto> rawChannels,
+      MattermostChannelCategoriesDto categoryResponse,
+      List<MattermostChannelMemberDto> memberships,
+    ) = await (
+      channelsFuture,
+      categoriesFuture,
+      membershipsFuture,
+    ).wait;
+    final Map<String, MattermostChannelMemberDto> membershipsByChannel =
+        <String, MattermostChannelMemberDto>{
+          for (final MattermostChannelMemberDto member in memberships)
+            member.channelId: member,
+        };
     List<SidebarChannel> channels = rawChannels
-        .map(
-          (MattermostChannelDto channel) =>
-              mapChannel(channel, teamName: team.name),
-        )
+        .map((MattermostChannelDto rawChannel) {
+          final SidebarChannel channel = mapChannel(
+            rawChannel,
+            teamName: team.name,
+          );
+          return mapChannelMembership(
+            channel: channel,
+            rawChannel: rawChannel,
+            member: membershipsByChannel[channel.id],
+          );
+        })
         .toList(growable: false);
     try {
       channels = await _resolveDialogNames(
@@ -69,6 +104,106 @@ final class MattermostChannelRepository implements ChannelRepository {
       otherUserId: otherUserId,
     );
     return mapChannel(dto).withDisplayName(otherUserDisplayName);
+  }
+
+  @override
+  Stream<ChannelSidebarRealtimeEvent> watchSidebar({
+    required AuthSession session,
+  }) {
+    final SessionRealtimeService? realtime = _realtime;
+    if (realtime == null) {
+      return const Stream<ChannelSidebarRealtimeEvent>.empty();
+    }
+    return realtime
+        .watch(
+          session: session,
+          subscription: const SessionRealtimeSubscription(
+            eventNames: _sidebarEventNames,
+          ),
+        )
+        .map((SessionRealtimeSignal signal) {
+          switch (signal) {
+            case SessionRealtimeRecoveryRequired():
+              return const ChannelSidebarRefreshRequired();
+            case SessionRealtimeConnectionChanged():
+              return null;
+            case SessionRealtimeEventReceived(:final event):
+              return _mapSidebarEvent(session, event);
+          }
+        })
+        .where((ChannelSidebarRealtimeEvent? event) => event != null)
+        .cast<ChannelSidebarRealtimeEvent>();
+  }
+
+  @override
+  Future<void> markChannelViewed({
+    required AuthSession session,
+    required String channelId,
+    String? previousChannelId,
+  }) => _api.viewChannel(
+    userId: session.userId,
+    channelId: channelId,
+    previousChannelId: previousChannelId,
+  );
+
+  ChannelSidebarRealtimeEvent? _mapSidebarEvent(
+    AuthSession session,
+    MattermostWebSocketEvent event,
+  ) {
+    switch (event.name) {
+      case 'posted':
+        final MattermostPostDto? post = _postFromEvent(event.data);
+        if (post == null || post.channelId.isEmpty) {
+          return const ChannelSidebarRefreshRequired();
+        }
+        if (post.userId == session.userId) return null;
+        return ChannelSidebarMessagePosted(
+          channelId: post.channelId,
+          isThreadReply: post.rootId.isNotEmpty,
+        );
+      case 'channel_viewed':
+        final String channelId = _eventChannelId(event);
+        return channelId.isEmpty
+            ? const ChannelSidebarRefreshRequired()
+            : ChannelSidebarUnreadChanged(
+                channelId: channelId,
+                isUnread: false,
+              );
+      case 'post_unread':
+        final String channelId = _eventChannelId(event);
+        return channelId.isEmpty
+            ? const ChannelSidebarRefreshRequired()
+            : ChannelSidebarUnreadChanged(channelId: channelId, isUnread: true);
+      case 'channel_member_updated':
+        return const ChannelSidebarRefreshRequired();
+      default:
+        return null;
+    }
+  }
+
+  static String _eventChannelId(MattermostWebSocketEvent event) {
+    if (event.channelId.isNotEmpty) return event.channelId;
+    final Object? channelId = event.data['channel_id'];
+    return channelId is String ? channelId : '';
+  }
+
+  static MattermostPostDto? _postFromEvent(Map<String, Object?> data) {
+    final Object? raw = data['post'];
+    final Object? decoded;
+    try {
+      decoded = raw is String ? jsonDecode(raw) : raw;
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map<Object?, Object?>) return null;
+    return MattermostPostDto.fromJson(
+      decoded.map(
+        (Object? key, Object? value) => MapEntry<String, Object?>(
+          key is String ? key : key.toString(),
+          value,
+        ),
+      ),
+    );
   }
 
   Future<List<SidebarChannel>> _resolveDialogNames({

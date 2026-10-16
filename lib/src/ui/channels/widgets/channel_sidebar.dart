@@ -321,7 +321,7 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
         return _ChannelTile(
           key: ValueKey<String>('channel-${channel.id}'),
           channel: channel,
-          muted: section.muted,
+          muted: section.muted || channel.muted,
           selected: ref.watch(
             selectedChannelProvider.select(
               (SidebarChannel? selected) => selected?.id == channel.id,
@@ -458,6 +458,9 @@ class _ChannelTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme colors = theme.colorScheme;
+    final bool highlightUnread = channel.isUnread && !muted;
     final RoundedRectangleBorder shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(8),
     );
@@ -465,9 +468,7 @@ class _ChannelTile extends StatelessWidget {
       opacity: muted ? 0.55 : 1,
       child: Material(
         key: ValueKey<String>('channel-selection-surface-${channel.id}'),
-        color: selected
-            ? Theme.of(context).colorScheme.secondaryContainer
-            : Colors.transparent,
+        color: selected ? colors.secondaryContainer : Colors.transparent,
         shape: shape,
         clipBehavior: Clip.antiAlias,
         child: ListTile(
@@ -475,11 +476,29 @@ class _ChannelTile extends StatelessWidget {
           visualDensity: const VisualDensity(vertical: -2),
           selected: selected,
           shape: shape,
-          leading: ChannelAvatar(channel: channel),
+          leading: IconTheme(
+            data: theme.iconTheme.copyWith(
+              color: selected
+                  ? colors.onSecondaryContainer
+                  : highlightUnread
+                  ? colors.onSurface
+                  : colors.onSurfaceVariant,
+            ),
+            child: ChannelAvatar(channel: channel),
+          ),
           title: Text(
             channel.displayName,
+            semanticsLabel: highlightUnread
+                ? ChannelSidebarStrings.unreadChannel(channel.displayName)
+                : channel.displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            // Let ListTile provide its established typography and colors.
+            // Unread rows only add their emphasis, keeping all other channel
+            // rows visually identical to the pre-unread-highlight sidebar.
+            style: highlightUnread
+                ? const TextStyle(fontWeight: FontWeight.w600)
+                : const TextStyle(fontWeight: FontWeight.w300),
           ),
           onTap: onTap,
         ),

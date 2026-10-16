@@ -35,6 +35,26 @@ SidebarChannel mapChannel(MattermostChannelDto dto, {String teamName = ''}) {
   );
 }
 
+/// Adds the current user's channel-specific read and notification projection.
+///
+/// This client uses Mattermost's CRT/root counters for ordinary channels and
+/// the full message counters for direct and group conversations, matching the
+/// policies used by Inbox.
+SidebarChannel mapChannelMembership({
+  required SidebarChannel channel,
+  required MattermostChannelDto rawChannel,
+  MattermostChannelMemberDto? member,
+}) {
+  if (member == null) return channel;
+  final bool isUnread = channel.isDialog
+      ? rawChannel.totalMessageCount > member.msgCount
+      : rawChannel.totalMessageCountRoot > member.msgCountRoot;
+  return channel.copyWith(
+    isUnread: isUnread,
+    muted: member.notifyProps?.markUnread == 'mention',
+  );
+}
+
 List<SidebarSection> mapSections({
   required List<SidebarChannel> channels,
   required List<MattermostChannelCategoryDto> categories,
