@@ -498,7 +498,7 @@ class _ChannelTile extends StatelessWidget {
             // rows visually identical to the pre-unread-highlight sidebar.
             style: highlightUnread
                 ? const TextStyle(fontWeight: FontWeight.w600)
-                :  const TextStyle(fontWeight: FontWeight.w300),
+                : const TextStyle(fontWeight: FontWeight.w300),
           ),
           onTap: onTap,
         ),
