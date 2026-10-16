@@ -6,11 +6,23 @@ the authenticated shell is using it.
 
 ## Loading and refresh
 
-The initial request loads the user's first team, its channels, and sidebar
-categories. Direct and group-message names are resolved through the users API.
-An initial failure shows a retry state. Manual refresh keeps the existing
-snapshot visible until the replacement succeeds and reports a non-blocking
-failure otherwise.
+The initial request loads the user's first team, its channels, channel
+memberships, and sidebar categories. Membership read counters are compared with
+the channel totals: ordinary channels use the CRT root counters, while direct
+and group conversations use the full-message counters. Unread channel names and
+icons use the emphasized sidebar treatment; muted channels retain the muted
+treatment.
+
+Unread state is updated from `posted`, `channel_viewed`, and `post_unread`
+WebSocket events. A reconnect or sequence gap performs an authoritative REST
+reload. There is no polling interval: the sidebar loads when its session starts,
+updates from realtime events, and reloads on manual refresh or realtime
+recovery. Selecting a channel calls the v4 channel-view endpoint and clears the
+local highlight after the server accepts the new read boundary.
+
+Direct and group-message names are resolved through the users API. An initial
+failure shows a retry state. Manual refresh keeps the existing snapshot visible
+until the replacement succeeds and reports a non-blocking failure otherwise.
 
 Sidebar search filters the loaded snapshot locally by the displayed channel or
 conversation name. Matches remain in their original categories. Search expands
@@ -66,6 +78,8 @@ window narrows.
 
 - Sidebar snapshots, category expansion, pagination state, and sync metadata
   are not stored in Drift.
+- Channel unread counters are part of the volatile sidebar snapshot and are
+  never persisted locally.
 - Refresh keeps list identity and scroll position where possible.
 - User-facing strings come from the feature's string layer, not widgets.
 - Keyboard traversal, focus restoration, semantics, touch targets, and large

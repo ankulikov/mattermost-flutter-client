@@ -11,4 +11,6 @@ abstract final class ChannelSidebarStrings {
   static const String searchHint = 'Find channels and dialogs';
   static const String clearSearch = 'Clear channel search';
   static const String noSearchResults = 'No matching channels or dialogs';
+
+  static String unreadChannel(String channelName) => '$channelName, unread';
 }

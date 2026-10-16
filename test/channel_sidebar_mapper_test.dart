@@ -219,6 +219,57 @@ void main() {
     }
   });
 
+  test('maps unread state from root counters for ordinary channels', () {
+    const MattermostChannelDto raw = MattermostChannelDto(
+      id: 'channel-1',
+      teamId: 'team-1',
+      name: 'general',
+      displayName: 'General',
+      type: 'O',
+      totalMessageCount: 20,
+      totalMessageCountRoot: 8,
+    );
+
+    final SidebarChannel channel = mapChannelMembership(
+      channel: mapChannel(raw),
+      rawChannel: raw,
+      member: const MattermostChannelMemberDto(
+        channelId: 'channel-1',
+        userId: 'me',
+        msgCount: 20,
+        msgCountRoot: 7,
+      ),
+    );
+
+    expect(channel.isUnread, isTrue);
+  });
+
+  test('maps dialog unread state from full counters and mute preference', () {
+    const MattermostChannelDto raw = MattermostChannelDto(
+      id: 'dm-1',
+      teamId: '',
+      name: 'me__ada',
+      displayName: '',
+      type: 'D',
+      totalMessageCount: 5,
+      totalMessageCountRoot: 0,
+    );
+
+    final SidebarChannel channel = mapChannelMembership(
+      channel: mapChannel(raw),
+      rawChannel: raw,
+      member: const MattermostChannelMemberDto(
+        channelId: 'dm-1',
+        userId: 'me',
+        msgCount: 4,
+        notifyProps: MattermostChannelNotifyPropsDto(markUnread: 'mention'),
+      ),
+    );
+
+    expect(channel.isUnread, isTrue);
+    expect(channel.muted, isTrue);
+  });
+
   test('keeps the team handle on a mapped channel for post permalinks', () {
     final SidebarChannel channel = mapChannel(
       const MattermostChannelDto(

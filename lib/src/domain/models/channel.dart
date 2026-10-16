@@ -26,6 +26,8 @@ final class SidebarChannel {
     this.teamName = '',
     this.lastActivityAt = 0,
     this.profileImage,
+    this.isUnread = false,
+    this.muted = false,
   });
 
   final String id;
@@ -38,6 +40,8 @@ final class SidebarChannel {
   final String teamName;
   final int lastActivityAt;
   final SidebarProfileImage? profileImage;
+  final bool isUnread;
+  final bool muted;
 
   bool get isDialog =>
       kind == ChannelKind.directMessage || kind == ChannelKind.groupMessage;
@@ -51,6 +55,8 @@ final class SidebarChannel {
     teamName: teamName,
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
+    isUnread: isUnread,
+    muted: muted,
   );
 
   SidebarChannel withDirectUser({
@@ -69,6 +75,21 @@ final class SidebarChannel {
       userId: userId,
       updatedAt: profileImageUpdatedAt,
     ),
+    isUnread: isUnread,
+    muted: muted,
+  );
+
+  SidebarChannel copyWith({bool? isUnread, bool? muted}) => SidebarChannel(
+    id: id,
+    teamId: teamId,
+    name: name,
+    displayName: displayName,
+    kind: kind,
+    teamName: teamName,
+    lastActivityAt: lastActivityAt,
+    profileImage: profileImage,
+    isUnread: isUnread ?? this.isUnread,
+    muted: muted ?? this.muted,
   );
 }
 
