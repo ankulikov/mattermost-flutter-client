@@ -1863,8 +1863,8 @@ void main() {
 
       expect(unread.style?.fontWeight, FontWeight.w600);
       expect(unread.semanticsLabel, 'Unread channel, unread');
-      expect(read.style, isNull);
-      expect(mutedUnread.style, isNull);
+      expect(read.style?.fontWeight, FontWeight.w300);
+      expect(mutedUnread.style?.fontWeight, FontWeight.w300);
     }
   });
 
