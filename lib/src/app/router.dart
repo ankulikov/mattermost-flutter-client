@@ -109,6 +109,7 @@ final GoRouter appRouter = GoRouter(
                 teamId: arguments.teamId,
                 unreadReplies: arguments.unreadReplies,
                 positionAtEndWhenRead: arguments.positionAtEndWhenRead,
+                markReadOnOpen: arguments.markReadOnOpen,
                 onSelectChannel: arguments.onSelectChannel,
                 onReplySent: arguments.onReplySent,
                 onThreadRead: arguments.onThreadRead,

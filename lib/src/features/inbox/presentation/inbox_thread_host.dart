@@ -187,6 +187,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
                   teamId: target.teamId,
                   unreadReplies: target.unreadReplies,
                   positionAtEndWhenRead: target.positionAtEndWhenRead,
+                  markReadOnOpen: false,
                   onSelectChannel: widget.onSelectChannel,
                   onThreadUnfollowed: _removeUnfollowedThread,
                   onClose: () => setState(() => _selectedTarget = null),
@@ -224,6 +225,7 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
       teamId: target.teamId,
       unreadReplies: target.unreadReplies,
       positionAtEndWhenRead: target.positionAtEndWhenRead,
+      markReadOnOpen: false,
       onSelectChannel: widget.onSelectChannel == null
           ? null
           : (String name) {

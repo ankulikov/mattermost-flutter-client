@@ -172,6 +172,53 @@ void main() {
     expect(find.text('Current workspace'), findsOneWidget);
   });
 
+  testWidgets('does not mark an Inbox thread read when it opens', (
+    WidgetTester tester,
+  ) async {
+    final _RecordingThreadRepository threadRepository =
+        _RecordingThreadRepository();
+    final InboxItem item = ThreadInboxItem(
+      thread: FollowedThread(
+        root: _post(id: 'inbox-thread', channelId: publicChannel.id),
+        replyCount: 1,
+        lastReplyAt: DateTime.utc(2026, 9, 4, 12, 1),
+        lastViewedAt: DateTime.utc(2026, 9, 4, 12),
+        unreadReplies: 1,
+        unreadMentions: 0,
+      ),
+      channel: publicChannel,
+      teamId: 'team',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_NoopAuthRepository()),
+          authSessionProvider.overrideWithValue(_session),
+          postRepositoryProvider.overrideWithValue(_PostRepository()),
+          threadRepositoryProvider.overrideWithValue(threadRepository),
+        ],
+        child: MaterialApp(
+          home: InboxThreadHost(
+            showAdjacentWorkspace: true,
+            background: const Text('Current workspace'),
+            inboxBuilder: (_, ValueChanged<InboxItem> onOpenItem) => Center(
+              child: FilledButton(
+                onPressed: () => onOpenItem(item),
+                child: const Text('Inbox thread'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Inbox thread'));
+    await tester.pumpAndSettle();
+
+    expect(threadRepository.markReadCalls, 0);
+  });
+
   testWidgets('pushes a thread on narrow width and Back restores Inbox', (
     WidgetTester tester,
   ) async {
@@ -201,8 +248,14 @@ void main() {
         ),
         GoRoute(
           path: ThreadRoute.path,
-          builder: (_, GoRouterState state) =>
-              Text('Route thread ${state.pathParameters['rootPostId']}'),
+          builder: (_, GoRouterState state) {
+            final ThreadRouteArguments arguments =
+                state.extra! as ThreadRouteArguments;
+            return Text(
+              'Route thread ${state.pathParameters['rootPostId']} '
+              'markReadOnOpen=${arguments.markReadOnOpen}',
+            );
+          },
         ),
       ],
     );
@@ -221,14 +274,20 @@ void main() {
     await tester.tap(find.text('Direct message'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Route thread channel-message'), findsOneWidget);
+    expect(
+      find.text('Route thread channel-message markReadOnOpen=false'),
+      findsOneWidget,
+    );
     expect(find.text('Direct message'), findsNothing);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     expect(find.text('Direct message'), findsOneWidget);
-    expect(find.text('Route thread channel-message'), findsNothing);
+    expect(
+      find.text('Route thread channel-message markReadOnOpen=false'),
+      findsNothing,
+    );
   });
 
   testWidgets('opens a multi-message bundle beside Inbox as a chat', (
@@ -506,7 +565,7 @@ final class _PostRepository extends PostRepository {
   }) async => const ChannelPostPage();
 }
 
-final class _ThreadRepository extends ThreadRepository {
+class _ThreadRepository extends ThreadRepository {
   @override
   Future<MessageThread> load({
     required AuthSession session,
@@ -534,6 +593,20 @@ final class _ThreadRepository extends ThreadRepository {
     isComplete: true,
     loadedAt: DateTime.utc(2026, 9, 4, 12, 2),
   );
+}
+
+final class _RecordingThreadRepository extends _ThreadRepository {
+  int markReadCalls = 0;
+
+  @override
+  Future<void> markRead({
+    required AuthSession session,
+    required String teamId,
+    required String rootPostId,
+    required DateTime timestamp,
+  }) async {
+    markReadCalls += 1;
+  }
 }
 
 InboxPostCandidate _candidate(Post post, SidebarChannel channel) =>
