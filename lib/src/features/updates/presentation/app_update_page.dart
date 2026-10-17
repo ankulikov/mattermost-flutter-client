@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/features/updates/domain/models/app_update.dart';
@@ -8,6 +9,14 @@ import 'package:mattermost_flutter/src/features/updates/presentation/app_update_
 import 'package:mattermost_flutter/src/features/updates/presentation/app_update_strings.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+final RegExp _pullRequestReference = RegExp(
+  r'(?:\[[^\]]*\]\()?(https://github\.com/ankulikov/mattermost-flutter-client/pull/(\d+))(?:\))?',
+);
+final RegExp _compareReference = RegExp(
+  r'(?:\[[^\]]*\]\()?(https://github\.com/ankulikov/mattermost-flutter-client/compare/([^/?#\s)]+\.\.\.[^/?#\s)]+))(?:\))?',
+);
 
 class AppUpdatePage extends ConsumerStatefulWidget {
   const AppUpdatePage({super.key});
@@ -392,17 +401,90 @@ class _ReleaseNotes extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          SelectionArea(
-            child: Text(
-              release.notes.isEmpty
-                  ? AppUpdateStrings.noReleaseNotes
-                  : release.notes,
-            ),
-          ),
+          release.notes.isEmpty
+              ? const Text(AppUpdateStrings.noReleaseNotes)
+              : _ReleaseNotesMarkdown(data: release.notes),
         ],
       ),
     ),
   );
+}
+
+/// Displays GitHub release notes as selectable Markdown.
+///
+/// Release metadata is remote content. HTTP(S) links open in the external
+/// browser, and images are represented by their alternative text instead of
+/// loading remote resources.
+class _ReleaseNotesMarkdown extends StatelessWidget {
+  const _ReleaseNotesMarkdown({required this.data});
+
+  final String data;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final TextStyle bodyStyle = theme.textTheme.bodyMedium!;
+    final ColorScheme colors = theme.colorScheme;
+    return MarkdownBody(
+      data: normalizeReleaseNotesMarkdown(data),
+      selectable: true,
+      softLineBreak: true,
+      onTapLink: (_, String? href, _) {
+        final Uri? uri = href == null ? null : Uri.tryParse(href);
+        if (uri == null ||
+            !const <String>{'http', 'https'}.contains(uri.scheme)) {
+          return;
+        }
+        unawaited(_openReleaseNotesLink(uri));
+      },
+      imageBuilder: (_, _, String? alt) => Text(alt ?? ''),
+      styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+        p: bodyStyle,
+        blockSpacing: 8,
+        a: bodyStyle.copyWith(
+          color: colors.primary,
+          decoration: TextDecoration.underline,
+          decorationColor: colors.primary,
+        ),
+        code: bodyStyle.copyWith(
+          fontFamily: 'monospace',
+          backgroundColor: colors.surfaceContainerHighest,
+        ),
+        h1: theme.textTheme.headlineSmall,
+        h2: theme.textTheme.titleLarge,
+        h3: theme.textTheme.titleMedium,
+        h4: theme.textTheme.titleSmall,
+        h5: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+        h6: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+        horizontalRuleDecoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Converts known GitHub release references to concise Markdown links.
+///
+/// Both generated plain URLs and links GitHub has already labeled are accepted.
+String normalizeReleaseNotesMarkdown(String markdown) => markdown
+    .replaceAllMapped(_pullRequestReference, (Match match) {
+      final String url = match.group(1)!;
+      final String number = match.group(2)!;
+      return '[#$number]($url)';
+    })
+    .replaceAllMapped(_compareReference, (Match match) {
+      final String url = match.group(1)!;
+      final String versions = match.group(2)!;
+      return '[$versions]($url)';
+    });
+
+Future<void> _openReleaseNotesLink(Uri uri) async {
+  try {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } on Object {
+    // The platform owns the external browser; failure leaves the dialog open.
+  }
 }
 
 class _InitialFailure extends ConsumerWidget {

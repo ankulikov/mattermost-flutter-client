@@ -9,6 +9,20 @@ import 'package:mattermost_flutter/src/features/updates/domain/repositories/app_
 import 'package:mattermost_flutter/src/features/updates/presentation/app_update_page.dart';
 
 void main() {
+  test('shortens known GitHub pull request and compare references', () {
+    const String repository =
+        'https://github.com/ankulikov/mattermost-flutter-client';
+
+    expect(
+      normalizeReleaseNotesMarkdown(
+        'Fixed $repository/pull/12345 and '
+        '[full changelog]($repository/compare/v0.0.3...v0.5.0).',
+      ),
+      'Fixed [#12345]($repository/pull/12345) and '
+      '[v0.0.3...v0.5.0]($repository/compare/v0.0.3...v0.5.0).',
+    );
+  });
+
   Future<void> pumpPage(
     WidgetTester tester,
     _UpdateRepository repository, {
@@ -51,6 +65,47 @@ void main() {
     expect(find.text('Mattermost 1.1.0'), findsOneWidget);
     expect(find.text('New messages experience'), findsOneWidget);
     expect(find.text('Install 1.1.0'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('renders GitHub release notes as selectable Markdown', (
+    WidgetTester tester,
+  ) async {
+    await pumpPage(
+      tester,
+      _UpdateRepository(
+        catalog: _catalog(
+          notes: '''
+## What's Changed
+
+* **New** messages in [#8](https://github.com/example/repo/pull/8)
+* [full changelog](https://github.com/ankulikov/mattermost-flutter-client/compare/v0.0.3...v0.5.0)
+![release image](https://example.com/release.png)
+''',
+        ),
+      ),
+    );
+
+    expect(find.text("What's Changed"), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (Widget widget) =>
+            widget is SelectableText &&
+            widget.textSpan?.toPlainText().contains('New messages in #8') ==
+                true,
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('release image'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (Widget widget) =>
+            widget is SelectableText &&
+            widget.textSpan?.toPlainText().contains('v0.0.3...v0.5.0') == true,
+      ),
+      findsOneWidget,
+    );
+    expect(find.text("## What's Changed"), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -221,7 +276,10 @@ final class _UpdateRepository implements AppUpdateRepository {
   }
 }
 
-UpdateCatalog _catalog({bool complete = true}) {
+UpdateCatalog _catalog({
+  bool complete = true,
+  String notes = 'New messages experience',
+}) {
   final UpdateArtifact artifact = UpdateArtifact(
     name: 'mattermost-v1.1.0-arm64-v8a.apk',
     downloadUrl: Uri.parse('https://github.com/example/update.apk'),
@@ -232,7 +290,7 @@ UpdateCatalog _catalog({bool complete = true}) {
   final UpdateRelease release = UpdateRelease(
     version: const AppVersion(major: 1, minor: 1, patch: 0),
     title: 'Mattermost 1.1.0',
-    notes: 'New messages experience',
+    notes: notes,
     publishedAt: DateTime.utc(2026, 10, 17),
     artifacts: <UpdateArtifact>[artifact],
   );

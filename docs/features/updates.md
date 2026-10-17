@@ -88,9 +88,12 @@ application as a recovery path.
 ## UI and refresh behavior
 
 The Profile settings list opens the update screen. It shows installed and
-available versions, all intervening release notes as inert selectable text,
-download progress, permission guidance, retry, and “Later.” Release text is not
-rendered as HTML or interactive Markdown.
+available versions, all intervening release notes as selectable GitHub Flavored
+Markdown, download progress, permission guidance, retry, and “Later.” Headings,
+lists, emphasis, code, and link labels are formatted. URLs for this repository's
+pull requests and version comparisons use compact `#123` and
+`vA...vB` labels. HTTP(S) links open in the external browser. Images are
+rendered as their alternative text, and raw HTML is not rendered.
 
 The application performs a quiet check after launch and on resume, at most once
 every six hours per process. Manual checks remain available. An initial failure
