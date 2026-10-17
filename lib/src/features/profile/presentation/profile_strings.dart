@@ -19,6 +19,7 @@ abstract final class ProfileStrings {
   static const String security = 'Security';
   static const String notifications = 'Notifications';
   static const String display = 'Display';
+  static const String appUpdates = 'App updates';
   static const String theme = 'Theme';
   static const String themeDescription =
       'Choose how Mattermost looks on this device.';

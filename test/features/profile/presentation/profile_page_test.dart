@@ -303,6 +303,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('opens Android update settings from the enabled profile tile', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpProfile(tester, _ProfileRepository());
+
+    final Finder updates = find.byKey(
+      const ValueKey<String>('profile-app-updates'),
+    );
+    await tester.drag(
+      find.byKey(const ValueKey<String>('profile-scroll-view')),
+      const Offset(0, -900),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<ListTile>(updates).enabled, isTrue);
+
+    await tester.tap(updates);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.byKey(const ValueKey<String>('app-update-page')),
+      findsOneWidget,
+    );
+    expect(find.text('App updates'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows an initial retry state without profile data', (
     WidgetTester tester,
   ) async {

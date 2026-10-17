@@ -29,6 +29,14 @@ Each platform also has a uniquely named SHA-256 checksum file. Matching Dart and
 native symbol files remain private workflow artifacts for 90 days. Keep them for
 as long as the corresponding binary can produce crash reports.
 
+GitHub's release-asset metadata must expose the SHA-256 digest for every Android
+APK. The Android in-app updater rejects an asset with a missing digest, an
+unexpected filename/ABI, a non-GitHub download URL, or a mismatched size/hash.
+Do not rename Android assets without updating the rules in
+`docs/features/updates.md` and the update client together. Release publishing
+also rejects an empty generated release-notes body because the client presents
+every intervening stable release.
+
 ## Android signing secrets
 
 The Android release job fails unless these repository or environment secrets are
@@ -85,6 +93,11 @@ The release Gradle configuration reads `android/key.properties`; Git ignores
 that file and the keystore. Keep a secure backup of both the keystore and its
 passwords. Android updates must use the same signing certificate as the
 installed application.
+
+The first updater-enabled release must be installed manually. Later direct APK
+installs require Android's “install unknown apps” trust for Mattermost, and the
+OS may still require confirmation. Never resolve an identity or signing mismatch
+by uninstalling the current app because that erases its local session and data.
 
 Create a keystore once:
 

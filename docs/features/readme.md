@@ -115,6 +115,7 @@ Drift, logs, analytics, fixtures, or screenshots.
 - [Mentions, reactions, and emoji](mentions-and-emoji.md)
 - [Profiles and statuses](profiles-and-statuses.md)
 - [User preferences](preferences.md)
+- [Android app updates](updates.md)
 - [Attachments and interactive messages](attachments-and-actions.md)
 
 Operational release details remain in [the release guide](../RELEASES.md).

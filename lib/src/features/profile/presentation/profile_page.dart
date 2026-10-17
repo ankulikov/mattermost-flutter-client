@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/features/profile/presentation/current_use
 import 'package:mattermost_flutter/src/features/profile/presentation/display_settings_page.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/profile_strings.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/widgets/profile_navigation_avatar.dart';
+import 'package:mattermost_flutter/src/features/updates/presentation/app_update_page.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_avatar_image.dart';
 
@@ -62,6 +63,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             ),
           ),
         ),
+        onAppUpdates: () => unawaited(
+          Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(
+              builder: (BuildContext context) => const AppUpdatePage(),
+            ),
+          ),
+        ),
         onLogout: _loggingOut ? null : () => unawaited(_logout()),
         isLoggingOut: _loggingOut,
       ),
@@ -100,6 +108,7 @@ class _ProfileBody extends StatelessWidget {
     required this.onCustomStatusSelected,
     required this.onClearCustomStatus,
     required this.onDisplaySettings,
+    required this.onAppUpdates,
     required this.onLogout,
     required this.isLoggingOut,
   });
@@ -109,6 +118,7 @@ class _ProfileBody extends StatelessWidget {
   final ValueChanged<QuickCustomStatus> onCustomStatusSelected;
   final VoidCallback onClearCustomStatus;
   final VoidCallback onDisplaySettings;
+  final VoidCallback onAppUpdates;
   final VoidCallback? onLogout;
   final bool isLoggingOut;
 
@@ -187,6 +197,7 @@ class _ProfileBody extends StatelessWidget {
                         const SizedBox(height: 32),
                         _SettingsMenu(
                           onDisplaySettings: onDisplaySettings,
+                          onAppUpdates: onAppUpdates,
                           onLogout: onLogout,
                           isLoggingOut: isLoggingOut,
                         ),
@@ -429,11 +440,13 @@ class _QuickStatusChoices extends StatelessWidget {
 class _SettingsMenu extends StatelessWidget {
   const _SettingsMenu({
     required this.onDisplaySettings,
+    required this.onAppUpdates,
     required this.onLogout,
     required this.isLoggingOut,
   });
 
   final VoidCallback onDisplaySettings;
+  final VoidCallback onAppUpdates;
   final VoidCallback? onLogout;
   final bool isLoggingOut;
 
@@ -468,6 +481,13 @@ class _SettingsMenu extends StatelessWidget {
                 icon: Icons.visibility_outlined,
                 label: ProfileStrings.display,
                 onTap: onDisplaySettings,
+              ),
+              const Divider(height: 1),
+              _SettingsTile(
+                tileKey: const ValueKey<String>('profile-app-updates'),
+                icon: Icons.system_update_alt,
+                label: ProfileStrings.appUpdates,
+                onTap: onAppUpdates,
               ),
             ],
           ),

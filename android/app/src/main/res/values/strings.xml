@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_notification_channel_name">App updates</string>
+    <string name="update_installed_notification_title">Update installed</string>
+    <string name="update_installed_notification_body">Open Mattermost</string>
+</resources>
