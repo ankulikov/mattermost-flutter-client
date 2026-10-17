@@ -60,6 +60,10 @@ cache. Adding a reaction updates the open channel or thread optimistically,
 then calls `POST /reactions`. Removing one calls
 `DELETE /users/{user_id}/posts/{post_id}/reactions/{emoji_name}`. A failed
 request rolls the local change back without replacing the displayed content.
+Realtime `reaction_added` and `reaction_removed` events apply an idempotent
+delta to a matching post in the open channel or thread. They use the same
+buffering and recovery path as post events, so socket echoes of optimistic
+changes do not double-count reactions.
 
 The reaction picker is an anchored popover for precise pointer input and a
 bottom sheet after a touch long press. It supports arrows, Enter, Escape,

@@ -670,8 +670,42 @@ final class ThreadController extends AsyncNotifier<ThreadViewState> {
   ) => switch (event) {
     PostRealtimeUpserted(:final post) => _withRealtimePost(current, post),
     PostRealtimeDeleted(:final post) => _withRealtimeDeletion(current, post),
+    PostRealtimeReactionChanged(
+      :final postId,
+      :final userId,
+      :final emojiName,
+      :final added,
+    ) =>
+      _withRealtimeReaction(
+        current,
+        postId: postId,
+        userId: userId,
+        emojiName: emojiName,
+        added: added,
+      ),
     PostRealtimeRecoveryRequired() => current,
   };
+
+  MessageThread _withRealtimeReaction(
+    MessageThread thread, {
+    required String postId,
+    required String userId,
+    required String emojiName,
+    required bool added,
+  }) {
+    final ChannelPost? post = _findPost(thread, postId);
+    if (post == null) return thread;
+    return _withReplacement(
+      thread,
+      applyRealtimeReaction(
+        post,
+        emojiName: emojiName,
+        userId: userId,
+        added: added,
+        currentUserId: _session?.userId ?? '',
+      ),
+    );
+  }
 
   MessageThread _withRealtimePost(MessageThread thread, ChannelPost post) {
     if (post.id == rootPostId) return _withReplacement(thread, post);

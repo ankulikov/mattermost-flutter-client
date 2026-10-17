@@ -215,6 +215,67 @@ Post toggleCurrentUserReaction(
   return post.withReactions(reactions);
 }
 
+/// Applies one server-confirmed reaction delta without changing post content.
+///
+/// WebSocket delivery can overlap an optimistic local mutation, so adding an
+/// existing user and removing an absent user are intentionally idempotent.
+Post applyRealtimeReaction(
+  Post post, {
+  required String emojiName,
+  required String userId,
+  required bool added,
+  required String currentUserId,
+}) {
+  if (emojiName.isEmpty || userId.isEmpty) return post;
+  final int index = post.reactions.indexWhere(
+    (PostReaction reaction) => reaction.emojiName == emojiName,
+  );
+  if (added) {
+    if (index < 0) {
+      return post.withReactions(<PostReaction>[
+        ...post.reactions,
+        PostReaction(
+          emoji: mattermostSystemEmojis[emojiName] ?? ':$emojiName:',
+          emojiName: emojiName,
+          count: 1,
+          reactedByCurrentUser: userId == currentUserId,
+          userIds: <String>[userId],
+        ),
+      ]);
+    }
+    final PostReaction current = post.reactions[index];
+    if (current.userIds.contains(userId)) return post;
+    final List<PostReaction> reactions = List<PostReaction>.of(post.reactions);
+    final List<String> userIds = <String>[...current.userIds, userId];
+    reactions[index] = current.copyWith(
+      count: userIds.length,
+      reactedByCurrentUser:
+          current.reactedByCurrentUser || userId == currentUserId,
+      userIds: userIds,
+    );
+    return post.withReactions(reactions);
+  }
+
+  if (index < 0) return post;
+  final PostReaction current = post.reactions[index];
+  if (!current.userIds.contains(userId)) return post;
+  final List<String> userIds = current.userIds
+      .where((String candidate) => candidate != userId)
+      .toList(growable: false);
+  final List<PostReaction> reactions = List<PostReaction>.of(post.reactions);
+  if (userIds.isEmpty) {
+    reactions.removeAt(index);
+  } else {
+    reactions[index] = current.copyWith(
+      count: userIds.length,
+      reactedByCurrentUser:
+          current.reactedByCurrentUser && userId != currentUserId,
+      userIds: userIds,
+    );
+  }
+  return post.withReactions(reactions);
+}
+
 int compareMessagesBySentAt(Post first, Post second) {
   final int byTime = first.sentAt.compareTo(second.sentAt);
   return byTime != 0 ? byTime : first.id.compareTo(second.id);

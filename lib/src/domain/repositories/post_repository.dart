@@ -24,6 +24,24 @@ final class PostRealtimeDeleted extends PostRealtimeEvent {
   final ChannelPost post;
 }
 
+/// A reaction change received from the active session's shared event bus.
+///
+/// Reaction socket events contain a reaction rather than a full post, so the
+/// open projection applies this delta to the matching post it already owns.
+final class PostRealtimeReactionChanged extends PostRealtimeEvent {
+  const PostRealtimeReactionChanged({
+    required this.postId,
+    required this.userId,
+    required this.emojiName,
+    required this.added,
+  });
+
+  final String postId;
+  final String userId;
+  final String emojiName;
+  final bool added;
+}
+
 /// The socket reconnected or skipped sequence numbers, so REST must reconcile.
 final class PostRealtimeRecoveryRequired extends PostRealtimeEvent {
   const PostRealtimeRecoveryRequired();

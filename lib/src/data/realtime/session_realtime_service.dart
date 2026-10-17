@@ -34,6 +34,8 @@ abstract final class MattermostRealtimeEventGroups {
     'posted',
     'post_edited',
     'post_deleted',
+    'reaction_added',
+    'reaction_removed',
   };
   static const Set<String> threads = <String>{'thread_updated'};
   static const Set<String> userStatus = <String>{'status_change'};
