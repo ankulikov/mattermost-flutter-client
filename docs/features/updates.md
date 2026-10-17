@@ -1,0 +1,101 @@
+# Android app updates
+
+The update feature discovers stable releases from the public GitHub Releases
+API and can install a compatible APK over the current Android application. The
+first updater-enabled build must still be installed manually. macOS, iOS, Web,
+and Windows do not use this installer.
+
+## Architecture and ownership
+
+The vertical slice lives under `lib/src/features/updates/`:
+
+- `domain` owns semantic/build version comparison, compatible ABI selection,
+  update state, and the repository contract;
+- `data` owns the unauthenticated GitHub adapter, installed-package metadata,
+  verified temporary download, and the Android platform gateway;
+- `presentation` owns the Riverpod controller and adaptive update screen.
+
+The GitHub client is process-wide infrastructure configured separately from
+`MattermostApi`. It never receives a Mattermost token, cookie, message, or user
+identifier. Release metadata is held in memory only. ETags avoid downloading an
+unchanged page again during the process lifetime.
+
+## Discovery and release identity
+
+The client requests stable, non-draft releases in pages of 100 and continues
+until GitHub reports that there is no next page. A ten-page safety bound avoids
+unbounded work. A later-page failure keeps the releases already fetched but
+marks the history incomplete; installation stays disabled until a complete
+retry succeeds.
+
+Tags must be `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH+BUILD`. Semantic
+versions are compared first. The optional tag build distinguishes releases
+with the same semantic version. The installed build number comes from platform
+package metadata, not `pubspec.yaml`. Flutter's release workflow adds an ABI
+offset to split-APK version codes (1,000 for ARM32, 2,000 for ARM64, and 4,000
+for x86-64); discovery removes the running process ABI's offset before comparing
+the tag build. The native installer still compares the unmodified Android
+version codes.
+
+Android assets must use the release workflow's ABI suffixes:
+
+```text
+mattermost-vVERSION-arm64-v8a.apk
+mattermost-vVERSION-armeabi-v7a.apk
+mattermost-vVERSION-x86_64.apk
+```
+
+The GitHub asset must provide a `sha256:` digest and an HTTPS download URL on
+`github.com`. Selection follows Android's ordered `SUPPORTED_ABIS` list. Every
+newer release is shown oldest-to-newest, while the install action targets the
+newest release that has a compatible asset.
+
+## Download and installation safety
+
+The APK is downloaded into the application cache with one active operation at
+a time. The client verifies the exact byte count and computes SHA-256 on a
+background isolate before calling Android. Partial and staged files are removed
+after failure or after the native installer has copied the APK into its session.
+
+The Kotlin gateway accepts only APKs inside the application cache. Before it
+creates a `PackageInstaller.Session`, it verifies:
+
+- the archive package name matches the running application ID;
+- the archive version code is strictly greater than the installed version code;
+- the archive's current signing certificate set exactly matches the installed
+  application's signing certificate set.
+
+The session asks Android for `USER_ACTION_NOT_REQUIRED` where supported, but the
+client always handles `STATUS_PENDING_USER_ACTION` and opens the system-owned
+confirmation UI. Android 8 and newer also require the user to trust this app as
+an install source. The update screen links to that per-source setting and checks
+the permission again when the app resumes.
+
+Successful replacement preserves application data because the application ID
+and signing identity do not change. The updater never uninstalls the current
+application as a recovery path.
+
+## UI and refresh behavior
+
+The Profile settings list opens the update screen. It shows installed and
+available versions, all intervening release notes as inert selectable text,
+download progress, permission guidance, retry, and “Later.” Release text is not
+rendered as HTML or interactive Markdown.
+
+The application performs a quiet check after launch and on resume, at most once
+every six hours per process. Manual checks remain available. An initial failure
+shows retry; a refresh failure preserves existing release information.
+
+The screen uses the shared 700 px compact breakpoint, constrains expanded
+content width, scrolls at large text scales, and exposes progress semantics.
+
+## Verification
+
+Unit tests cover version/build ordering, ABI selection, pagination,
+prerelease filtering, partial history, asset validation, cleanup, controller
+retry/refresh/install states, the six-hour bound, compact and expanded layouts,
+large text, permission recovery, and install blocking for partial history.
+
+An end-to-end release test still requires two APKs signed by the production
+release key. Install the older APK, sign in and change a preference, then update
+to the newer APK and verify that both session and preference survive.

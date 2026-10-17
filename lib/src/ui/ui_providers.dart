@@ -12,6 +12,7 @@ import 'package:mattermost_flutter/src/domain/services/realtime_connection_servi
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/current_user_profile_controller.dart';
+import 'package:mattermost_flutter/src/features/updates/presentation/app_update_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_controller.dart';
@@ -24,6 +25,12 @@ export '../data/providers/repository_providers.dart';
 final NotifierProvider<AuthController, AuthState> authControllerProvider =
     NotifierProvider<AuthController, AuthState>(
       () => AuthController(authRepositoryProvider),
+    );
+
+final NotifierProvider<AppUpdateController, AppUpdateViewState>
+appUpdateControllerProvider =
+    NotifierProvider<AppUpdateController, AppUpdateViewState>(
+      () => AppUpdateController(appUpdateRepositoryProvider),
     );
 
 /// UI projection for controller state. It contains only the domain session;

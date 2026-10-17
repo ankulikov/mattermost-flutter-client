@@ -49,10 +49,24 @@ import 'package:mattermost_flutter/src/features/search/data/repositories/matterm
 import 'package:mattermost_flutter/src/features/search/data/repositories/mattermost_message_search_timezone_repository.dart';
 import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_repository.dart';
 import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_timezone_repository.dart';
+import 'package:mattermost_flutter/src/features/updates/data/github_app_update_repository.dart';
+import 'package:mattermost_flutter/src/features/updates/domain/repositories/app_update_repository.dart';
 
 final Provider<RealtimeConnectionService> realtimeConnectionServiceProvider =
     Provider<RealtimeConnectionService>(
       (Ref ref) => ref.watch(sessionRealtimeServiceProvider),
+    );
+
+final Provider<AppUpdateRepository> appUpdateRepositoryProvider =
+    Provider<AppUpdateRepository>(
+      (Ref ref) => GithubAppUpdateRepository(
+        releaseApi: ref.watch(githubReleaseApiProvider),
+        installedApplicationSource: ref.watch(
+          installedApplicationSourceProvider,
+        ),
+        installerGateway: ref.watch(packageInstallerGatewayProvider),
+        downloader: ref.watch(updateArtifactDownloaderProvider),
+      ),
     );
 
 final Provider<UploadFilePicker> uploadFilePickerProvider =
