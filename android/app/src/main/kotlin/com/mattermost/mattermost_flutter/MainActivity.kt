@@ -1,5 +1,7 @@
 package com.mattermost.mattermost_flutter
 
+import android.app.ActivityOptions
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageInfo
@@ -8,11 +10,11 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import io.flutter.embedding.android.FlutterActivity
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.Executors
@@ -21,7 +23,6 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val METHOD_CHANNEL = "com.mattermost.mattermost_flutter/app_update"
         private const val EVENT_CHANNEL = "com.mattermost.mattermost_flutter/app_update_events"
-        private const val INSTALL_ACTION = "com.mattermost.mattermost_flutter.INSTALL_STATUS"
     }
 
     private val installExecutor = Executors.newSingleThreadExecutor()
@@ -52,6 +53,12 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         installExecutor.shutdown()
         super.onDestroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        getSystemService(NotificationManager::class.java)
+            .cancel(InstallResultActivity.UPDATE_NOTIFICATION_ID)
     }
 
     private fun handleUpdateMethod(call: MethodCall, result: MethodChannel.Result) {
@@ -143,7 +150,7 @@ class MainActivity : FlutterActivity() {
         if (archive.packageName != packageName) {
             throw UpdateValidationException("package_mismatch", "The package identity changed.")
         }
-        if (archive.longVersionCode <= installed.longVersionCode) {
+        if (packageVersionCode(archive) <= packageVersionCode(installed)) {
             throw UpdateValidationException("version_not_newer", "The update version is not newer.")
         }
         if (!hasCompatibleSigningIdentity(installed, archive)) {
@@ -154,7 +161,8 @@ class MainActivity : FlutterActivity() {
 
     private fun stageAndCommit(apk: File): Int {
         val installer = packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        val params =
+            PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(packageName)
         params.setSize(apk.length())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -172,20 +180,20 @@ class MainActivity : FlutterActivity() {
                         session.fsync(output)
                     }
                 }
-                val statusIntent = Intent(this, InstallStatusReceiver::class.java).apply {
-                    action = INSTALL_ACTION
-                    putExtra(InstallStatusReceiver.EXTRA_SESSION_ID, sessionId)
+                val statusIntent = Intent(this, InstallResultActivity::class.java).apply {
+                    putExtra(InstallResultActivity.EXTRA_SESSION_ID, sessionId)
                 }
-                val pendingIntent = PendingIntent.getBroadcast(
+                val pendingIntent = PendingIntent.getActivity(
                     this,
                     sessionId,
                     statusIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            PendingIntent.FLAG_MUTABLE
-                        } else {
-                            0
-                        },
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                PendingIntent.FLAG_MUTABLE
+                            } else {
+                                0
+                            },
+                    installResultActivityOptions(),
                 )
                 InstallStatusBus.emit(mapOf("type" to "installing"))
                 session.commit(pendingIntent.intentSender)
@@ -196,6 +204,21 @@ class MainActivity : FlutterActivity() {
         }
         return sessionId
     }
+
+    private fun installResultActivityOptions() =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            ActivityOptions.makeBasic().apply {
+                pendingIntentCreatorBackgroundActivityStartMode =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+                    } else {
+                        @Suppress("DEPRECATION")
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    }
+            }.toBundle()
+        } else {
+            null
+        }
 
     @Suppress("DEPRECATION")
     private fun packageArchiveInfo(apk: File): PackageInfo? =
@@ -247,11 +270,22 @@ class MainActivity : FlutterActivity() {
         }.toSet()
     }
 
-    private fun hasCompatibleSigningIdentity(installed: PackageInfo, archive: PackageInfo): Boolean {
+    private fun hasCompatibleSigningIdentity(
+        installed: PackageInfo,
+        archive: PackageInfo
+    ): Boolean {
         val installedDigests = signingDigests(installed)
         val archiveDigests = signingDigests(archive)
         return installedDigests.isNotEmpty() && installedDigests == archiveDigests
     }
+
+    @Suppress("DEPRECATION")
+    private fun packageVersionCode(info: PackageInfo): Long =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            info.versionCode.toLong()
+        }
 }
 
 private class UpdateValidationException(

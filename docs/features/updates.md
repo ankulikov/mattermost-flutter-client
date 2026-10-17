@@ -71,6 +71,16 @@ confirmation UI. Android 8 and newer also require the user to trust this app as
 an install source. The update screen links to that per-source setting and checks
 the permission again when the app resumes.
 
+Install status is delivered to a small transparent `InstallResultActivity`
+through the `PackageInstaller` session's Activity `PendingIntent`. It opens the
+system confirmation UI when required. After a successful replacement, it opens
+`MainActivity` and posts an “Update installed — Open Mattermost” notification
+as a fallback. `MainActivity` removes the fallback once it reaches the resumed
+state. On Android 13 and newer, the fallback is shown only when the user has
+allowed app notifications. Auto-open begins with the first published version
+that contains `InstallResultActivity`; replacing the app with an older APK that
+lacks the callback activity still completes the update but cannot auto-open it.
+
 Successful replacement preserves application data because the application ID
 and signing identity do not change. The updater never uninstalls the current
 application as a recovery path.
