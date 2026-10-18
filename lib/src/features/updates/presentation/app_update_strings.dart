@@ -3,7 +3,6 @@ abstract final class AppUpdateStrings {
   static const String checkForUpdates = 'Check for updates';
   static const String checking = 'Checking for updates';
   static const String retry = 'Retry';
-  static const String later = 'Later';
   static const String installedVersion = 'Installed version';
   static const String availableVersion = 'Available version';
   static const String upToDate = 'You are using the latest version.';
