@@ -33,7 +33,7 @@ class AppUpdateAvailableDialog extends StatelessWidget {
         key: const ValueKey<String>('app-update-now'),
         onPressed: () =>
             Navigator.of(context).pop(AppUpdateAvailableAction.updateNow),
-        child: const Text(AppUpdateStrings.updateNow),
+        child: const Text(AppUpdateStrings.update),
       ),
     ],
   );

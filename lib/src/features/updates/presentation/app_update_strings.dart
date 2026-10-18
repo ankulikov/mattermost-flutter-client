@@ -1,7 +1,7 @@
 abstract final class AppUpdateStrings {
   static const String title = 'App updates';
   static const String updateAvailableTitle = 'New version available';
-  static const String updateNow = 'Update now';
+  static const String update = 'Update';
   static const String later = 'Later';
   static const String checkForUpdates = 'Check for updates';
   static const String checking = 'Checking for updates';
@@ -42,8 +42,8 @@ abstract final class AppUpdateStrings {
     required String currentVersion,
     required String newVersion,
   }) =>
-      'New version available. Current version: $currentVersion, '
-      'New version: $newVersion';
+      'New version available ($currentVersion -> $newVersion). '
+      "Press 'Update' to see release notes and update the app.";
 
   static String downloadPercent(int percent) => 'Downloading update: $percent%';
 }

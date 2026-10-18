@@ -39,21 +39,19 @@ void main() {
     return result;
   }
 
-  testWidgets('shows versions and returns Update now', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('shows versions and returns Update', (WidgetTester tester) async {
     final ValueNotifier<AppUpdateAvailableAction?> result =
         await showDialogUnderTest(tester);
 
     expect(find.text('New version available'), findsOneWidget);
     expect(
       find.text(
-        'New version available. Current version: 1.2.3, '
-        'New version: 2.3.4',
+        'New version available (1.2.3 -> 2.3.4). '
+        "Press 'Update' to see release notes and update the app.",
       ),
       findsOneWidget,
     );
-    await tester.tap(find.text('Update now'));
+    await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
     expect(result.value, AppUpdateAvailableAction.updateNow);
   });

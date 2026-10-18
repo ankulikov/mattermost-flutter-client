@@ -52,11 +52,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('New version available'), findsOneWidget);
-    expect(find.textContaining('Current version: 1.0.0+10'), findsOneWidget);
+    expect(
+      find.textContaining('New version available (1.0.0+10 -> 2.3.4)'),
+      findsOneWidget,
+    );
     expect(updates.checkCalls, 1);
     expect(preferences.writeCalls, 1);
 
-    await tester.tap(find.text('Update now'));
+    await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
 
     expect(find.byType(AppUpdatePage), findsOneWidget);
