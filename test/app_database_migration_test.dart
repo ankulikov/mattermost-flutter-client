@@ -279,4 +279,43 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test('adds the update-check time when upgrading schema 14', () async {
+    final Directory directory = await Directory.systemTemp.createTemp(
+      'mattermost-update-check-preference-',
+    );
+    final File file = File('${directory.path}/cache.sqlite');
+    final sqlite.Database legacy = sqlite.sqlite3.open(file.path);
+    legacy
+      ..execute('''
+        CREATE TABLE user_preferences (
+          account_id TEXT NOT NULL,
+          preferences_json TEXT NOT NULL,
+          PRIMARY KEY (account_id)
+        )
+      ''')
+      ..execute(
+        "INSERT INTO user_preferences VALUES ('account-a', '{\"theme\":\"dark\"}')",
+      )
+      ..execute('PRAGMA user_version = 14')
+      ..close();
+
+    final db.AppDatabase database = db.AppDatabase(NativeDatabase(file));
+    try {
+      final List<String> columns = await database
+          .customSelect('PRAGMA table_info(user_preferences)')
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(columns, contains('last_check_update'));
+
+      final db.UserPreferencesRow row = await database
+          .select(database.userPreferencesRows)
+          .getSingle();
+      expect(row.preferencesJson, '{"theme":"dark"}');
+      expect(row.lastCheckUpdate, isNull);
+    } finally {
+      await database.close();
+      await directory.delete(recursive: true);
+    }
+  });
 }

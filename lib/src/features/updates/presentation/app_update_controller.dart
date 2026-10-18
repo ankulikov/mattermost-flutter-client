@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/repositories/user_preferences_repository.dart';
 import 'package:mattermost_flutter/src/features/updates/domain/models/app_update.dart';
 import 'package:mattermost_flutter/src/features/updates/domain/repositories/app_update_repository.dart';
 
@@ -67,19 +68,24 @@ final class AppUpdateViewState {
 }
 
 final class AppUpdateController extends Notifier<AppUpdateViewState> {
-  AppUpdateController(this._repositoryProvider, {DateTime Function()? clock})
-    : _clock = clock ?? DateTime.now;
+  AppUpdateController(
+    this._repositoryProvider,
+    this._preferencesRepositoryProvider, {
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
 
-  static const Duration automaticCheckInterval = Duration(hours: 6);
+  static const Duration automaticCheckInterval = Duration(days: 1);
 
   final Provider<AppUpdateRepository> _repositoryProvider;
+  final Provider<UserPreferencesRepository> _preferencesRepositoryProvider;
   final DateTime Function() _clock;
   StreamSubscription<UpdateInstallerEvent>? _installerSubscription;
   RequestCancellation? _cancellation;
-  DateTime? _lastCheckAttempt;
   int _generation = 0;
 
   AppUpdateRepository get _repository => ref.read(_repositoryProvider);
+  UserPreferencesRepository get _preferencesRepository =>
+      ref.read(_preferencesRepositoryProvider);
 
   @override
   AppUpdateViewState build() {
@@ -95,32 +101,47 @@ final class AppUpdateController extends Notifier<AppUpdateViewState> {
     return const AppUpdateViewState();
   }
 
-  Future<void> checkIfDue() async {
-    final DateTime? lastAttempt = _lastCheckAttempt;
-    if (lastAttempt != null &&
-        _clock().difference(lastAttempt) < automaticCheckInterval) {
-      return;
+  Future<UpdateCatalog?> checkIfDue() async {
+    if (state.checkStatus is OperationInProgress) return null;
+    final DateTime? lastAttempt;
+    try {
+      lastAttempt = await _preferencesRepository.readLastUpdateCheck();
+    } on Object catch (error) {
+      state = state.copyWith(checkStatus: OperationStatus.failed(error));
+      return null;
     }
-    await check();
+    final DateTime now = _clock();
+    if (lastAttempt != null &&
+        now.isBefore(lastAttempt.add(automaticCheckInterval))) {
+      return null;
+    }
+    return check(checkedAt: now);
   }
 
-  Future<void> check({bool replaceCurrent = false}) async {
-    if (!replaceCurrent && state.checkStatus is OperationInProgress) return;
+  Future<UpdateCatalog?> check({
+    bool replaceCurrent = false,
+    DateTime? checkedAt,
+  }) async {
+    if (!replaceCurrent && state.checkStatus is OperationInProgress) {
+      return null;
+    }
     final (RequestCancellation cancellation, int generation) = _beginRequest();
-    _lastCheckAttempt = _clock();
     state = state.copyWith(checkStatus: const OperationStatus.inProgress());
     try {
+      await _preferencesRepository.writeLastUpdateCheck(checkedAt ?? _clock());
+      if (!_isCurrent(cancellation, generation)) return null;
       final UpdateCatalog catalog = await cancellation.run(
         _repository.checkForUpdates,
       );
-      if (!_isCurrent(cancellation, generation)) return;
+      if (!_isCurrent(cancellation, generation)) return null;
       state = state.copyWith(
         supported: true,
         catalog: catalog,
         checkStatus: const OperationStatus.idle(),
       );
+      return catalog;
     } on AppUpdateUnsupportedException catch (error) {
-      if (!_isCurrent(cancellation, generation)) return;
+      if (!_isCurrent(cancellation, generation)) return null;
       state = state.copyWith(
         supported: false,
         checkStatus: OperationStatus.failed(error),
@@ -128,11 +149,20 @@ final class AppUpdateController extends Notifier<AppUpdateViewState> {
     } on Object catch (error) {
       if (!_isCurrent(cancellation, generation) ||
           error is RequestCancelledException) {
-        return;
+        return null;
       }
       state = state.copyWith(checkStatus: OperationStatus.failed(error));
     } finally {
       if (_isCurrent(cancellation, generation)) _cancellation = null;
+    }
+    return null;
+  }
+
+  Future<void> postponeAutomaticChecks() async {
+    try {
+      await _preferencesRepository.writeLastUpdateCheck(_clock());
+    } on Object catch (error) {
+      state = state.copyWith(checkStatus: OperationStatus.failed(error));
     }
   }
 
@@ -190,7 +220,6 @@ final class AppUpdateController extends Notifier<AppUpdateViewState> {
         await _repository.canRequestPackageInstalls()) {
       state = state.copyWith(installPhase: const UpdateInstallIdle());
     }
-    await checkIfDue();
   }
 
   (RequestCancellation, int) _beginRequest() {

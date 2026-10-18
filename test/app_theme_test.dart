@@ -216,8 +216,14 @@ final class _FakeUserPreferencesRepository
   }
 
   @override
+  Future<DateTime?> readLastUpdateCheck() async => null;
+
+  @override
   Future<void> update(UserPreferences preferences) {
     updatedPreferences.add(preferences);
     return onUpdate?.call(preferences) ?? Future<void>.value();
   }
+
+  @override
+  Future<void> writeLastUpdateCheck(DateTime checkedAt) async {}
 }

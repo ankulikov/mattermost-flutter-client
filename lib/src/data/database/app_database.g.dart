@@ -1733,8 +1733,24 @@ class $UserPreferencesRowsTable extends UserPreferencesRows
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _lastCheckUpdateMeta = const VerificationMeta(
+    'lastCheckUpdate',
+  );
   @override
-  List<GeneratedColumn> get $columns => [accountId, preferencesJson];
+  late final GeneratedColumn<DateTime> lastCheckUpdate =
+      GeneratedColumn<DateTime>(
+        'last_check_update',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountId,
+    preferencesJson,
+    lastCheckUpdate,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1766,6 +1782,15 @@ class $UserPreferencesRowsTable extends UserPreferencesRows
     } else if (isInserting) {
       context.missing(_preferencesJsonMeta);
     }
+    if (data.containsKey('last_check_update')) {
+      context.handle(
+        _lastCheckUpdateMeta,
+        lastCheckUpdate.isAcceptableOrUnknown(
+          data['last_check_update']!,
+          _lastCheckUpdateMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1783,6 +1808,10 @@ class $UserPreferencesRowsTable extends UserPreferencesRows
         DriftSqlType.string,
         data['${effectivePrefix}preferences_json'],
       )!,
+      lastCheckUpdate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_check_update'],
+      ),
     );
   }
 
@@ -1796,15 +1825,20 @@ class UserPreferencesRow extends DataClass
     implements Insertable<UserPreferencesRow> {
   final String accountId;
   final String preferencesJson;
+  final DateTime? lastCheckUpdate;
   const UserPreferencesRow({
     required this.accountId,
     required this.preferencesJson,
+    this.lastCheckUpdate,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['account_id'] = Variable<String>(accountId);
     map['preferences_json'] = Variable<String>(preferencesJson);
+    if (!nullToAbsent || lastCheckUpdate != null) {
+      map['last_check_update'] = Variable<DateTime>(lastCheckUpdate);
+    }
     return map;
   }
 
@@ -1812,6 +1846,9 @@ class UserPreferencesRow extends DataClass
     return UserPreferencesRowsCompanion(
       accountId: Value(accountId),
       preferencesJson: Value(preferencesJson),
+      lastCheckUpdate: lastCheckUpdate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastCheckUpdate),
     );
   }
 
@@ -1823,6 +1860,7 @@ class UserPreferencesRow extends DataClass
     return UserPreferencesRow(
       accountId: serializer.fromJson<String>(json['accountId']),
       preferencesJson: serializer.fromJson<String>(json['preferencesJson']),
+      lastCheckUpdate: serializer.fromJson<DateTime?>(json['lastCheckUpdate']),
     );
   }
   @override
@@ -1831,20 +1869,30 @@ class UserPreferencesRow extends DataClass
     return <String, dynamic>{
       'accountId': serializer.toJson<String>(accountId),
       'preferencesJson': serializer.toJson<String>(preferencesJson),
+      'lastCheckUpdate': serializer.toJson<DateTime?>(lastCheckUpdate),
     };
   }
 
-  UserPreferencesRow copyWith({String? accountId, String? preferencesJson}) =>
-      UserPreferencesRow(
-        accountId: accountId ?? this.accountId,
-        preferencesJson: preferencesJson ?? this.preferencesJson,
-      );
+  UserPreferencesRow copyWith({
+    String? accountId,
+    String? preferencesJson,
+    Value<DateTime?> lastCheckUpdate = const Value.absent(),
+  }) => UserPreferencesRow(
+    accountId: accountId ?? this.accountId,
+    preferencesJson: preferencesJson ?? this.preferencesJson,
+    lastCheckUpdate: lastCheckUpdate.present
+        ? lastCheckUpdate.value
+        : this.lastCheckUpdate,
+  );
   UserPreferencesRow copyWithCompanion(UserPreferencesRowsCompanion data) {
     return UserPreferencesRow(
       accountId: data.accountId.present ? data.accountId.value : this.accountId,
       preferencesJson: data.preferencesJson.present
           ? data.preferencesJson.value
           : this.preferencesJson,
+      lastCheckUpdate: data.lastCheckUpdate.present
+          ? data.lastCheckUpdate.value
+          : this.lastCheckUpdate,
     );
   }
 
@@ -1852,44 +1900,51 @@ class UserPreferencesRow extends DataClass
   String toString() {
     return (StringBuffer('UserPreferencesRow(')
           ..write('accountId: $accountId, ')
-          ..write('preferencesJson: $preferencesJson')
+          ..write('preferencesJson: $preferencesJson, ')
+          ..write('lastCheckUpdate: $lastCheckUpdate')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(accountId, preferencesJson);
+  int get hashCode => Object.hash(accountId, preferencesJson, lastCheckUpdate);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is UserPreferencesRow &&
           other.accountId == this.accountId &&
-          other.preferencesJson == this.preferencesJson);
+          other.preferencesJson == this.preferencesJson &&
+          other.lastCheckUpdate == this.lastCheckUpdate);
 }
 
 class UserPreferencesRowsCompanion extends UpdateCompanion<UserPreferencesRow> {
   final Value<String> accountId;
   final Value<String> preferencesJson;
+  final Value<DateTime?> lastCheckUpdate;
   final Value<int> rowid;
   const UserPreferencesRowsCompanion({
     this.accountId = const Value.absent(),
     this.preferencesJson = const Value.absent(),
+    this.lastCheckUpdate = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   UserPreferencesRowsCompanion.insert({
     required String accountId,
     required String preferencesJson,
+    this.lastCheckUpdate = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : accountId = Value(accountId),
        preferencesJson = Value(preferencesJson);
   static Insertable<UserPreferencesRow> custom({
     Expression<String>? accountId,
     Expression<String>? preferencesJson,
+    Expression<DateTime>? lastCheckUpdate,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (accountId != null) 'account_id': accountId,
       if (preferencesJson != null) 'preferences_json': preferencesJson,
+      if (lastCheckUpdate != null) 'last_check_update': lastCheckUpdate,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1897,11 +1952,13 @@ class UserPreferencesRowsCompanion extends UpdateCompanion<UserPreferencesRow> {
   UserPreferencesRowsCompanion copyWith({
     Value<String>? accountId,
     Value<String>? preferencesJson,
+    Value<DateTime?>? lastCheckUpdate,
     Value<int>? rowid,
   }) {
     return UserPreferencesRowsCompanion(
       accountId: accountId ?? this.accountId,
       preferencesJson: preferencesJson ?? this.preferencesJson,
+      lastCheckUpdate: lastCheckUpdate ?? this.lastCheckUpdate,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1915,6 +1972,9 @@ class UserPreferencesRowsCompanion extends UpdateCompanion<UserPreferencesRow> {
     if (preferencesJson.present) {
       map['preferences_json'] = Variable<String>(preferencesJson.value);
     }
+    if (lastCheckUpdate.present) {
+      map['last_check_update'] = Variable<DateTime>(lastCheckUpdate.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1926,6 +1986,7 @@ class UserPreferencesRowsCompanion extends UpdateCompanion<UserPreferencesRow> {
     return (StringBuffer('UserPreferencesRowsCompanion(')
           ..write('accountId: $accountId, ')
           ..write('preferencesJson: $preferencesJson, ')
+          ..write('lastCheckUpdate: $lastCheckUpdate, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2883,12 +2944,14 @@ typedef $$UserPreferencesRowsTableCreateCompanionBuilder =
     UserPreferencesRowsCompanion Function({
       required String accountId,
       required String preferencesJson,
+      Value<DateTime?> lastCheckUpdate,
       Value<int> rowid,
     });
 typedef $$UserPreferencesRowsTableUpdateCompanionBuilder =
     UserPreferencesRowsCompanion Function({
       Value<String> accountId,
       Value<String> preferencesJson,
+      Value<DateTime?> lastCheckUpdate,
       Value<int> rowid,
     });
 
@@ -2908,6 +2971,11 @@ class $$UserPreferencesRowsTableFilterComposer
 
   ColumnFilters<String> get preferencesJson => $composableBuilder(
     column: $table.preferencesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastCheckUpdate => $composableBuilder(
+    column: $table.lastCheckUpdate,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2930,6 +2998,11 @@ class $$UserPreferencesRowsTableOrderingComposer
     column: $table.preferencesJson,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<DateTime> get lastCheckUpdate => $composableBuilder(
+    column: $table.lastCheckUpdate,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserPreferencesRowsTableAnnotationComposer
@@ -2946,6 +3019,11 @@ class $$UserPreferencesRowsTableAnnotationComposer
 
   GeneratedColumn<String> get preferencesJson => $composableBuilder(
     column: $table.preferencesJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastCheckUpdate => $composableBuilder(
+    column: $table.lastCheckUpdate,
     builder: (column) => column,
   );
 }
@@ -2995,20 +3073,24 @@ class $$UserPreferencesRowsTableTableManager
               ({
                 Value<String> accountId = const Value.absent(),
                 Value<String> preferencesJson = const Value.absent(),
+                Value<DateTime?> lastCheckUpdate = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UserPreferencesRowsCompanion(
                 accountId: accountId,
                 preferencesJson: preferencesJson,
+                lastCheckUpdate: lastCheckUpdate,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String accountId,
                 required String preferencesJson,
+                Value<DateTime?> lastCheckUpdate = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UserPreferencesRowsCompanion.insert(
                 accountId: accountId,
                 preferencesJson: preferencesJson,
+                lastCheckUpdate: lastCheckUpdate,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

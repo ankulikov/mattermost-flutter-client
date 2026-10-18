@@ -12,10 +12,11 @@ active session's durable account scope ID. Presentation and app composition
 code do not query the database directly.
 
 The `user_preferences` table contains one row per account/server scope. The row
-stores the complete preferences document as JSON in `preferences_json`; tokens,
-message content, and other server data are never included. Updating a known
-preference preserves unknown JSON fields so an older client does not erase
-settings written by a newer client.
+stores the complete preferences document as JSON in `preferences_json` and the
+last app-update check attempt in the nullable `last_check_update` column.
+Tokens, message content, and other server data are never included. Updating a
+known preference preserves unknown JSON fields so an older client does not
+erase settings written by a newer client.
 
 ## JSON compatibility
 

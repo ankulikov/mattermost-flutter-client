@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart';
 import 'package:mattermost_flutter/src/data/database/app_database.dart' as db;
 import 'package:mattermost_flutter/src/features/preferences/domain/models/user_preferences.dart';
 import 'package:mattermost_flutter/src/features/preferences/domain/repositories/user_preferences_repository.dart';
@@ -37,6 +38,39 @@ final class DriftUserPreferencesRepository
             db.UserPreferencesRowsCompanion.insert(
               accountId: _accountScopeId,
               preferencesJson: jsonEncode(document),
+            ),
+          );
+    });
+  }
+
+  @override
+  Future<DateTime?> readLastUpdateCheck() async {
+    return (await _readRow())?.lastCheckUpdate?.toUtc();
+  }
+
+  @override
+  Future<void> writeLastUpdateCheck(DateTime checkedAt) async {
+    await _database.transaction(() async {
+      final Value<DateTime?> timestamp = Value<DateTime?>(checkedAt.toUtc());
+      final int updated =
+          await (_database.update(_database.userPreferencesRows)..where(
+                (db.$UserPreferencesRowsTable table) =>
+                    table.accountId.equals(_accountScopeId),
+              ))
+              .write(
+                db.UserPreferencesRowsCompanion(lastCheckUpdate: timestamp),
+              );
+      if (updated != 0) return;
+
+      await _database
+          .into(_database.userPreferencesRows)
+          .insert(
+            db.UserPreferencesRowsCompanion.insert(
+              accountId: _accountScopeId,
+              preferencesJson: jsonEncode(<String, Object?>{
+                'theme': UserPreferences.defaults.theme.name,
+              }),
+              lastCheckUpdate: timestamp,
             ),
           );
     });

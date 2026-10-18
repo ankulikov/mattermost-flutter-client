@@ -95,9 +95,15 @@ pull requests and version comparisons use compact `#123` and
 `vA...vB` labels. HTTP(S) links open in the external browser. Images are
 rendered as their alternative text, and raw HTML is not rendered.
 
-The application performs a quiet check after launch and on resume, at most once
-every six hours per process. Manual checks remain available. An initial failure
-shows retry; a refresh failure preserves existing release information.
+The application performs a quiet, non-blocking check after launch for the
+active account, at most once per day across process restarts. The timestamp is
+stored in the account-scoped `user_preferences.last_check_update` column. A
+successful discovery with a compatible update opens a modal showing the
+installed and available versions. “Update now” opens the update screen; “Later”
+postpones the next automatic check for one day. Opening the update screen
+manually always checks immediately and records the attempt without consulting
+the automatic-check timestamp. An initial failure shows retry; a refresh
+failure preserves existing release information.
 
 The screen uses the shared 700 px compact breakpoint, constrains expanded
 content width, scrolls at large text scales, and exposes progress semantics.
@@ -106,8 +112,9 @@ content width, scrolls at large text scales, and exposes progress semantics.
 
 Unit tests cover version/build ordering, ABI selection, pagination,
 prerelease filtering, partial history, asset validation, cleanup, controller
-retry/refresh/install states, the six-hour bound, compact and expanded layouts,
-large text, permission recovery, and install blocking for partial history.
+retry/refresh/install states, the persisted one-day bound, compact and expanded
+layouts, large text, permission recovery, and install blocking for partial
+history.
 
 An end-to-end release test still requires two APKs signed by the production
 release key. Install the older APK, sign in and change a preference, then update
