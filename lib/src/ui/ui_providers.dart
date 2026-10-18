@@ -30,7 +30,10 @@ final NotifierProvider<AuthController, AuthState> authControllerProvider =
 final NotifierProvider<AppUpdateController, AppUpdateViewState>
 appUpdateControllerProvider =
     NotifierProvider<AppUpdateController, AppUpdateViewState>(
-      () => AppUpdateController(appUpdateRepositoryProvider),
+      () => AppUpdateController(
+        appUpdateRepositoryProvider,
+        userPreferencesRepositoryProvider,
+      ),
     );
 
 /// UI projection for controller state. It contains only the domain session;

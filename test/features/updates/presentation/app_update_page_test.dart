@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/models/user_preferences.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/repositories/user_preferences_repository.dart';
 import 'package:mattermost_flutter/src/features/updates/domain/models/app_update.dart';
 import 'package:mattermost_flutter/src/features/updates/domain/repositories/app_update_repository.dart';
 import 'package:mattermost_flutter/src/features/updates/presentation/app_update_page.dart';
@@ -26,6 +28,7 @@ void main() {
   Future<void> pumpPage(
     WidgetTester tester,
     _UpdateRepository repository, {
+    _PreferencesRepository? preferences,
     Size size = const Size(390, 844),
     double textScale = 1,
   }) async {
@@ -35,7 +38,12 @@ void main() {
     });
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [appUpdateRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          appUpdateRepositoryProvider.overrideWithValue(repository),
+          userPreferencesRepositoryProvider.overrideWithValue(
+            preferences ?? _PreferencesRepository(),
+          ),
+        ],
         child: MaterialApp(
           home: MediaQuery(
             data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
@@ -158,6 +166,19 @@ void main() {
     expect(find.text('Could not check for updates.'), findsOneWidget);
   });
 
+  testWidgets('opening the page records a manual update check', (
+    WidgetTester tester,
+  ) async {
+    final _PreferencesRepository preferences = _PreferencesRepository();
+    await pumpPage(
+      tester,
+      _UpdateRepository(catalog: _catalog()),
+      preferences: preferences,
+    );
+
+    expect(preferences.lastUpdateCheck, isNotNull);
+  });
+
   testWidgets('requests install permission and resumes installation', (
     WidgetTester tester,
   ) async {
@@ -228,6 +249,24 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+final class _PreferencesRepository implements UserPreferencesRepository {
+  DateTime? lastUpdateCheck;
+
+  @override
+  Future<UserPreferences> read() async => UserPreferences.defaults;
+
+  @override
+  Future<DateTime?> readLastUpdateCheck() async => lastUpdateCheck;
+
+  @override
+  Future<void> update(UserPreferences preferences) async {}
+
+  @override
+  Future<void> writeLastUpdateCheck(DateTime checkedAt) async {
+    lastUpdateCheck = checkedAt;
+  }
 }
 
 final class _UpdateRepository implements AppUpdateRepository {

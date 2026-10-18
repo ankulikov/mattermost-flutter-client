@@ -224,10 +224,16 @@ final class _UserPreferencesRepository implements UserPreferencesRepository {
   Future<UserPreferences> read() async => initial;
 
   @override
+  Future<DateTime?> readLastUpdateCheck() async => null;
+
+  @override
   Future<void> update(UserPreferences preferences) async {
     updateCalls += 1;
     updated = preferences;
     if (failUpdate) throw StateError('save failed');
     await updateCompleter?.future;
   }
+
+  @override
+  Future<void> writeLastUpdateCheck(DateTime checkedAt) async {}
 }

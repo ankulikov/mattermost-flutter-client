@@ -99,11 +99,14 @@ class InboxCounters extends Table {
 /// The complete durable preferences document for one account/server scope.
 ///
 /// Individual settings remain JSON fields so adding a setting does not require
-/// a database migration. Repository mapping owns defaults and compatibility.
+/// a database migration. Operational metadata uses typed columns. Repository
+/// mapping owns defaults and compatibility.
 class UserPreferencesRows extends Table {
   TextColumn get accountId => text()();
 
   TextColumn get preferencesJson => text()();
+
+  DateTimeColumn get lastCheckUpdate => dateTime().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{accountId};
@@ -129,7 +132,7 @@ final class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(openDatabaseConnection());
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -180,6 +183,12 @@ final class AppDatabase extends _$AppDatabase {
       }
       if (from < 14) {
         await migrator.createTable(userPreferencesRows);
+      }
+      if (from >= 14 && from < 15) {
+        await migrator.addColumn(
+          userPreferencesRows,
+          userPreferencesRows.lastCheckUpdate,
+        );
       }
     },
   );

@@ -6,7 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/app/router.dart';
 import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
+import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/features/preferences/domain/models/user_preferences.dart';
+import 'package:mattermost_flutter/src/features/updates/domain/models/app_update.dart';
+import 'package:mattermost_flutter/src/features/updates/presentation/app_update_available_dialog.dart';
+import 'package:mattermost_flutter/src/features/updates/presentation/app_update_page.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class MattermostApp extends ConsumerWidget {
@@ -58,35 +63,76 @@ class _UpdateLifecycleCoordinator extends ConsumerStatefulWidget {
 }
 
 class _UpdateLifecycleCoordinatorState
-    extends ConsumerState<_UpdateLifecycleCoordinator>
-    with WidgetsBindingObserver {
+    extends ConsumerState<_UpdateLifecycleCoordinator> {
   bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  bool _checkScheduled = false;
+  bool _dialogVisible = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _isAndroid) {
-        unawaited(ref.read(appUpdateControllerProvider.notifier).checkIfDue());
+      if (mounted) {
+        _scheduleStartupCheck(ref.read(activeAccountSessionProvider));
       }
     });
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
+  void _scheduleStartupCheck(AuthSession? session) {
+    if (!_isAndroid || session == null || _checkScheduled) return;
+    _checkScheduled = true;
+    unawaited(_checkForUpdate());
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isAndroid) {
-      unawaited(ref.read(appUpdateControllerProvider.notifier).handleResumed());
+  Future<void> _checkForUpdate() async {
+    final UpdateCatalog? catalog = await ref
+        .read(appUpdateControllerProvider.notifier)
+        .checkIfDue();
+    final UpdateCandidate? candidate = catalog?.candidate;
+    final BuildContext? dialogContext = appNavigatorKey.currentContext;
+    if (!mounted ||
+        candidate == null ||
+        dialogContext == null ||
+        !dialogContext.mounted ||
+        _dialogVisible) {
+      return;
     }
+
+    _dialogVisible = true;
+    final AppUpdateAvailableAction? action =
+        await showDialog<AppUpdateAvailableAction>(
+          context: dialogContext,
+          barrierDismissible: false,
+          builder: (BuildContext context) => AppUpdateAvailableDialog(
+            currentVersion: catalog!.installed.displayVersion,
+            newVersion: candidate.release.version.displayName,
+          ),
+        );
+    _dialogVisible = false;
+    if (!mounted) return;
+    if (action == AppUpdateAvailableAction.updateNow) {
+      final BuildContext? navigationContext = appNavigatorKey.currentContext;
+      if (navigationContext != null && navigationContext.mounted) {
+        await Navigator.of(navigationContext).push<void>(
+          MaterialPageRoute<void>(
+            builder: (BuildContext context) => const AppUpdatePage(),
+          ),
+        );
+      }
+      return;
+    }
+    await ref
+        .read(appUpdateControllerProvider.notifier)
+        .postponeAutomaticChecks();
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    ref.listen<AuthSession?>(
+      activeAccountSessionProvider,
+      (AuthSession? previous, AuthSession? next) => _scheduleStartupCheck(next),
+    );
+    return widget.child;
+  }
 }

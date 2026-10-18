@@ -32,8 +32,12 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && ref.read(appUpdateControllerProvider).catalog == null) {
-        unawaited(ref.read(appUpdateControllerProvider.notifier).check());
+      if (mounted) {
+        unawaited(
+          ref
+              .read(appUpdateControllerProvider.notifier)
+              .check(replaceCurrent: true),
+        );
       }
     });
   }

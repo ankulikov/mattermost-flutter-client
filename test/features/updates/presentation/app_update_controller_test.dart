@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/models/user_preferences.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/repositories/user_preferences_repository.dart';
 import 'package:mattermost_flutter/src/features/updates/domain/models/app_update.dart';
 import 'package:mattermost_flutter/src/features/updates/domain/repositories/app_update_repository.dart';
 import 'package:mattermost_flutter/src/features/updates/presentation/app_update_controller.dart';
@@ -73,47 +75,116 @@ void main() {
     expect(harness.state.installPhase, isA<UpdateInstallFailure>());
   });
 
-  test('automatic checks are bounded by the six hour interval', () async {
-    var now = DateTime.utc(2026, 10, 17);
+  test(
+    'automatic checks are bounded by the persisted one day interval',
+    () async {
+      var now = DateTime.utc(2026, 10, 17);
+      final _UpdateRepository repository = _UpdateRepository()
+        ..catalog = _catalog();
+      final _PreferencesRepository preferences = _PreferencesRepository();
+      final Provider<AppUpdateRepository> repositoryProvider =
+          Provider<AppUpdateRepository>((Ref ref) => repository);
+      final Provider<UserPreferencesRepository> preferencesProvider =
+          Provider<UserPreferencesRepository>((Ref ref) => preferences);
+      late final NotifierProvider<AppUpdateController, AppUpdateViewState>
+      controllerProvider;
+      controllerProvider =
+          NotifierProvider<AppUpdateController, AppUpdateViewState>(
+            () => AppUpdateController(
+              repositoryProvider,
+              preferencesProvider,
+              clock: () => now,
+            ),
+          );
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(() {
+        container.dispose();
+        unawaited(repository.dispose());
+      });
+      container.listen(controllerProvider, (_, _) {});
+
+      await container.read(controllerProvider.notifier).checkIfDue();
+      await container.read(controllerProvider.notifier).checkIfDue();
+      expect(repository.checkCalls, 1);
+      expect(preferences.lastUpdateCheck, now);
+
+      now = now.add(const Duration(hours: 23, minutes: 59));
+      await container.read(controllerProvider.notifier).checkIfDue();
+      expect(repository.checkCalls, 1);
+
+      now = now.add(const Duration(minutes: 1));
+      await container.read(controllerProvider.notifier).checkIfDue();
+      expect(repository.checkCalls, 2);
+    },
+  );
+
+  test('manual checks and Later both record the current time', () async {
+    var now = DateTime.utc(2026, 10, 17, 8);
     final _UpdateRepository repository = _UpdateRepository()
       ..catalog = _catalog();
-    final Provider<AppUpdateRepository> repositoryProvider =
-        Provider<AppUpdateRepository>((Ref ref) => repository);
-    late final NotifierProvider<AppUpdateController, AppUpdateViewState>
-    controllerProvider;
-    controllerProvider =
-        NotifierProvider<AppUpdateController, AppUpdateViewState>(
-          () => AppUpdateController(repositoryProvider, clock: () => now),
-        );
-    final ProviderContainer container = ProviderContainer();
-    addTearDown(() {
-      container.dispose();
-      unawaited(repository.dispose());
-    });
-    container.listen(controllerProvider, (_, _) {});
+    final _PreferencesRepository preferences = _PreferencesRepository(
+      lastUpdateCheck: now,
+    );
+    final _ControllerHarness harness = _ControllerHarness(
+      repository,
+      preferences: preferences,
+      clock: () => now,
+    );
+    addTearDown(harness.dispose);
 
-    await container.read(controllerProvider.notifier).checkIfDue();
-    await container.read(controllerProvider.notifier).checkIfDue();
+    now = now.add(const Duration(hours: 2));
+    await harness.controller.check(replaceCurrent: true);
     expect(repository.checkCalls, 1);
+    expect(preferences.lastUpdateCheck, now);
 
-    now = now.add(const Duration(hours: 6));
-    await container.read(controllerProvider.notifier).checkIfDue();
-    expect(repository.checkCalls, 2);
+    now = now.add(const Duration(hours: 3));
+    await harness.controller.postponeAutomaticChecks();
+    expect(preferences.lastUpdateCheck, now);
+  });
+
+  test('a preference read failure does not start an automatic check', () async {
+    final _UpdateRepository repository = _UpdateRepository()
+      ..catalog = _catalog();
+    final _ControllerHarness harness = _ControllerHarness(
+      repository,
+      preferences: _PreferencesRepository(
+        readError: StateError('database unavailable'),
+      ),
+    );
+    addTearDown(harness.dispose);
+
+    await harness.controller.checkIfDue();
+
+    expect(repository.checkCalls, 0);
+    expect(harness.state.checkStatus, isA<OperationFailed>());
   });
 }
 
 final class _ControllerHarness {
-  _ControllerHarness(this.repository) {
+  _ControllerHarness(
+    this.repository, {
+    _PreferencesRepository? preferences,
+    DateTime Function()? clock,
+  }) : preferences = preferences ?? _PreferencesRepository() {
     repositoryProvider = Provider<AppUpdateRepository>((Ref ref) => repository);
+    preferencesProvider = Provider<UserPreferencesRepository>(
+      (Ref ref) => this.preferences,
+    );
     controllerProvider =
         NotifierProvider<AppUpdateController, AppUpdateViewState>(
-          () => AppUpdateController(repositoryProvider),
+          () => AppUpdateController(
+            repositoryProvider,
+            preferencesProvider,
+            clock: clock,
+          ),
         );
     container = ProviderContainer()..listen(controllerProvider, (_, _) {});
   }
 
   final _UpdateRepository repository;
+  final _PreferencesRepository preferences;
   late final Provider<AppUpdateRepository> repositoryProvider;
+  late final Provider<UserPreferencesRepository> preferencesProvider;
   late final NotifierProvider<AppUpdateController, AppUpdateViewState>
   controllerProvider;
   late final ProviderContainer container;
@@ -125,6 +196,30 @@ final class _ControllerHarness {
   void dispose() {
     container.dispose();
     unawaited(repository.dispose());
+  }
+}
+
+final class _PreferencesRepository implements UserPreferencesRepository {
+  _PreferencesRepository({this.lastUpdateCheck, this.readError});
+
+  DateTime? lastUpdateCheck;
+  final Object? readError;
+
+  @override
+  Future<UserPreferences> read() async => UserPreferences.defaults;
+
+  @override
+  Future<DateTime?> readLastUpdateCheck() async {
+    if (readError case final Object error) throw error;
+    return lastUpdateCheck;
+  }
+
+  @override
+  Future<void> update(UserPreferences preferences) async {}
+
+  @override
+  Future<void> writeLastUpdateCheck(DateTime checkedAt) async {
+    lastUpdateCheck = checkedAt;
   }
 }
 
