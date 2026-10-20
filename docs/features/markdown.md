@@ -40,9 +40,10 @@ server-provided HTML to a platform renderer.
 ## Links and permalinks
 
 External activation accepts `http`, `https`, and `mailto`. Relative links
-resolve against the authenticated server. A post permalink for that same origin
-uses the internal permalink route; a look-alike link from another origin stays
-external.
+resolve against the authenticated server. Scheme-less links that begin with a
+domain name are treated as HTTPS external links rather than server-relative
+paths. A post permalink for that same origin uses the internal permalink route;
+a look-alike link from another origin stays external.
 
 ## Security and performance
 

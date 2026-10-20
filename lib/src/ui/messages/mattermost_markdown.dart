@@ -389,7 +389,32 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
   Uri? _resolvedLink(String href) {
     final Uri? parsed = Uri.tryParse(href);
     if (parsed == null) return null;
-    return parsed.scheme.isEmpty ? _resolveHttpUri(parsed) : parsed;
+    if (parsed.scheme.isNotEmpty) return parsed;
+    return _schemeLessDomainLink(href) ?? _resolveHttpUri(parsed);
+  }
+
+  Uri? _schemeLessDomainLink(String href) {
+    if (href.startsWith('/') ||
+        href.startsWith('.') ||
+        href.startsWith('?') ||
+        href.startsWith('#')) {
+      return null;
+    }
+    final Uri? candidate = Uri.tryParse('https://$href');
+    if (candidate == null ||
+        candidate.userInfo.isNotEmpty ||
+        !candidate.host.contains('.')) {
+      return null;
+    }
+    final RegExp dnsLabel = RegExp(
+      r'^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$',
+    );
+    if (candidate.host
+        .split('.')
+        .any((String label) => label.isEmpty || !dnsLabel.hasMatch(label))) {
+      return null;
+    }
+    return candidate;
   }
 
   Uri? _resolveHttpUri(Uri uri) {

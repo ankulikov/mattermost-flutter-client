@@ -71,6 +71,41 @@ void main() {
     );
   });
 
+  testWidgets('opens scheme-less domain links externally', (
+    WidgetTester tester,
+  ) async {
+    final List<Uri> launchedUris = <Uri>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MattermostMarkdown(
+            data:
+                '[external](rights.k.fintech.site/v3/resource) '
+                '[relative](/help)',
+            serverUrl: Uri.parse('https://mt.fintech.site'),
+            linkLauncher: (Uri uri) async {
+              launchedUris.add(uri);
+              return true;
+            },
+          ),
+        ),
+      ),
+    );
+
+    _tapTextSpan(tester, 'external');
+    await tester.pump();
+    expect(launchedUris, <Uri>[
+      Uri.parse('https://rights.k.fintech.site/v3/resource'),
+    ]);
+
+    _tapTextSpan(tester, 'relative');
+    await tester.pump();
+    expect(launchedUris, <Uri>[
+      Uri.parse('https://rights.k.fintech.site/v3/resource'),
+      Uri.parse('https://mt.fintech.site/help'),
+    ]);
+  });
+
   test('uses Mattermost system emoji aliases generated from emoji.json', () {
     expect(mattermostSystemEmojis['large_green_circle'], '🟢');
     expect(mattermostSystemEmojis, isNot(contains('mattermost')));
