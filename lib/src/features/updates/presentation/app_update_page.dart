@@ -32,8 +32,12 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && ref.read(appUpdateControllerProvider).catalog == null) {
-        unawaited(ref.read(appUpdateControllerProvider.notifier).check());
+      if (mounted) {
+        unawaited(
+          ref
+              .read(appUpdateControllerProvider.notifier)
+              .check(replaceCurrent: true),
+        );
       }
     });
   }
@@ -258,7 +262,7 @@ class _Actions extends ConsumerWidget {
     return Wrap(
       spacing: 12,
       runSpacing: 12,
-      alignment: WrapAlignment.end,
+      alignment: WrapAlignment.center,
       children: <Widget>[
         OutlinedButton.icon(
           key: const ValueKey<String>('app-update-check'),
@@ -287,10 +291,6 @@ class _Actions extends ConsumerWidget {
               ),
             ),
           ),
-        TextButton(
-          onPressed: installBusy ? null : () => Navigator.of(context).pop(),
-          child: const Text(AppUpdateStrings.later),
-        ),
       ],
     );
   }

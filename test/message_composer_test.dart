@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/mention_candidate.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/mention_search_result.dart';
@@ -759,6 +761,141 @@ void main() {
     expect(tester.widget<TextField>(fullInput).focusNode?.hasFocus, isTrue);
   });
 
+  testWidgets(
+    'full editor searches emoji and Enter inserts instead of sending',
+    (WidgetTester tester) async {
+      final FakeEmojiRepository repository = FakeEmojiRepository();
+      final List<String> submissions = <String>[];
+      await tester.pumpWidget(
+        _emojiComposerApp(
+          repository: repository,
+          onSubmit: (String message, String _) async {
+            submissions.add(message);
+          },
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('message-input-emoji')),
+        'Meet :of',
+      );
+      await tester.pump();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('open-full-editor-emoji')),
+      );
+      await tester.pumpAndSettle();
+      final Finder input = find.byKey(
+        const ValueKey<String>('full-message-input-emoji'),
+      );
+
+      expect(
+        find.byKey(const ValueKey<String>('full-editor-emoji-suggestions')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('emoji-office')),
+        findsOneWidget,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(submissions, isEmpty);
+      expect(tester.widget<TextField>(input).controller?.text, 'Meet 🏢');
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('full-editor-send-emoji')),
+      );
+      await tester.pumpAndSettle();
+      expect(submissions, <String>['Meet 🏢']);
+    },
+  );
+
+  testWidgets(
+    'compact full editor searches and inserts people and user groups',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 760));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final List<String> submissions = <String>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(
+                size: Size(320, 760),
+                textScaler: TextScaler.linear(2),
+              ),
+              child: Scaffold(
+                body: MessageComposer(
+                  destinationId: 'full-mentions',
+                  placeholder: 'Write a message',
+                  accountId: 'account-a',
+                  teamId: 'team-1',
+                  channelId: 'channel-1',
+                  mentionRepositoryFactory:
+                      _PeopleAndGroupsMentionRepository.new,
+                  onSubmit: (String message, String _) async {
+                    submissions.add(message);
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      Future<Finder> openEditorAndSearch(String query) async {
+        await tester.tap(
+          find.byKey(const ValueKey<String>('open-full-editor-full-mentions')),
+        );
+        await tester.pumpAndSettle();
+        final Finder input = find.byKey(
+          const ValueKey<String>('full-message-input-full-mentions'),
+        );
+        await tester.enterText(input, query);
+        await tester.pump(const Duration(milliseconds: 250));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey<String>('full-editor-mention-suggestions')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        return input;
+      }
+
+      await openEditorAndSearch('@be');
+      expect(
+        find.byKey(const ValueKey<String>('mention-bea-id')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('mention-group-backend-id')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey<String>('mention-bea-id')));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('full-editor-send-full-mentions')),
+      );
+      await tester.pumpAndSettle();
+      expect(submissions, <String>['@bea ']);
+
+      await openEditorAndSearch('@back');
+      await tester.tap(
+        find.byKey(const ValueKey<String>('mention-group-backend-id')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('full-editor-send-full-mentions')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(submissions, <String>['@bea ', '@backend ']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final double width in <double>[320, 900]) {
     testWidgets(
       'full editor adapts and keeps every formatting icon visible at $width',
@@ -980,6 +1117,45 @@ final class _GroupMentionRepository implements MentionRepository {
     int limit = 30,
   }) async => const MentionSearchResult(
     channelMembers: <MentionCandidate>[],
+    groupMentions: <GroupMentionCandidate>[
+      GroupMentionCandidate(
+        group: GroupMention(
+          id: 'backend-id',
+          name: 'backend',
+          displayName: 'Backend Team',
+          memberCount: 18,
+        ),
+      ),
+    ],
+    notInChannel: <MentionCandidate>[],
+  );
+
+  @override
+  Future<List<GroupMention>> resolveGroupsByNames(List<String> names) async =>
+      const <GroupMention>[];
+}
+
+final class _PeopleAndGroupsMentionRepository implements MentionRepository {
+  @override
+  Future<MentionSearchResult> autocomplete({
+    required String teamId,
+    required String channelId,
+    required String term,
+    int limit = 30,
+  }) async => const MentionSearchResult(
+    channelMembers: <MentionCandidate>[
+      MentionCandidate(
+        user: UserSummary(
+          id: 'bea-id',
+          firstName: 'Bea',
+          lastName: 'Developer',
+          username: 'bea',
+          nickname: '',
+          position: '',
+          email: '',
+        ),
+      ),
+    ],
     groupMentions: <GroupMentionCandidate>[
       GroupMentionCandidate(
         group: GroupMention(

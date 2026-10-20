@@ -97,6 +97,13 @@ Mention and emoji suggestions belong to the active composer. Moving the caret,
 changing the destination, closing the composer, or starting a newer query
 cancels work that is no longer relevant.
 
+Quick mode and the full editor expose the same mention, user-group, and emoji
+autocomplete behavior. The full editor keeps suggestions inside its editing
+surface: the panel is capped at 560 px on wider panes and uses the available
+width and a bounded portion of the editor height on compact panes. Enter chooses
+the highlighted suggestion before sending; arrows, Tab for mentions, and Escape
+retain their quick-composer behavior.
+
 ## Relevant code
 
 - `lib/src/ui/messages/message_editor_controller.dart`

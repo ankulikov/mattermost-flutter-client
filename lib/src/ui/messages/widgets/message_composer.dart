@@ -444,8 +444,12 @@ class _MessageComposerState extends State<MessageComposer> {
   }
 
   void _onFocusChanged() {
-    if (!_focusNode.hasFocus) _mentionController?.updateQuery(null);
-    if (mounted) setState(() {});
+    if (_focusNode.hasFocus) {
+      _onTextChanged();
+    } else {
+      _mentionController?.updateQuery(null);
+      if (mounted) setState(() {});
+    }
   }
 
   String _emojiQueryKey(EmojiAutocompleteQuery query) =>
@@ -577,6 +581,11 @@ class _MessageComposerState extends State<MessageComposer> {
                       const <Widget>[]
                 : const <Widget>[],
             contextMenuBuilder: _buildContextMenu,
+            accountId: widget.accountId,
+            emojiRepository: _availableEmojiRepository,
+            mentionController: _availableMentionController,
+            onEmojiSelected: _selectEmoji,
+            onMentionSelected: _selectMentionForQuery,
           );
           if (compact) {
             return Dialog.fullscreen(
@@ -721,6 +730,11 @@ class _MessageComposerState extends State<MessageComposer> {
   void _selectMention(MentionSuggestion candidate) {
     final MentionQuery? query = _visibleMentionQuery;
     if (query == null) return;
+    _selectMentionForQuery(query, candidate);
+    _focusNode.requestFocus();
+  }
+
+  void _selectMentionForQuery(MentionQuery query, MentionSuggestion candidate) {
     switch (candidate) {
       case MentionCandidate(:final user):
         _controller.replaceQueryWithMention(
@@ -732,7 +746,6 @@ class _MessageComposerState extends State<MessageComposer> {
     }
     _dismissedMentionQuery = null;
     _mentionController?.dismiss();
-    _focusNode.requestFocus();
   }
 
   void _selectEmoji(EmojiSuggestion suggestion) {
@@ -745,7 +758,7 @@ class _MessageComposerState extends State<MessageComposer> {
       _controller.replaceQueryWithCustomEmoji(query, custom);
     }
     _dismissedEmojiQuery = null;
-    _focusNode.requestFocus();
+    if (!_fullEditorOpen) _focusNode.requestFocus();
     final CustomEmojiRepository? repository = _availableEmojiRepository;
     if (repository != null) {
       unawaited(_rememberEmoji(repository, suggestion.name));
