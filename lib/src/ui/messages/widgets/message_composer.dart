@@ -848,6 +848,128 @@ class _MessageComposerState extends State<MessageComposer> {
     );
   }
 
+  Widget _buildMessageInput({
+    required MentionQuery? mentionQuery,
+    required EmojiAutocompleteQuery? emojiQuery,
+    required bool autocompleteOwnsShortcuts,
+    required bool imeOwnsShortcuts,
+  }) => CallbackShortcuts(
+    bindings: <ShortcutActivator, VoidCallback>{
+      const SingleActivator(LogicalKeyboardKey.enter): () {
+        _submitOrSelectEmoji();
+      },
+      const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+          _insertNewLine,
+      const SingleActivator(LogicalKeyboardKey.numpadEnter):
+          _submitOrSelectEmoji,
+      const SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
+          _insertNewLine,
+      if (mentionQuery != null) ...<ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+            _mentionNavigation.move(1),
+        const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+            _mentionNavigation.move(-1),
+        const SingleActivator(LogicalKeyboardKey.escape):
+            _dismissMentionAutocomplete,
+        const SingleActivator(LogicalKeyboardKey.tab): _submitOrSelectEmoji,
+      } else if (emojiQuery != null) ...<ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+            _emojiNavigation.move(1),
+        const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+            _emojiNavigation.move(-1),
+        const SingleActivator(LogicalKeyboardKey.escape):
+            _dismissEmojiAutocomplete,
+      },
+      const SingleActivator(LogicalKeyboardKey.keyC, control: true): () =>
+          _copySelection(cut: false),
+      const SingleActivator(LogicalKeyboardKey.keyC, meta: true): () =>
+          _copySelection(cut: false),
+      const SingleActivator(LogicalKeyboardKey.keyX, control: true): () =>
+          _copySelection(cut: true),
+      const SingleActivator(LogicalKeyboardKey.keyX, meta: true): () =>
+          _copySelection(cut: true),
+      if (!autocompleteOwnsShortcuts &&
+          !imeOwnsShortcuts) ...<ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyB, control: true): () =>
+            _controller.applyFormattingCommand(MessageFormattingCommand.bold),
+        const SingleActivator(LogicalKeyboardKey.keyB, meta: true): () =>
+            _controller.applyFormattingCommand(MessageFormattingCommand.bold),
+        const SingleActivator(LogicalKeyboardKey.keyI, control: true): () =>
+            _controller.applyFormattingCommand(MessageFormattingCommand.italic),
+        const SingleActivator(LogicalKeyboardKey.keyI, meta: true): () =>
+            _controller.applyFormattingCommand(MessageFormattingCommand.italic),
+      },
+    },
+    child: TextField(
+      key: ValueKey<String>('message-input-${widget.destinationId}'),
+      controller: _controller,
+      focusNode: _focusNode,
+      groupId: _textFieldTapGroup,
+      readOnly: _sending,
+      minLines: 1,
+      maxLines: 6,
+      keyboardType: TextInputType.multiline,
+      textInputAction: TextInputAction.newline,
+      spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+      contextMenuBuilder: _buildContextMenu,
+      decoration: InputDecoration(
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        hintText: widget.placeholder,
+      ),
+    ),
+  );
+
+  Widget _buildFullEditorButton() => IconButton(
+    key: ValueKey<String>('open-full-editor-${widget.destinationId}'),
+    tooltip: MessageComposerStrings.openFullEditor,
+    onPressed: _sending ? null : () => unawaited(_openFullEditor()),
+    icon: const Icon(Icons.edit_note_outlined),
+  );
+
+  Widget _buildSendButton() => Semantics(
+    button: true,
+    label: _editingPostId != null
+        ? MessageComposerStrings.saveEdit
+        : _sending
+        ? MessageComposerStrings.sending
+        : MessageComposerStrings.send,
+    child: IconButton.filled(
+      key: ValueKey<String>('send-message-${widget.destinationId}'),
+      tooltip: _editingPostId != null
+          ? MessageComposerStrings.saveEdit
+          : MessageComposerStrings.send,
+      onPressed: _canSend
+          ? () => unawaited(_submit(finalizeComposing: true))
+          : null,
+      icon: _sending
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.send_rounded),
+    ),
+  );
+
+  Widget? _buildAttachmentButton() {
+    if (_editingPostId != null ||
+        widget.fileUploadRepositoryFactory == null ||
+        widget.uploadFilePickerFactory == null ||
+        widget.accountId.isEmpty) {
+      return null;
+    }
+    return IconButton(
+      key: ValueKey<String>('attach-file-${widget.destinationId}'),
+      tooltip: MessageComposerStrings.attach,
+      onPressed: (_uploads?.canAdd ?? true) && !_sending && !_picking
+          ? () => unawaited(_pickFiles())
+          : null,
+      icon: const Icon(Icons.attach_file),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
@@ -984,195 +1106,51 @@ class _MessageComposerState extends State<MessageComposer> {
                                 .toList(),
                           ),
                         ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: <Widget>[
-                          if (_editingPostId == null &&
-                              widget.fileUploadRepositoryFactory != null &&
-                              widget.uploadFilePickerFactory != null &&
-                              widget.accountId.isNotEmpty) ...<Widget>[
-                            IconButton(
-                              key: ValueKey<String>(
-                                'attach-file-${widget.destinationId}',
+                      if (constraints.maxWidth <
+                          AppBreakpoints.compact) ...<Widget>[
+                        _buildMessageInput(
+                          mentionQuery: mentionQuery,
+                          emojiQuery: emojiQuery,
+                          autocompleteOwnsShortcuts: autocompleteOwnsShortcuts,
+                          imeOwnsShortcuts: imeOwnsShortcuts,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: <Widget>[
+                            if (_buildAttachmentButton()
+                                case final Widget attachmentButton) ...<Widget>[
+                              attachmentButton,
+                              const SizedBox(width: 4),
+                            ],
+                            _buildFullEditorButton(),
+                            const Spacer(),
+                            _buildSendButton(),
+                          ],
+                        ),
+                      ] else
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: <Widget>[
+                            if (_buildAttachmentButton()
+                                case final Widget attachmentButton) ...<Widget>[
+                              attachmentButton,
+                              const SizedBox(width: 4),
+                            ],
+                            Expanded(
+                              child: _buildMessageInput(
+                                mentionQuery: mentionQuery,
+                                emojiQuery: emojiQuery,
+                                autocompleteOwnsShortcuts:
+                                    autocompleteOwnsShortcuts,
+                                imeOwnsShortcuts: imeOwnsShortcuts,
                               ),
-                              tooltip: MessageComposerStrings.attach,
-                              onPressed:
-                                  (_uploads?.canAdd ?? true) &&
-                                      !_sending &&
-                                      !_picking
-                                  ? () => unawaited(_pickFiles())
-                                  : null,
-                              icon: const Icon(Icons.attach_file),
                             ),
                             const SizedBox(width: 4),
+                            _buildFullEditorButton(),
+                            const SizedBox(width: 4),
+                            _buildSendButton(),
                           ],
-                          Expanded(
-                            child: CallbackShortcuts(
-                              bindings: <ShortcutActivator, VoidCallback>{
-                                const SingleActivator(
-                                  LogicalKeyboardKey.enter,
-                                ): () {
-                                  _submitOrSelectEmoji();
-                                },
-                                const SingleActivator(
-                                  LogicalKeyboardKey.enter,
-                                  shift: true,
-                                ): _insertNewLine,
-                                const SingleActivator(
-                                  LogicalKeyboardKey.numpadEnter,
-                                ): _submitOrSelectEmoji,
-                                const SingleActivator(
-                                  LogicalKeyboardKey.numpadEnter,
-                                  shift: true,
-                                ): _insertNewLine,
-                                if (mentionQuery !=
-                                    null) ...<ShortcutActivator, VoidCallback>{
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.arrowDown,
-                                  ): () =>
-                                      _mentionNavigation.move(1),
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.arrowUp,
-                                  ): () =>
-                                      _mentionNavigation.move(-1),
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.escape,
-                                  ): _dismissMentionAutocomplete,
-                                  const SingleActivator(LogicalKeyboardKey.tab):
-                                      _submitOrSelectEmoji,
-                                } else if (emojiQuery !=
-                                    null) ...<ShortcutActivator, VoidCallback>{
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.arrowDown,
-                                  ): () =>
-                                      _emojiNavigation.move(1),
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.arrowUp,
-                                  ): () =>
-                                      _emojiNavigation.move(-1),
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.escape,
-                                  ): _dismissEmojiAutocomplete,
-                                },
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyC,
-                                  control: true,
-                                ): () =>
-                                    _copySelection(cut: false),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyC,
-                                  meta: true,
-                                ): () =>
-                                    _copySelection(cut: false),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyX,
-                                  control: true,
-                                ): () =>
-                                    _copySelection(cut: true),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyX,
-                                  meta: true,
-                                ): () =>
-                                    _copySelection(cut: true),
-                                if (!autocompleteOwnsShortcuts &&
-                                    !imeOwnsShortcuts) ...<
-                                  ShortcutActivator,
-                                  VoidCallback
-                                >{
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.keyB,
-                                    control: true,
-                                  ): () => _controller.applyFormattingCommand(
-                                    MessageFormattingCommand.bold,
-                                  ),
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.keyB,
-                                    meta: true,
-                                  ): () => _controller.applyFormattingCommand(
-                                    MessageFormattingCommand.bold,
-                                  ),
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.keyI,
-                                    control: true,
-                                  ): () => _controller.applyFormattingCommand(
-                                    MessageFormattingCommand.italic,
-                                  ),
-                                  const SingleActivator(
-                                    LogicalKeyboardKey.keyI,
-                                    meta: true,
-                                  ): () => _controller.applyFormattingCommand(
-                                    MessageFormattingCommand.italic,
-                                  ),
-                                },
-                              },
-                              child: TextField(
-                                key: ValueKey<String>(
-                                  'message-input-${widget.destinationId}',
-                                ),
-                                controller: _controller,
-                                focusNode: _focusNode,
-                                groupId: _textFieldTapGroup,
-                                readOnly: _sending,
-                                minLines: 1,
-                                maxLines: 6,
-                                keyboardType: TextInputType.multiline,
-                                textInputAction: TextInputAction.newline,
-                                spellCheckConfiguration:
-                                    const SpellCheckConfiguration.disabled(),
-                                contextMenuBuilder: _buildContextMenu,
-                                decoration: InputDecoration(
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  disabledBorder: InputBorder.none,
-                                  hintText: widget.placeholder,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            key: ValueKey<String>(
-                              'open-full-editor-${widget.destinationId}',
-                            ),
-                            tooltip: MessageComposerStrings.openFullEditor,
-                            onPressed: _sending
-                                ? null
-                                : () => unawaited(_openFullEditor()),
-                            icon: const Icon(Icons.edit_note_outlined),
-                          ),
-                          const SizedBox(width: 4),
-                          Semantics(
-                            button: true,
-                            label: _editingPostId != null
-                                ? MessageComposerStrings.saveEdit
-                                : _sending
-                                ? MessageComposerStrings.sending
-                                : MessageComposerStrings.send,
-                            child: IconButton.filled(
-                              key: ValueKey<String>(
-                                'send-message-${widget.destinationId}',
-                              ),
-                              tooltip: _editingPostId != null
-                                  ? MessageComposerStrings.saveEdit
-                                  : MessageComposerStrings.send,
-                              onPressed: _canSend
-                                  ? () => unawaited(
-                                      _submit(finalizeComposing: true),
-                                    )
-                                  : null,
-                              icon: _sending
-                                  ? const SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.send_rounded),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
                     ],
                   ),
                 ),
