@@ -344,28 +344,61 @@ void main() {
     expect(tester.widget<TextField>(input).focusNode?.hasFocus, isFalse);
   });
 
-  testWidgets('lays out at compact width with large text', (
-    WidgetTester tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(320, 300));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-          child: Scaffold(
-            body: MessageComposer(
-              destinationId: 'compact',
-              placeholder: 'Write a message',
-              onSubmit: (String message, String pendingPostId) async {},
+  for (final double width in <double>[320, 900]) {
+    testWidgets(
+      'adapts composer controls at ${width.toInt()}px with large text',
+      (WidgetTester tester) async {
+        await tester.binding.setSurfaceSize(Size(width, 400));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: Scaffold(
+                body: MessageComposer(
+                  destinationId: 'adaptive',
+                  placeholder: 'Write a message',
+                  onSubmit: (String message, String pendingPostId) async {},
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-    );
+        );
 
-    expect(tester.takeException(), isNull);
-  });
+        final Finder input = find.byKey(
+          const ValueKey<String>('message-input-adaptive'),
+        );
+        final Finder fullEditor = find.byKey(
+          const ValueKey<String>('open-full-editor-adaptive'),
+        );
+        final Finder send = find.byKey(
+          const ValueKey<String>('send-message-adaptive'),
+        );
+        if (width < 700) {
+          expect(tester.getSize(input).width, moreOrLessEquals(width - 44));
+          expect(
+            tester.getTopLeft(fullEditor).dy,
+            greaterThan(tester.getBottomLeft(input).dy),
+          );
+          expect(
+            tester.getTopLeft(send).dy,
+            greaterThan(tester.getBottomLeft(input).dy),
+          );
+        } else {
+          expect(tester.getSize(input).width, lessThan(width - 44));
+          expect(
+            tester.getBottomLeft(fullEditor).dy,
+            moreOrLessEquals(tester.getBottomLeft(input).dy),
+          );
+          expect(
+            tester.getBottomLeft(send).dy,
+            moreOrLessEquals(tester.getBottomLeft(input).dy),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('opens after two characters and inserts a system emoji', (
     WidgetTester tester,

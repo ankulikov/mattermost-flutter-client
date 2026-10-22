@@ -81,7 +81,26 @@ void main() {
         final attach = find.byKey(
           const ValueKey<String>('attach-file-channel'),
         );
+        final input = find.byKey(
+          const ValueKey<String>('message-input-channel'),
+        );
+        final fullEditor = find.byKey(
+          const ValueKey<String>('open-full-editor-channel'),
+        );
         final send = find.byKey(const ValueKey<String>('send-message-channel'));
+        for (final Finder action in <Finder>[attach, fullEditor, send]) {
+          if (width < 700) {
+            expect(
+              tester.getTopLeft(action).dy,
+              greaterThan(tester.getBottomLeft(input).dy),
+            );
+          } else {
+            expect(
+              tester.getBottomLeft(action).dy,
+              moreOrLessEquals(tester.getBottomLeft(input).dy),
+            );
+          }
+        }
         await tester.tap(attach);
         await tester.pump();
         expect(repository.result, isNotNull);
