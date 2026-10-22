@@ -47,6 +47,7 @@ final class AuthController extends Notifier<AuthState> {
 
   final Provider<AuthRepository> _repositoryProvider;
   int _attemptId = 0;
+  bool _restoreInProgress = false;
   String? _lastDiscoveryAddress;
 
   @override
@@ -56,11 +57,19 @@ final class AuthController extends Notifier<AuthState> {
       _attemptId += 1;
       unawaited(repository.cancelSsoAuthentication().catchError((_) {}));
     });
-    return const AuthState();
+    // The first visible state must not imply that the user is signed out.
+    // BootstrapPage starts restoration after provider initialization and keeps
+    // this state hidden behind the startup surface until the result is known.
+    return const AuthState(phase: AuthPhase.restoring);
   }
 
   Future<void> restore() async {
-    if (state.phase != AuthPhase.signedOut) return;
+    if (_restoreInProgress ||
+        (state.phase != AuthPhase.restoring &&
+            state.phase != AuthPhase.signedOut)) {
+      return;
+    }
+    _restoreInProgress = true;
     final int attemptId = ++_attemptId;
     state = const AuthState(phase: AuthPhase.restoring);
     try {
@@ -74,6 +83,8 @@ final class AuthController extends Notifier<AuthState> {
     } on AuthFailure catch (error) {
       if (!_isCurrent(attemptId)) return;
       state = AuthState(failure: error.kind);
+    } finally {
+      _restoreInProgress = false;
     }
   }
 

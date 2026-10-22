@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
@@ -92,8 +93,17 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   Widget build(BuildContext context) {
     ref.watch(realtimeConnectionStatusProvider);
     final AuthState auth = ref.watch(authControllerProvider);
+    if (auth.phase == AuthPhase.restoring) {
+      return const _StartupContent();
+    }
     if (auth.phase != AuthPhase.signedIn) {
       return _buildUnauthenticated(auth: auth);
+    }
+    final bool isThemeLoading = ref.watch(
+      appThemeProvider.select((AppThemeState state) => state.isLoading),
+    );
+    if (isThemeLoading) {
+      return const _StartupContent();
     }
 
     final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
@@ -734,6 +744,20 @@ class _MainContent extends StatelessWidget {
     }
     return _SignedOutContent(auth: auth);
   }
+}
+
+class _StartupContent extends StatelessWidget {
+  const _StartupContent();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    key: const ValueKey<String>('app-startup'),
+    body: Center(
+      child: CircularProgressIndicator(
+        color: Theme.of(context).colorScheme.primary,
+      ),
+    ),
+  );
 }
 
 class _SignedOutContent extends ConsumerWidget {

@@ -40,6 +40,14 @@ active account. It reads secure storage once while restoring a session or uses
 the credential supplied by the current sign-in attempt. Feature repositories
 receive the authenticated API and cannot access the token.
 
+Application startup begins in a distinct restoring state. The sign-in surface
+is not rendered until secure storage and server-side session validation have
+resolved. A saved token is accepted only after `GET /users/me` succeeds; an
+expired token is cleared, while a network failure preserves the credential and
+offers retry. After a session is accepted, the authenticated shell remains
+behind the startup surface until the account-scoped theme preference is loaded,
+so neither the sign-in UI nor a default-themed shell flashes during startup.
+
 An authenticated session also owns one `SessionRealtimeService` and one
 `WebSocketGateway`. Opening a channel, Inbox item, or thread never creates an
 extra WebSocket connection.
