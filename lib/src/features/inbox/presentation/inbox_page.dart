@@ -470,14 +470,19 @@ class _InboxUpdates extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<_UpdateLine> updates = switch (item) {
-      ThreadInboxItem(:final thread, :final unreadMentionDetails) =>
+      ThreadInboxItem(
+        :final thread,
+        :final channel,
+        :final unreadMentionDetails,
+      ) =>
         <_UpdateLine>[
           _UpdateLine(
             tags: <String>['${thread.unreadReplies}'],
             text: InboxStrings.newRepliesWithLastOneAt(thread.unreadReplies),
             trailingTags: <String>[_timestamp(context, thread.lastReplyAt)],
           ),
-          if (thread.unreadMentions > 0)
+          if (thread.unreadMentions > 0 &&
+              (!channel.isDialog || unreadMentionDetails?.hasMentions == true))
             _UpdateLine(
               tags: _threadMentionTags(unreadMentionDetails),
               text: InboxStrings.mentioned,

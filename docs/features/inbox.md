@@ -57,7 +57,7 @@ The Updates block is derived from these presentation fields:
 
 | Source | Updates |
 | --- | --- |
-| Followed thread | `<count> new replies, last one at <time>`; when present, `You`, each matching `@<group slug>`, `@channel`, or an unclassified `Mention`, followed by `mentioned` |
+| Followed thread | `<count> new replies, last one at <time>`; when present, `You`, each matching `@<group slug>`, `@channel`, or an unclassified `Mention`, followed by `mentioned`. In direct and group-message threads, the mention line requires an explicit reconstructed mention because CRT can count ordinary dialog replies as mentions. |
 | Direct or group-message dialog | `<count> messages since <date of first bundled message>` when the bundle contains more than one message; no Updates block for a single message |
 | Current referenceable user-group mention | `@<group slug> mentioned` |
 | Direct or keyword mention of the current user | `You mentioned` |

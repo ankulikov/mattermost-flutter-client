@@ -471,6 +471,68 @@ void main() {
     },
   );
 
+  test(
+    'does not classify an ordinary direct-thread reply as a mention',
+    () async {
+      final _InboxApi api = _InboxApi(
+        teams: const <MattermostTeamDto>[
+          MattermostTeamDto(id: 'team', name: 'team', displayName: 'Team'),
+        ],
+        channels: const <MattermostChannelDto>[
+          MattermostChannelDto(
+            id: 'dm',
+            teamId: 'team',
+            type: 'D',
+            name: 'me__other',
+            displayName: 'Other',
+          ),
+        ],
+        members: const <MattermostChannelMemberDto>[
+          MattermostChannelMemberDto(channelId: 'dm', userId: 'me'),
+        ],
+        unread: const <MattermostPostDto>[],
+        threads: const <MattermostUserThreadDto>[
+          MattermostUserThreadDto(
+            id: 'root',
+            replyCount: 1,
+            lastReplyAt: 2000,
+            lastViewedAt: 1000,
+            participants: <MattermostUserDto>[],
+            post: MattermostPostDto(
+              id: 'root',
+              userId: 'other',
+              channelId: 'dm',
+              message: 'Root',
+              createAt: 500,
+            ),
+            unreadReplies: 1,
+            unreadMentions: 1,
+          ),
+        ],
+        threadPosts: const <String, List<MattermostPostDto>>{
+          'root': <MattermostPostDto>[
+            MattermostPostDto(
+              id: 'reply',
+              rootId: 'root',
+              userId: 'other',
+              channelId: 'dm',
+              message: 'No explicit mention here',
+              createAt: 2000,
+            ),
+          ],
+        },
+      );
+
+      final InboxSnapshot snapshot = await _repository(
+        api,
+      ).load(session: session);
+
+      final ThreadInboxItem item = snapshot.newItems.single as ThreadInboxItem;
+      expect(item.thread.unreadMentions, 1);
+      expect(item.unreadMentionDetails?.hasMentions, isFalse);
+    },
+  );
+
   test('flags incomplete historical mention reconstruction', () async {
     final _InboxApi api = _InboxApi(
       teams: const <MattermostTeamDto>[

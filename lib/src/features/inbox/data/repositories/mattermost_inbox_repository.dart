@@ -898,7 +898,11 @@ final class MattermostInboxRepository extends InboxRepository {
         ? null
         : _threadMentionDetails(
             unreadPosts: unreadPosts,
-            expectedCount: raw.unreadMentions,
+            // CRT counts dialog replies as mentions even when their bodies do
+            // not contain an explicit mention. Preserve that server counter
+            // on FollowedThread, but do not turn its implicit dialog
+            // semantics into an unclassified `Mention` presentation reason.
+            expectedCount: channel.isDialog ? 0 : raw.unreadMentions,
             member: member,
             currentUser: currentUser,
             groupMentionNames: groupMentionNames,
