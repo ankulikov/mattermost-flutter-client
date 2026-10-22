@@ -462,6 +462,50 @@ void main() {
     },
   );
 
+  testWidgets(
+    'omits mention update for a direct thread without an explicit mention',
+    (WidgetTester tester) async {
+      final ThreadInboxItem item = ThreadInboxItem(
+        thread: FollowedThread(
+          root: _post('direct-root', 'thread root', direct: true),
+          replyCount: 1,
+          lastReplyAt: DateTime.utc(2026, 9, 4),
+          lastViewedAt: DateTime.utc(2026, 9, 3),
+          unreadReplies: 1,
+          unreadMentions: 1,
+        ),
+        channel: _channel(direct: true),
+        teamId: 'team',
+        unreadMentionDetails: InboxThreadMentionDetails(),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authSessionProvider.overrideWithValue(_session),
+            inboxRepositoryProvider.overrideWithValue(
+              _InboxRepository(InboxSnapshot(newItems: <InboxItem>[item])),
+            ),
+            postponedRepositoryProvider.overrideWithValue(
+              const _PostponedRepository(),
+            ),
+          ],
+          child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder updates = find.byKey(
+        const ValueKey<String>('inbox-updates-thread:direct-root'),
+      );
+      expect(updates, findsOneWidget);
+      expect(
+        find.descendant(of: updates, matching: find.text('mentioned')),
+        findsNothing,
+      );
+      expect(find.text('new reply, last one at'), findsOneWidget);
+    },
+  );
+
   testWidgets('shows exact message counts on both Inbox tabs', (
     WidgetTester tester,
   ) async {
