@@ -267,6 +267,9 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                 uploadFilePickerFactory: session == null
                     ? null
                     : () => ref.read(uploadFilePickerProvider),
+                uploadClipboardFactory: session == null
+                    ? null
+                    : () => ref.read(uploadClipboardProvider),
                 fileUploadRepositoryFactory: session == null
                     ? null
                     : () => ref.read(fileUploadRepositoryProvider),

@@ -20,7 +20,7 @@ abstract final class MessageComposerStrings {
   static const String uploadFinalizing = 'Finalizing upload…';
   static const String uploadQueued = 'Waiting to upload';
   static const String tooManyFiles = 'Choose up to five files per message.';
-  static const String pickerFailed = 'Files could not be selected.';
+  static const String pickerFailed = 'Files could not be added.';
   static const String uploadFailed = 'Upload failed';
   static const String fileTooLarge = 'File exceeds the server size limit';
   static const String uploadForbidden = 'Uploading is not allowed here';

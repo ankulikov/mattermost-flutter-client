@@ -56,6 +56,30 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(controller.tiles, isEmpty);
   });
+
+  test('releases temporary sources after upload, removal, and close', () async {
+    final repository = _Repository();
+    final controller = ComposerUploadController(
+      repository: repository,
+      channelId: 'channel',
+    );
+    final released = <int>[];
+    SelectedUploadFile source(int index) => SelectedUploadFile(
+      name: 'file-$index.txt',
+      size: 1,
+      openStream: () =>
+          Stream<Uint8List>.value(Uint8List.fromList(<int>[index])),
+      dispose: () => released.add(index),
+    );
+    controller.addFiles(<SelectedUploadFile>[source(0), source(1), source(2)]);
+    controller.remove(controller.tiles[1].localId);
+    expect(released, <int>[1]);
+    repository.calls.first.result.complete('uploaded');
+    await Future<void>.delayed(Duration.zero);
+    expect(released, <int>[1, 0]);
+    controller.dispose();
+    expect(released, <int>[1, 0, 2]);
+  });
 }
 
 SelectedUploadFile _file(int index) => SelectedUploadFile(

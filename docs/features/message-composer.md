@@ -20,6 +20,23 @@ retried or removed. Attachment-only posts are supported. A failed post keeps
 its text, file IDs, and pending post ID for manual retry without reuploading.
 Removing or closing a composer cancels its in-flight requests.
 
+When the message field is focused, the platform paste shortcut reads copied
+files before text. Copied files retain their names, extensions, and bytes;
+an image without a file path gets a timestamped name such as
+`clipboard_2026_10_24_10_20_30.png`. Pasted files use
+the same volatile upload queue, five-file limit, retries, and send gate as
+paperclip selections. If the clipboard has no supported file content, paste
+inserts plain text at the selection. The quick and full editors share this
+behavior. macOS copies security-scoped clipboard files into app-owned temporary
+storage and removes each copy when its upload tile is done. The current adapter
+reads file paths on other desktop platforms and clipboard images
+on every supported platform. Web exposes images but not copied file paths.
+Android keyboard clipboard history inserts images through Flutter's content
+insertion callback. The composer accepts supported image MIME types and adds
+the provided bytes to the same upload queue with a timestamped filename.
+Android file clipboard URIs still require a usable image representation when
+read through the shortcut path.
+
 Enter sends the message. Shift+Enter inserts a line break. The draft clears
 only after a successful REST response. A failure leaves the draft and shows a
 non-blocking error.

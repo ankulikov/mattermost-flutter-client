@@ -380,6 +380,9 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                       uploadFilePickerFactory: session == null
                           ? null
                           : () => ref.read(uploadFilePickerProvider),
+                      uploadClipboardFactory: session == null
+                          ? null
+                          : () => ref.read(uploadClipboardProvider),
                       fileUploadRepositoryFactory: session == null
                           ? null
                           : () => ref.read(fileUploadRepositoryProvider),

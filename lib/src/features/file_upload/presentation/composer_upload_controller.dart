@@ -65,6 +65,7 @@ final class ComposerUploadController extends ChangeNotifier {
     tile.generation++;
     tile.cancellation?.cancel();
     tile.retryTimer?.cancel();
+    tile.source?.dispose?.call();
     notifyListeners();
     _startQueued();
   }
@@ -92,6 +93,7 @@ final class ComposerUploadController extends ChangeNotifier {
       tile.generation++;
       tile.cancellation?.cancel();
       tile.retryTimer?.cancel();
+      tile.source?.dispose?.call();
     }
     _tiles.clear();
     notifyListeners();
@@ -143,6 +145,7 @@ final class ComposerUploadController extends ChangeNotifier {
         },
       );
       if (!_current(tile, generation)) return;
+      tile.source?.dispose?.call();
       tile
         ..fileId = id
         ..source = null
