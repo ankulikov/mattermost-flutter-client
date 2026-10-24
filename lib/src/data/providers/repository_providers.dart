@@ -30,6 +30,7 @@ import 'package:mattermost_flutter/src/domain/services/realtime_connection_servi
 import 'package:mattermost_flutter/src/features/channel_members/data/mattermost_channel_members_repository.dart';
 import 'package:mattermost_flutter/src/features/channel_members/domain/channel_members_repository.dart';
 import 'package:mattermost_flutter/src/features/file_upload/data/mattermost_file_upload_repository.dart';
+import 'package:mattermost_flutter/src/features/file_upload/data/system_upload_clipboard.dart';
 import 'package:mattermost_flutter/src/features/file_upload/data/system_upload_file_picker.dart';
 import 'package:mattermost_flutter/src/features/file_upload/domain/file_upload.dart';
 import 'package:mattermost_flutter/src/features/inbox/data/repositories/mattermost_inbox_repository.dart';
@@ -70,6 +71,9 @@ final Provider<AppUpdateRepository> appUpdateRepositoryProvider =
 
 final Provider<UploadFilePicker> uploadFilePickerProvider =
     Provider<UploadFilePicker>((Ref ref) => const SystemUploadFilePicker());
+
+final Provider<UploadClipboard> uploadClipboardProvider =
+    Provider<UploadClipboard>((Ref ref) => const SystemUploadClipboard());
 
 final Provider<FileUploadRepository> fileUploadRepositoryProvider =
     Provider<FileUploadRepository>(

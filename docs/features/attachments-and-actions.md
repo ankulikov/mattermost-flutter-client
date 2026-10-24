@@ -17,6 +17,12 @@ picked sources are never persisted. Removing a completed tile detaches its ID
 from the pending post; the public API does not provide immediate draft-file
 deletion.
 
+The composer also accepts copied files and clipboard images through the same
+upload contract. The clipboard adapter stays outside presentation code. Native
+desktop files preserve the source name and extension; image-only clipboard
+data is represented as PNG. Web support is limited to images, and Android
+content URIs currently require a usable image representation.
+
 A single image receives a large preview. Multiple files use compact cards, and
 the full-screen viewer pages through images from one post. Images support pinch
 zoom and panning up to 5x; page swiping pauses while an image is enlarged, and
