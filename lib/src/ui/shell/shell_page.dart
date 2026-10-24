@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
@@ -99,13 +98,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     if (auth.phase != AuthPhase.signedIn) {
       return _buildUnauthenticated(auth: auth);
     }
-    final bool isThemeLoading = ref.watch(
-      appThemeProvider.select((AppThemeState state) => state.isLoading),
-    );
-    if (isThemeLoading) {
-      return const _StartupContent();
-    }
-
     final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
     final ShellDestination destination = ref.watch(shellDestinationProvider);
     final bool threadsSelected = destination == ShellDestination.inbox;

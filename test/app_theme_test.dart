@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
 import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
-import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
-import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/features/preferences/domain/models/user_preferences.dart';
 import 'package:mattermost_flutter/src/features/preferences/domain/repositories/user_preferences_repository.dart';
 
@@ -42,7 +40,7 @@ void main() {
   });
 
   group('AppThemeController', () {
-    test('uses light without reading preferences while signed out', () {
+    test('uses the bootstrapped light preference while signed out', () {
       final _FakeUserPreferencesRepository repository =
           _FakeUserPreferencesRepository();
       final ProviderContainer container = _container(repository);
@@ -56,37 +54,31 @@ void main() {
       expect(repository.readCount, 0);
     });
 
-    test('loads the active account persisted theme', () async {
-      final Completer<UserPreferences> read = Completer<UserPreferences>();
+    test('uses the bootstrapped theme synchronously', () {
       final _FakeUserPreferencesRepository repository =
-          _FakeUserPreferencesRepository(onRead: () => read.future);
-      final ProviderContainer container = _signedInContainer(repository);
-      addTearDown(container.dispose);
-
-      expect(
-        container.read(appThemeProvider).preference,
-        ThemePreference.light,
+          _FakeUserPreferencesRepository();
+      final ProviderContainer container = _container(
+        repository,
+        initial: ThemePreference.dark,
       );
-      expect(container.read(appThemeProvider).isLoading, isTrue);
-
-      read.complete(const UserPreferences(theme: ThemePreference.dark));
-      await pumpEventQueue();
+      addTearDown(container.dispose);
 
       expect(container.read(appThemeProvider).preference, ThemePreference.dark);
       expect(container.read(appThemeProvider).isLoading, isFalse);
+      expect(repository.readCount, 0);
     });
 
-    test('falls back to light when reading preferences fails', () async {
+    test('does not read preferences after the boot snapshot', () async {
       final _FakeUserPreferencesRepository repository =
           _FakeUserPreferencesRepository(
             onRead: () => Future<UserPreferences>.error(
               StateError('preferences unavailable'),
             ),
           );
-      final ProviderContainer container = _signedInContainer(repository);
+      final ProviderContainer container = _container(repository);
       addTearDown(container.dispose);
 
-      expect(container.read(appThemeProvider).isLoading, isTrue);
+      expect(container.read(appThemeProvider).isLoading, isFalse);
       await pumpEventQueue();
 
       expect(
@@ -109,7 +101,7 @@ void main() {
       final Completer<void> update = Completer<void>();
       final _FakeUserPreferencesRepository repository =
           _FakeUserPreferencesRepository(onUpdate: (_) => update.future);
-      final ProviderContainer container = _signedInContainer(repository);
+      final ProviderContainer container = _container(repository);
       addTearDown(container.dispose);
       container.read(appThemeProvider);
       await pumpEventQueue();
@@ -120,9 +112,7 @@ void main() {
 
       expect(container.read(appThemeProvider).preference, ThemePreference.dark);
       expect(container.read(appThemeProvider).isSaving, isTrue);
-      expect(repository.updatedPreferences, const <UserPreferences>[
-        UserPreferences(theme: ThemePreference.dark),
-      ]);
+      expect(repository.updatedThemes, <ThemePreference>[ThemePreference.dark]);
 
       update.complete();
       await result;
@@ -140,7 +130,7 @@ void main() {
               return updateAttempts == 1 ? update.future : Future<void>.value();
             },
           );
-      final ProviderContainer container = _signedInContainer(repository);
+      final ProviderContainer container = _container(repository);
       addTearDown(container.dispose);
       container.read(appThemeProvider);
       await pumpEventQueue();
@@ -163,30 +153,19 @@ void main() {
           .updateTheme(ThemePreference.dark);
 
       expect(container.read(appThemeProvider).preference, ThemePreference.dark);
-      expect(repository.updatedPreferences, hasLength(2));
+      expect(repository.updatedThemes, hasLength(2));
     });
   });
 }
 
-ProviderContainer _container(_FakeUserPreferencesRepository repository) =>
-    ProviderContainer(
-      overrides: [
-        userPreferencesRepositoryProvider.overrideWithValue(repository),
-      ],
-    );
-
-ProviderContainer _signedInContainer(
-  _FakeUserPreferencesRepository repository,
-) {
-  final ProviderContainer container = _container(repository);
-  container.read(activeAccountSessionProvider.notifier).set(_session);
-  return container;
-}
-
-final AuthSession _session = AuthSession(
-  serverUrl: Uri.parse('https://mattermost.example.com'),
-  userId: 'user-1',
-  username: 'test-user',
+ProviderContainer _container(
+  _FakeUserPreferencesRepository repository, {
+  ThemePreference initial = ThemePreference.light,
+}) => ProviderContainer(
+  overrides: [
+    appSettingsRepositoryProvider.overrideWithValue(repository),
+    initialAppThemeProvider.overrideWithValue(initial),
+  ],
 );
 
 double _contrast(Color first, Color second) {
@@ -205,10 +184,9 @@ final class _FakeUserPreferencesRepository
 
   final Future<UserPreferences> Function()? onRead;
   final Future<void> Function(UserPreferences preferences)? onUpdate;
-  final List<UserPreferences> updatedPreferences = <UserPreferences>[];
+  final List<ThemePreference> updatedThemes = <ThemePreference>[];
   int readCount = 0;
 
-  @override
   Future<UserPreferences> read() {
     readCount += 1;
     return onRead?.call() ??
@@ -218,10 +196,18 @@ final class _FakeUserPreferencesRepository
   @override
   Future<DateTime?> readLastUpdateCheck() async => null;
 
-  @override
   Future<void> update(UserPreferences preferences) {
-    updatedPreferences.add(preferences);
     return onUpdate?.call(preferences) ?? Future<void>.value();
+  }
+
+  @override
+  Future<ThemePreference> readTheme() async => ThemePreference.light;
+
+  @override
+  Future<void> writeTheme(ThemePreference theme) {
+    updatedThemes.add(theme);
+    return onUpdate?.call(UserPreferences(theme: theme)) ??
+        Future<void>.value();
   }
 
   @override

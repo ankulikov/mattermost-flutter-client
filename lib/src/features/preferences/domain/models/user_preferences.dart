@@ -1,7 +1,11 @@
-/// Theme choices that can be persisted without depending on Flutter UI types.
-enum ThemePreference { light, dark }
+import 'package:mattermost_flutter/src/features/preferences/domain/models/theme_preference.dart';
 
-/// Durable preferences owned by one authenticated account.
+export 'theme_preference.dart';
+
+/// Compatibility alias for the legacy account-scoped Drift adapter.
+@Deprecated(
+  'Legacy account-scoped preferences are retained for migration only.',
+)
 final class UserPreferences {
   const UserPreferences({required this.theme});
 
@@ -16,10 +20,9 @@ final class UserPreferences {
   }
 
   @override
-  bool operator ==(Object other) {
-    return identical(this, other) ||
-        other is UserPreferences && other.theme == theme;
-  }
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is UserPreferences && other.theme == theme;
 
   @override
   int get hashCode => theme.hashCode;

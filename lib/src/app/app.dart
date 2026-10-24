@@ -6,9 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/app/router.dart';
 import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
-import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
-import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
-import 'package:mattermost_flutter/src/features/preferences/domain/models/user_preferences.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/models/theme_preference.dart';
 import 'package:mattermost_flutter/src/features/updates/domain/models/app_update.dart';
 import 'package:mattermost_flutter/src/features/updates/presentation/app_update_available_dialog.dart';
 import 'package:mattermost_flutter/src/features/updates/presentation/app_update_page.dart';
@@ -74,13 +72,13 @@ class _UpdateLifecycleCoordinatorState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _scheduleStartupCheck(ref.read(activeAccountSessionProvider));
+        _scheduleStartupCheck();
       }
     });
   }
 
-  void _scheduleStartupCheck(AuthSession? session) {
-    if (!_isAndroid || session == null || _checkScheduled) return;
+  void _scheduleStartupCheck() {
+    if (!_isAndroid || _checkScheduled) return;
     _checkScheduled = true;
     unawaited(_checkForUpdate());
   }
@@ -129,10 +127,6 @@ class _UpdateLifecycleCoordinatorState
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AuthSession?>(
-      activeAccountSessionProvider,
-      (AuthSession? previous, AuthSession? next) => _scheduleStartupCheck(next),
-    );
     return widget.child;
   }
 }

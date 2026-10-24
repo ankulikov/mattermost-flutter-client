@@ -29,7 +29,7 @@ void main() {
           const _RealtimeService(),
         ),
         appUpdateRepositoryProvider.overrideWithValue(updates),
-        userPreferencesRepositoryProvider.overrideWithValue(preferences),
+        appSettingsRepositoryProvider.overrideWithValue(preferences),
       ],
     );
     addTearDown(container.dispose);
@@ -72,14 +72,18 @@ final class _PreferencesRepository implements UserPreferencesRepository {
   int writeCalls = 0;
   DateTime? lastUpdateCheck;
 
-  @override
   Future<UserPreferences> read() async => UserPreferences.defaults;
 
   @override
   Future<DateTime?> readLastUpdateCheck() async => lastUpdateCheck;
 
-  @override
   Future<void> update(UserPreferences preferences) async {}
+
+  @override
+  Future<ThemePreference> readTheme() async => ThemePreference.light;
+
+  @override
+  Future<void> writeTheme(ThemePreference theme) async {}
 
   @override
   Future<void> writeLastUpdateCheck(DateTime checkedAt) async {

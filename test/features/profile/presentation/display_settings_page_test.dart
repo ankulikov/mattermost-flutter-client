@@ -27,7 +27,8 @@ void main() {
     await tester.binding.setSurfaceSize(size);
     final ProviderContainer container = ProviderContainer(
       overrides: [
-        userPreferencesRepositoryProvider.overrideWithValue(repository),
+        appSettingsRepositoryProvider.overrideWithValue(repository),
+        initialAppThemeProvider.overrideWithValue(repository.initial.theme),
       ],
     );
     addTearDown(() {
@@ -220,19 +221,24 @@ final class _UserPreferencesRepository implements UserPreferencesRepository {
   UserPreferences? updated;
   int updateCalls = 0;
 
-  @override
   Future<UserPreferences> read() async => initial;
 
   @override
   Future<DateTime?> readLastUpdateCheck() async => null;
 
-  @override
   Future<void> update(UserPreferences preferences) async {
     updateCalls += 1;
     updated = preferences;
     if (failUpdate) throw StateError('save failed');
     await updateCompleter?.future;
   }
+
+  @override
+  Future<ThemePreference> readTheme() async => initial.theme;
+
+  @override
+  Future<void> writeTheme(ThemePreference theme) =>
+      update(UserPreferences(theme: theme));
 
   @override
   Future<void> writeLastUpdateCheck(DateTime checkedAt) async {}

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
-import 'package:mattermost_flutter/src/features/preferences/domain/models/user_preferences.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/models/theme_preference.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/profile_strings.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 

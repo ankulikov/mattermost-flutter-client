@@ -1,22 +1,20 @@
 # User preferences
 
-User preferences are durable, account-owned settings that affect the local
-client experience. They survive process restarts so an authenticated account
-returns to its selected display theme without a server request.
+App preferences are durable, process-wide settings that affect the local client
+experience. They survive process restarts and are available before session
+restoration, so the first frame uses the selected display theme.
 
 ## Ownership and storage
 
-`UserPreferencesRepository` is the only application-facing persistence
-contract. Its Drift implementation reads and replaces the preferences for the
-active session's durable account scope ID. Presentation and app composition
-code do not query the database directly.
+`AppSettingsRepository` is the application-facing persistence contract.
+Its `SharedPreferencesAsync` implementation stores process-wide values under
+namespaced keys. Presentation code does not query platform storage directly.
 
-The `user_preferences` table contains one row per account/server scope. The row
-stores the complete preferences document as JSON in `preferences_json` and the
-last app-update check attempt in the nullable `last_check_update` column.
-Tokens, message content, and other server data are never included. Updating a
-known preference preserves unknown JSON fields so an older client does not
-erase settings written by a newer client.
+The current keys are `mattermost.app.theme` and
+`mattermost.app.last_update_check_utc_ms`. The latter is a UTC epoch timestamp.
+Tokens, message content, profiles, and other server data are never included.
+The legacy account-scoped Drift `user_preferences` table remains for one
+compatibility release; new reads and writes do not use it.
 
 ## JSON compatibility
 
@@ -35,4 +33,4 @@ new preferences and theme choices are introduced.
 
 - `lib/src/features/preferences/domain/`
 - `lib/src/features/preferences/data/`
-- `lib/src/data/database/app_database.dart`
+- `lib/src/features/preferences/data/repositories/shared_preferences_app_preferences_repository.dart`

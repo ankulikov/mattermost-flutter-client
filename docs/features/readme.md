@@ -76,10 +76,14 @@ statuses so one cannot overwrite the other.
 
 Drift stores only data with an owner, a freshness policy, and a reason to
 survive process restarts. Current durable data includes account-scoped user
-profiles, user preferences, recent emoji, and the expiring user-group
-membership projection used by Inbox classification. Inbox also stores only its
+profiles, recent emoji, and the expiring user-group membership projection used
+by Inbox classification. Inbox also stores only its
 New and Postponed counts so navigation and tab badges are available while the
 first snapshot loads.
+
+Process-wide local application preferences, such as the selected theme and the
+app-update check timestamp, use `SharedPreferencesAsync`. They are intentionally
+not account-owned so they can be read before session restoration.
 Messages, threads, sidebar snapshots, pagination cursors, and realtime sync
 metadata are not stored in Drift.
 
