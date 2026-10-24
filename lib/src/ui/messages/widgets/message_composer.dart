@@ -1054,6 +1054,8 @@ class _MessageComposerState extends State<MessageComposer> {
                             accountId: widget.accountId,
                             navigationController: _emojiNavigation,
                             limit: 48,
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.manual,
                             onSelected: _selectEmoji,
                           ),
                         ),
