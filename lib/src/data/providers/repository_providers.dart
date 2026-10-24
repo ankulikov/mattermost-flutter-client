@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
-import 'package:mattermost_flutter/src/data/database/database_provider.dart';
 import 'package:mattermost_flutter/src/data/mappers/mattermost_message_mapper.dart';
 import 'package:mattermost_flutter/src/data/platform/in_app_webview_sso_browser_gateway.dart';
 import 'package:mattermost_flutter/src/data/providers/infrastructure_providers.dart';
@@ -41,8 +40,8 @@ import 'package:mattermost_flutter/src/features/inbox/domain/repositories/postpo
 import 'package:mattermost_flutter/src/features/inbox/domain/repositories/viewed_channel_posts_repository.dart';
 import 'package:mattermost_flutter/src/features/mentions/data/repositories/mattermost_mention_repository.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/repositories/mention_repository.dart';
-import 'package:mattermost_flutter/src/features/preferences/data/repositories/drift_user_preferences_repository.dart';
-import 'package:mattermost_flutter/src/features/preferences/domain/repositories/user_preferences_repository.dart';
+import 'package:mattermost_flutter/src/features/preferences/data/repositories/shared_preferences_app_preferences_repository.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/repositories/app_settings_repository.dart';
 import 'package:mattermost_flutter/src/features/profile/data/repositories/mattermost_current_user_profile_repository.dart';
 import 'package:mattermost_flutter/src/features/profile/domain/repositories/current_user_profile_repository.dart';
 import 'package:mattermost_flutter/src/features/search/data/repositories/mattermost_message_search_repository.dart';
@@ -127,17 +126,10 @@ currentUserProfileRepositoryProvider = Provider<CurrentUserProfileRepository>((
   );
 });
 
-final Provider<UserPreferencesRepository> userPreferencesRepositoryProvider =
-    Provider<UserPreferencesRepository>((Ref ref) {
-      final session = ref.watch(activeAccountSessionProvider);
-      if (session == null) {
-        throw StateError('No active Mattermost account for preferences');
-      }
-      return DriftUserPreferencesRepository(
-        database: ref.watch(appDatabaseProvider),
-        accountScopeId: session.durableDataScopeId,
-      );
-    });
+final Provider<AppSettingsRepository> appSettingsRepositoryProvider =
+    Provider<AppSettingsRepository>(
+      (Ref ref) => SharedPreferencesAppPreferencesRepository(),
+    );
 
 final Provider<AttachmentRepository> attachmentRepositoryProvider =
     Provider<AttachmentRepository>(

@@ -95,9 +95,10 @@ pull requests and version comparisons use compact `#123` and
 `vA...vB` labels. HTTP(S) links open in the external browser. Images are
 rendered as their alternative text, and raw HTML is not rendered.
 
-The application performs a quiet, non-blocking check after launch for the
-active account, at most once per day across process restarts. The timestamp is
-stored in the account-scoped `user_preferences.last_check_update` column. A
+The application performs a quiet, non-blocking check after launch, regardless
+of authentication state, at most once per day across process restarts. The
+timestamp is stored in the process-wide app-preferences key
+`mattermost.app.last_update_check_utc_ms`. A
 successful discovery with a compatible update opens a modal showing the
 installed and available versions. “Update now” opens the update screen; “Later”
 postpones the next automatic check for one day. Opening the update screen

@@ -1,5 +1,5 @@
 import 'package:mattermost_flutter/src/app/bootstrap.dart';
 
-void main() {
-  bootstrapMattermostApp();
+Future<void> main() async {
+  await bootstrapMattermostApp();
 }

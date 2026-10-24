@@ -52,6 +52,34 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('keeps sign-in hidden while the saved session is unresolved', (
+    WidgetTester tester,
+  ) async {
+    final Completer<AuthSession?> restoration = Completer<AuthSession?>();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _SignedOutRepository(restoration: restoration.future),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey<String>('app-startup')), findsOneWidget);
+    expect(find.text(AuthStrings.title), findsNothing);
+    expect(find.byType(ChannelSidebar), findsNothing);
+
+    restoration.complete(null);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('app-startup')), findsNothing);
+    expect(find.text(AuthStrings.title), findsOneWidget);
+  });
+
   testWidgets('shows no navigation chrome while signed out', (
     WidgetTester tester,
   ) async {
@@ -1945,6 +1973,11 @@ void main() {
 }
 
 final class _SignedOutRepository implements AuthRepository {
+  _SignedOutRepository({Future<AuthSession?>? restoration})
+    : _restoration = restoration ?? Future<AuthSession?>.value(null);
+
+  final Future<AuthSession?> _restoration;
+
   @override
   Future<AuthSession> authenticateWithPassword({
     required Uri serverUrl,
@@ -1977,7 +2010,7 @@ final class _SignedOutRepository implements AuthRepository {
       const <SsoOption>[];
 
   @override
-  Future<AuthSession?> restoreSession() async => null;
+  Future<AuthSession?> restoreSession() => _restoration;
 
   @override
   Future<void> signOut() async {}

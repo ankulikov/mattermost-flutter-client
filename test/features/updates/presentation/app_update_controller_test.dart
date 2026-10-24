@@ -205,7 +205,6 @@ final class _PreferencesRepository implements UserPreferencesRepository {
   DateTime? lastUpdateCheck;
   final Object? readError;
 
-  @override
   Future<UserPreferences> read() async => UserPreferences.defaults;
 
   @override
@@ -214,8 +213,13 @@ final class _PreferencesRepository implements UserPreferencesRepository {
     return lastUpdateCheck;
   }
 
-  @override
   Future<void> update(UserPreferences preferences) async {}
+
+  @override
+  Future<ThemePreference> readTheme() async => ThemePreference.light;
+
+  @override
+  Future<void> writeTheme(ThemePreference theme) async {}
 
   @override
   Future<void> writeLastUpdateCheck(DateTime checkedAt) async {

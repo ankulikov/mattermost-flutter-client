@@ -17,14 +17,12 @@ final class DriftUserPreferencesRepository
   final db.AppDatabase _database;
   final String _accountScopeId;
 
-  @override
   Future<UserPreferences> read() async {
     final db.UserPreferencesRow? row = await _readRow();
     if (row == null) return UserPreferences.defaults;
     return _decode(row.preferencesJson);
   }
 
-  @override
   Future<void> update(UserPreferences preferences) async {
     await _database.transaction(() async {
       final db.UserPreferencesRow? existing = await _readRow();
@@ -42,6 +40,13 @@ final class DriftUserPreferencesRepository
           );
     });
   }
+
+  @override
+  Future<ThemePreference> readTheme() async => (await read()).theme;
+
+  @override
+  Future<void> writeTheme(ThemePreference theme) =>
+      update(UserPreferences(theme: theme));
 
   @override
   Future<DateTime?> readLastUpdateCheck() async {

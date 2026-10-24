@@ -92,10 +92,12 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   Widget build(BuildContext context) {
     ref.watch(realtimeConnectionStatusProvider);
     final AuthState auth = ref.watch(authControllerProvider);
+    if (auth.phase == AuthPhase.restoring) {
+      return const _StartupContent();
+    }
     if (auth.phase != AuthPhase.signedIn) {
       return _buildUnauthenticated(auth: auth);
     }
-
     final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
     final ShellDestination destination = ref.watch(shellDestinationProvider);
     final bool threadsSelected = destination == ShellDestination.inbox;
@@ -734,6 +736,20 @@ class _MainContent extends StatelessWidget {
     }
     return _SignedOutContent(auth: auth);
   }
+}
+
+class _StartupContent extends StatelessWidget {
+  const _StartupContent();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    key: const ValueKey<String>('app-startup'),
+    body: Center(
+      child: CircularProgressIndicator(
+        color: Theme.of(context).colorScheme.primary,
+      ),
+    ),
+  );
 }
 
 class _SignedOutContent extends ConsumerWidget {

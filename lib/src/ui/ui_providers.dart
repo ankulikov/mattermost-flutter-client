@@ -32,7 +32,7 @@ appUpdateControllerProvider =
     NotifierProvider<AppUpdateController, AppUpdateViewState>(
       () => AppUpdateController(
         appUpdateRepositoryProvider,
-        userPreferencesRepositoryProvider,
+        appSettingsRepositoryProvider,
       ),
     );
 

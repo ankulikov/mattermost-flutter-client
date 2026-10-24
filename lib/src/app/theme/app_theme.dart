@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
-import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
-import 'package:mattermost_flutter/src/features/preferences/domain/models/user_preferences.dart';
-import 'package:mattermost_flutter/src/features/preferences/domain/repositories/user_preferences_repository.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/models/theme_preference.dart';
+import 'package:mattermost_flutter/src/features/preferences/domain/repositories/app_settings_repository.dart';
 
 /// Themes supplied by the application composition root.
 ///
@@ -148,86 +145,49 @@ final class AppThemeState {
 final NotifierProvider<AppThemeController, AppThemeState> appThemeProvider =
     NotifierProvider<AppThemeController, AppThemeState>(AppThemeController.new);
 
-/// Owns the account-scoped theme selection at the application root.
+/// The bootstrapped snapshot prevents a default-themed first frame.
+final Provider<ThemePreference> initialAppThemeProvider =
+    Provider<ThemePreference>((Ref ref) => ThemePreference.light);
+
+/// Owns the process-wide theme selection at the application root.
 ///
 /// Reads fail closed to the light theme. Updates are optimistic so the selected
 /// theme is visible immediately. A persistence failure restores the last saved
 /// selection and is rethrown so the settings UI can offer non-blocking feedback
 /// and leave the failed choice available to retry.
 final class AppThemeController extends Notifier<AppThemeState> {
-  int _generation = 0;
-  UserPreferences _preferences = UserPreferences.defaults;
-  UserPreferencesRepository? _repository;
+  ThemePreference _preference = ThemePreference.light;
 
   @override
   AppThemeState build() {
-    final session = ref.watch(activeAccountSessionProvider);
-    final int generation = ++_generation;
-    _preferences = UserPreferences.defaults;
-    _repository = null;
-
-    if (session == null) return const AppThemeState();
-
-    final UserPreferencesRepository repository = ref.watch(
-      userPreferencesRepositoryProvider,
-    );
-    _repository = repository;
-    unawaited(_load(repository, generation));
-    return const AppThemeState(isLoading: true);
+    _preference = ref.watch(initialAppThemeProvider);
+    return AppThemeState(preference: _preference);
   }
 
-  Future<void> _load(
-    UserPreferencesRepository repository,
-    int generation,
-  ) async {
-    UserPreferences preferences;
-    try {
-      preferences = await repository.read();
-    } on Object {
-      preferences = UserPreferences.defaults;
-    }
-    if (!_isCurrent(repository, generation)) return;
-
-    _preferences = preferences;
-    state = AppThemeState(preference: preferences.theme);
-  }
-
-  /// Selects [preference] immediately and then saves it for this account.
+  /// Selects [preference] immediately and then saves it for the application.
   ///
   /// A failed save restores the previous selection and rethrows the error so
   /// callers can provide localized, non-blocking feedback.
   Future<void> updateTheme(ThemePreference preference) async {
-    final UserPreferencesRepository? repository = _repository;
-    if (repository == null) {
-      throw StateError('Theme preferences require an active account');
-    }
     if (state.isSaving) {
       throw StateError('A theme preference update is already in progress');
     }
 
-    final int generation = ++_generation;
-    final UserPreferences previousPreferences = _preferences;
-    final UserPreferences preferences = _preferences.copyWith(
-      theme: preference,
+    final ThemePreference previousPreference = _preference;
+    final AppSettingsRepository repository = ref.read(
+      appSettingsRepositoryProvider,
     );
-    _preferences = preferences;
+    _preference = preference;
     state = AppThemeState(preference: preference, isSaving: true);
 
     try {
-      await repository.update(preferences);
+      await repository.writeTheme(preference);
     } on Object {
-      if (_isCurrent(repository, generation)) {
-        _preferences = previousPreferences;
-        state = AppThemeState(preference: previousPreferences.theme);
-      }
+      _preference = previousPreference;
+      state = AppThemeState(preference: previousPreference);
       rethrow;
     }
 
-    if (_isCurrent(repository, generation)) {
-      state = state.copyWith(isSaving: false);
-    }
+    state = state.copyWith(isSaving: false);
   }
-
-  bool _isCurrent(UserPreferencesRepository repository, int generation) =>
-      identical(_repository, repository) && _generation == generation;
 }

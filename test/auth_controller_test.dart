@@ -9,6 +9,15 @@ import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
+  test('starts in a non-signed-out restoration state', () {
+    final ProviderContainer container = _container(
+      repository: _RecordingAuthRepository(),
+    );
+    addTearDown(container.dispose);
+
+    expect(container.read(authControllerProvider).phase, AuthPhase.restoring);
+  });
+
   test(
     'discovers SSO then validates its transient browser session token',
     () async {
