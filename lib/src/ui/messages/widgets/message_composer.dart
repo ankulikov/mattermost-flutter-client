@@ -73,6 +73,7 @@ class MessageComposer extends StatefulWidget {
     this.onSubmitWithFiles,
     this.onEdit,
     this.uploadFilePickerFactory,
+    this.uploadClipboardFactory,
     this.fileUploadRepositoryFactory,
     super.key,
   });
@@ -83,6 +84,7 @@ class MessageComposer extends StatefulWidget {
   final SubmitPost? onSubmitWithFiles;
   final Future<void> Function(String postId, String message)? onEdit;
   final UploadFilePicker Function()? uploadFilePickerFactory;
+  final UploadClipboard Function()? uploadClipboardFactory;
   final FileUploadRepository Function()? fileUploadRepositoryFactory;
   final CustomEmojiRepository Function()? emojiRepositoryFactory;
   final MentionRepository Function()? mentionRepositoryFactory;
@@ -191,16 +193,7 @@ class _MessageComposerState extends State<MessageComposer> {
     try {
       final files = await picker().pickFiles();
       if (!mounted || uploads != _uploads || files.isEmpty) return;
-      if (!uploads.addFiles(files)) {
-        setState(() {
-          _pickFailed = true;
-          _tooManyFiles = true;
-        });
-      } else {
-        _pendingPostId = null;
-        _pendingDraft = null;
-        setState(() => _pickFailed = false);
-      }
+      _addFiles(uploads, files);
     } on Object {
       if (mounted && uploads == _uploads) {
         setState(() {
@@ -213,6 +206,108 @@ class _MessageComposerState extends State<MessageComposer> {
         setState(() => _picking = false);
         _focusNode.requestFocus();
       }
+    }
+  }
+
+  void _addFiles(
+    ComposerUploadController uploads,
+    List<SelectedUploadFile> files,
+  ) {
+    if (!uploads.addFiles(files)) {
+      for (final SelectedUploadFile file in files) {
+        file.dispose?.call();
+      }
+      setState(() {
+        _pickFailed = true;
+        _tooManyFiles = true;
+      });
+    } else {
+      _pendingPostId = null;
+      _pendingDraft = null;
+      setState(() => _pickFailed = false);
+    }
+  }
+
+  void _insertKeyboardContent(KeyboardInsertedContent content) {
+    if (_editingPostId != null || _sending || _picking) return;
+    _initUploads();
+    final ComposerUploadController? uploads = _uploads;
+    if (uploads == null) return;
+    final Uint8List? bytes = content.data;
+    if (bytes == null || bytes.isEmpty) {
+      setState(() {
+        _pickFailed = true;
+        _tooManyFiles = false;
+      });
+      return;
+    }
+    final String extension = switch (content.mimeType) {
+      'image/png' => 'png',
+      'image/bmp' => 'bmp',
+      'image/jpg' || 'image/jpeg' => 'jpg',
+      'image/tiff' => 'tiff',
+      'image/gif' => 'gif',
+      'image/webp' => 'webp',
+      _ => '',
+    };
+    if (extension.isEmpty) return;
+    _addFiles(uploads, <SelectedUploadFile>[
+      SelectedUploadFile(
+        name: clipboardImageName(DateTime.now(), extension),
+        size: bytes.length,
+        type: extension,
+        openStream: () => Stream<Uint8List>.value(bytes),
+      ),
+    ]);
+  }
+
+  ContentInsertionConfiguration? get _imageInsertionConfiguration =>
+      _editingPostId == null &&
+          widget.fileUploadRepositoryFactory != null &&
+          widget.channelId != null &&
+          widget.accountId.isNotEmpty
+      ? ContentInsertionConfiguration(onContentInserted: _insertKeyboardContent)
+      : null;
+
+  Future<void> _paste() async {
+    final UploadClipboard Function()? clipboard = widget.uploadClipboardFactory;
+    if (_sending) return;
+    if (_editingPostId == null && clipboard != null && !_picking) {
+      _initUploads();
+      final ComposerUploadController? uploads = _uploads;
+      if (uploads != null) {
+        setState(() => _picking = true);
+        try {
+          final List<SelectedUploadFile> files = await clipboard().readFiles();
+          if (!mounted || uploads != _uploads) {
+            for (final SelectedUploadFile file in files) {
+              file.dispose?.call();
+            }
+            return;
+          }
+          if (files.isNotEmpty) {
+            _addFiles(uploads, files);
+            return;
+          }
+        } on Object {
+          if (!mounted || uploads != _uploads) return;
+          setState(() {
+            _pickFailed = true;
+            _tooManyFiles = false;
+          });
+          return;
+        } finally {
+          if (mounted && uploads == _uploads) setState(() => _picking = false);
+        }
+      }
+    }
+    try {
+      final ClipboardData? text = await Clipboard.getData(Clipboard.kTextPlain);
+      if (mounted && text?.text != null) {
+        _controller.replaceSelectionWithText(text!.text!);
+      }
+    } on Object {
+      // Clipboard access is platform-owned and must not disrupt the draft.
     }
   }
 
@@ -572,6 +667,8 @@ class _MessageComposerState extends State<MessageComposer> {
                     widget.accountId.isNotEmpty
                 ? _pickFiles
                 : null,
+            onPaste: () => unawaited(_paste()),
+            contentInsertionConfiguration: _imageInsertionConfiguration,
             onSubmit: () => _submit(finalizeComposing: true),
             onInsertNewLine: _insertNewLine,
             uploadTilesBuilder: () => _editingPostId == null
@@ -888,6 +985,10 @@ class _MessageComposerState extends State<MessageComposer> {
           _copySelection(cut: true),
       const SingleActivator(LogicalKeyboardKey.keyX, meta: true): () =>
           _copySelection(cut: true),
+      const SingleActivator(LogicalKeyboardKey.keyV, control: true): () =>
+          unawaited(_paste()),
+      const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
+          unawaited(_paste()),
       if (!autocompleteOwnsShortcuts &&
           !imeOwnsShortcuts) ...<ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.keyB, control: true): () =>
@@ -912,6 +1013,7 @@ class _MessageComposerState extends State<MessageComposer> {
       textInputAction: TextInputAction.newline,
       spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
       contextMenuBuilder: _buildContextMenu,
+      contentInsertionConfiguration: _imageInsertionConfiguration,
       decoration: InputDecoration(
         border: InputBorder.none,
         enabledBorder: InputBorder.none,

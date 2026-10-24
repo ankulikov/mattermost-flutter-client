@@ -31,6 +31,8 @@ class FullMessageEditor extends StatefulWidget {
     required this.canSend,
     required this.canAttach,
     required this.onAttach,
+    required this.onPaste,
+    required this.contentInsertionConfiguration,
     required this.onSubmit,
     required this.onInsertNewLine,
     required this.uploadTilesBuilder,
@@ -51,6 +53,8 @@ class FullMessageEditor extends StatefulWidget {
   final bool Function() canSend;
   final bool Function() canAttach;
   final Future<void> Function()? onAttach;
+  final VoidCallback onPaste;
+  final ContentInsertionConfiguration? contentInsertionConfiguration;
   final Future<bool> Function() onSubmit;
   final VoidCallback onInsertNewLine;
   final List<Widget> Function() uploadTilesBuilder;
@@ -425,6 +429,14 @@ class _FullMessageEditorState extends State<FullMessageEditor> {
                               LogicalKeyboardKey.numpadEnter,
                               shift: true,
                             ): widget.onInsertNewLine,
+                            const SingleActivator(
+                              LogicalKeyboardKey.keyV,
+                              control: true,
+                            ): widget.onPaste,
+                            const SingleActivator(
+                              LogicalKeyboardKey.keyV,
+                              meta: true,
+                            ): widget.onPaste,
                             if (mentionQuery !=
                                 null) ...<ShortcutActivator, VoidCallback>{
                               const SingleActivator(
@@ -514,6 +526,8 @@ class _FullMessageEditorState extends State<FullMessageEditor> {
                             spellCheckConfiguration:
                                 const SpellCheckConfiguration.disabled(),
                             contextMenuBuilder: widget.contextMenuBuilder,
+                            contentInsertionConfiguration:
+                                widget.contentInsertionConfiguration,
                             decoration: InputDecoration(
                               border: InputBorder.none,
                               hintText: widget.placeholder,
