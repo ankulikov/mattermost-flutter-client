@@ -15,6 +15,7 @@ import 'package:mattermost_flutter/src/features/channel_members/presentation/cha
 import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_route.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/resizable_pane_divider.dart';
 import 'package:mattermost_flutter/src/ui/messages/message_composer_strings.dart';
 import 'package:mattermost_flutter/src/ui/messages/post_action_navigation.dart';
@@ -57,7 +58,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
       MessageComposerController();
   String? _selectedRootPostId;
   bool _showMembers = false;
-  double _threadWidth = 380;
+  double _threadWidth = AppLayout.sidePaneWidth;
   String? _highlightedThreadPostId;
   PostNavigationTarget? _scheduledFocusTarget;
   PostNavigationTarget? _openedThreadTarget;
@@ -300,7 +301,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
               children: <Widget>[
                 Expanded(child: channelPane),
                 const VerticalDivider(width: 1),
-                SizedBox(width: 380, child: members),
+                SizedBox(width: AppLayout.sidePaneWidth, child: members),
               ],
             );
           }

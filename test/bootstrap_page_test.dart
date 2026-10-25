@@ -1828,7 +1828,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('uses compact vertical spacing for channel rows', (
+  testWidgets('uses a compact 40 pixel channel row target', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -1849,8 +1849,8 @@ void main() {
       of: find.text('Town Square'),
       matching: find.byType(ListTile),
     );
-    expect(tester.getSize(channelTile).height, 44);
-    expect(tester.widget<Text>(find.text('Town Square')).style?.fontSize, 15);
+    expect(tester.getSize(channelTile).height, 40);
+    expect(tester.getSize(channelTile).width, greaterThanOrEqualTo(40));
   });
 
   testWidgets('highlights unread channels at compact and expanded widths', (
@@ -1889,8 +1889,8 @@ void main() {
 
       expect(unread.style?.fontWeight, FontWeight.w600);
       expect(unread.semanticsLabel, 'Unread channel, unread');
-      expect(read.style?.fontWeight, FontWeight.w300);
-      expect(mutedUnread.style?.fontWeight, FontWeight.w300);
+      expect(read.style?.fontWeight, FontWeight.w400);
+      expect(mutedUnread.style?.fontWeight, FontWeight.w400);
     }
   });
 
@@ -1966,6 +1966,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Favorites'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
+    final Finder channelTile = find.ancestor(
+      of: find.text('Ada Lovelace'),
+      matching: find.byType(ListTile),
+    );
+    expect(tester.getSize(channelTile).height, greaterThanOrEqualTo(40));
     expect(tester.takeException(), isNull);
   });
 }

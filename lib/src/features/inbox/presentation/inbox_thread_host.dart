@@ -7,6 +7,7 @@ import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_channel_route.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -89,7 +90,7 @@ class InboxThreadHost extends ConsumerStatefulWidget {
     required this.background,
     required this.showAdjacentWorkspace,
     this.onSelectChannel,
-    this.inboxWidth = 380,
+    this.inboxWidth = AppLayout.sidePaneWidth,
     super.key,
   });
 

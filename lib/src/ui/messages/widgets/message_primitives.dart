@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:mattermost_flutter/src/app/theme/app_typography.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -147,7 +146,7 @@ class MessageBody extends ConsumerWidget {
         deletedMessage!,
         style: Theme.of(
           context,
-        ).textTheme.messageBody.copyWith(fontStyle: FontStyle.italic),
+        ).textTheme.bodyMedium!.copyWith(fontStyle: FontStyle.italic),
       );
     }
     return MessageMarkdown(
@@ -191,7 +190,7 @@ class MessageMarkdown extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final TextStyle bodyStyle =
-        textStyle ?? Theme.of(context).textTheme.messageBody;
+        textStyle ?? Theme.of(context).textTheme.bodyMedium!;
     final Map<String, CustomEmojiReference> customEmojiByName =
         <String, CustomEmojiReference>{
           for (final CustomEmojiReference emoji in customEmojis)
