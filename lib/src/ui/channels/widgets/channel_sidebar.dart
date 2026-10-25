@@ -473,7 +473,8 @@ class _ChannelTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: ListTile(
           dense: true,
-          visualDensity: const VisualDensity(vertical: -2),
+          visualDensity: const VisualDensity(vertical: -3),
+          minVerticalPadding: 4,
           selected: selected,
           shape: shape,
           leading: IconTheme(
@@ -493,12 +494,9 @@ class _ChannelTile extends StatelessWidget {
                 : channel.displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            // Let ListTile provide its established typography and colors.
-            // Unread rows only add their emphasis, keeping all other channel
-            // rows visually identical to the pre-unread-highlight sidebar.
-            style: highlightUnread
-                ? const TextStyle(fontWeight: FontWeight.w600)
-                : const TextStyle(fontWeight: FontWeight.w300),
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: highlightUnread ? FontWeight.w600 : FontWeight.w300,
+            ),
           ),
           onTap: onTap,
         ),

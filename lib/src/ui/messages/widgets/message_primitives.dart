@@ -146,7 +146,7 @@ class MessageBody extends ConsumerWidget {
         deletedMessage!,
         style: Theme.of(
           context,
-        ).textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic),
+        ).textTheme.bodyLarge?.copyWith(fontStyle: FontStyle.italic),
       );
     }
     return MessageMarkdown(
@@ -190,7 +190,7 @@ class MessageMarkdown extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final TextStyle? bodyStyle =
-        textStyle ?? Theme.of(context).textTheme.bodyMedium;
+        textStyle ?? Theme.of(context).textTheme.bodyLarge;
     final Map<String, CustomEmojiReference> customEmojiByName =
         <String, CustomEmojiReference>{
           for (final CustomEmojiReference emoji in customEmojis)
