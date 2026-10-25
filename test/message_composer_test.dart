@@ -514,6 +514,61 @@ void main() {
     expect(tester.widget<TextField>(input).controller?.text, 'How are you? 😃');
   });
 
+  for (final bool fullEditor in <bool>[false, true]) {
+    for (final double width in <double>[320, 900]) {
+      testWidgets(
+        '${fullEditor ? 'full editor' : 'quick composer'} keeps emoji suggestions open while scrolling at ${width.toInt()}px',
+        (WidgetTester tester) async {
+          await tester.binding.setSurfaceSize(Size(width, 760));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          await tester.pumpWidget(
+            _emojiComposerApp(repository: FakeEmojiRepository()),
+          );
+          if (fullEditor) {
+            await tester.tap(
+              find.byKey(const ValueKey<String>('open-full-editor-emoji')),
+            );
+            await tester.pumpAndSettle();
+          }
+          final Finder input = find.byKey(
+            ValueKey<String>(
+              fullEditor ? 'full-message-input-emoji' : 'message-input-emoji',
+            ),
+          );
+          final Finder suggestions = find.byKey(
+            ValueKey<String>(
+              fullEditor
+                  ? 'full-editor-emoji-suggestions'
+                  : 'composer-emoji-suggestions',
+            ),
+          );
+          await tester.enterText(input, ':sm');
+          await tester.pump();
+          expect(suggestions, findsOneWidget);
+          expect(tester.widget<TextField>(input).focusNode?.hasFocus, isTrue);
+          final ScrollableState scrollable = tester.state<ScrollableState>(
+            find.descendant(of: suggestions, matching: find.byType(Scrollable)),
+          );
+          expect(scrollable.position.maxScrollExtent, greaterThan(0));
+
+          await tester.drag(
+            find.descendant(
+              of: suggestions,
+              matching: find.byKey(const ValueKey<String>('emoji-grid')),
+            ),
+            const Offset(0, -120),
+          );
+          await tester.pump();
+
+          expect(suggestions, findsOneWidget);
+          expect(tester.widget<TextField>(input).focusNode?.hasFocus, isTrue);
+          expect(tester.widget<TextField>(input).controller?.text, ':sm');
+          expect(scrollable.position.pixels, greaterThan(0));
+        },
+      );
+    }
+  }
+
   testWidgets('renders a selected custom emoji and submits its shortcode', (
     WidgetTester tester,
   ) async {

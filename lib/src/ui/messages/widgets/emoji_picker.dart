@@ -169,6 +169,7 @@ class EmojiSearchResults extends StatefulWidget {
     required this.onSelected,
     this.navigationController,
     this.limit = 200,
+    this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.onDrag,
     super.key,
   });
 
@@ -178,6 +179,7 @@ class EmojiSearchResults extends StatefulWidget {
   final ValueChanged<EmojiSuggestion> onSelected;
   final EmojiSearchNavigationController? navigationController;
   final int limit;
+  final ScrollViewKeyboardDismissBehavior keyboardDismissBehavior;
 
   @override
   State<EmojiSearchResults> createState() => _EmojiSearchResultsState();
@@ -301,6 +303,7 @@ class _EmojiSearchResultsState extends State<EmojiSearchResults> {
               repository: widget.repository,
               accountId: widget.accountId,
               onSelected: widget.onSelected,
+              keyboardDismissBehavior: widget.keyboardDismissBehavior,
               highlightedIndex:
                   widget.navigationController?.highlightedIndex ?? -1,
               onHighlight: widget.navigationController?.highlight,
@@ -614,6 +617,7 @@ class _EmojiGrid extends StatelessWidget {
     this.hasMore = false,
     this.isLoadingMore = false,
     this.onLoadMore,
+    this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.onDrag,
     this.highlightedIndex = -1,
     this.onHighlight,
   });
@@ -625,6 +629,7 @@ class _EmojiGrid extends StatelessWidget {
   final bool hasMore;
   final bool isLoadingMore;
   final VoidCallback? onLoadMore;
+  final ScrollViewKeyboardDismissBehavior keyboardDismissBehavior;
   final int highlightedIndex;
   final ValueChanged<int>? onHighlight;
 
@@ -637,7 +642,7 @@ class _EmojiGrid extends StatelessWidget {
     return GridView.builder(
       key: const ValueKey<String>('emoji-grid'),
       padding: const EdgeInsets.all(12),
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      keyboardDismissBehavior: keyboardDismissBehavior,
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 58,
         mainAxisSpacing: 4,
