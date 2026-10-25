@@ -1015,6 +1015,7 @@ class _MessageComposerState extends State<MessageComposer> {
       contextMenuBuilder: _buildContextMenu,
       contentInsertionConfiguration: _imageInsertionConfiguration,
       decoration: InputDecoration(
+        filled: false,
         border: InputBorder.none,
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
@@ -1076,7 +1077,6 @@ class _MessageComposerState extends State<MessageComposer> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
-    final bool isDark = theme.brightness == Brightness.dark;
     final EmojiAutocompleteQuery? emojiQuery = _visibleEmojiQuery;
     final MentionQuery? mentionQuery = _visibleMentionQuery;
     final MentionAutocompleteController? mentionController =
@@ -1185,11 +1185,9 @@ class _MessageComposerState extends State<MessageComposer> {
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: colors.surface,
-                  border: _failed
-                      ? Border.all(color: colors.error)
-                      : isDark
-                      ? null
-                      : Border.all(color: colors.outlineVariant),
+                  border: Border.all(
+                    color: _failed ? colors.error : colors.outlineVariant,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Padding(
