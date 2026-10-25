@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
@@ -24,6 +25,55 @@ void main() {
       '> First line\n> Second line\n> ',
     );
   });
+
+  for (final theme in [MattermostTheme.light(), MattermostTheme.dark()]) {
+    for (final width in [390.0, 900.0]) {
+      testWidgets(
+        'composer has a unified surface at $width in ${theme.brightness}',
+        (tester) async {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: theme,
+              home: MediaQuery(
+                data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+                child: Scaffold(
+                  body: Center(
+                    child: SizedBox(
+                      width: width,
+                      child: MessageComposer(
+                        destinationId: 'surface',
+                        placeholder: 'Message',
+                        onSubmit: (_, _) async {},
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          final input = find.byKey(
+            const ValueKey<String>('message-input-surface'),
+          );
+          final field = tester.widget<TextField>(input);
+          expect(field.decoration!.filled, isFalse);
+          final boxes = tester.widgetList<DecoratedBox>(
+            find.ancestor(of: input, matching: find.byType(DecoratedBox)),
+          );
+          expect(
+            boxes.any((box) {
+              final decoration = box.decoration;
+              return decoration is BoxDecoration &&
+                  decoration.border ==
+                      Border.all(color: theme.colorScheme.outlineVariant) &&
+                  decoration.borderRadius == BorderRadius.circular(12);
+            }),
+            isTrue,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
 
   testWidgets('composer controller inserts a multiline quote and focuses', (
     WidgetTester tester,

@@ -10,6 +10,7 @@ import 'package:mattermost_flutter/src/features/profile/presentation/display_set
 import 'package:mattermost_flutter/src/features/profile/presentation/profile_strings.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/widgets/profile_navigation_avatar.dart';
 import 'package:mattermost_flutter/src/features/updates/presentation/app_update_page.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_avatar_image.dart';
 
@@ -156,7 +157,9 @@ class _ProfileBody extends StatelessWidget {
             SliverToBoxAdapter(
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
+                  constraints: const BoxConstraints(
+                    maxWidth: AppLayout.readableContentWidth,
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 28, 20, 32),
                     child: Column(

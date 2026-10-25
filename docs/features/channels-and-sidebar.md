@@ -29,6 +29,9 @@ conversation name. Matches remain in their original categories. Search expands
 matching categories temporarily and restores their previous expansion state
 when the query is cleared.
 
+Channel and category rows use a compact 40 px minimum interactive height to
+fit more entries on screen. Rows can grow when text scaling requires more room.
+
 ## Direct-message avatars
 
 The users batch response supplies a versioned profile reference for each direct

@@ -12,6 +12,8 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realti
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/reconcile_queues.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
@@ -268,19 +270,23 @@ class _InboxList extends StatelessWidget {
               ],
             );
           }
-          final bool expanded = constraints.maxWidth >= 700;
+          final bool expanded = constraints.maxWidth >= AppBreakpoints.compact;
           return ListView.builder(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.symmetric(
-              horizontal: expanded ? 24 : 8,
-              vertical: 12,
+              horizontal: expanded
+                  ? AppLayout.expandedPageGutter
+                  : AppLayout.compactPageGutter,
+              vertical: AppSpacing.md,
             ),
             itemCount: presentationItems.length,
             itemBuilder: (BuildContext context, int index) {
               final InboxItem item = presentationItems[index];
               return Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
+                  constraints: const BoxConstraints(
+                    maxWidth: AppLayout.readableContentWidth,
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _InboxRow(
@@ -349,7 +355,7 @@ class _InboxRow extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppLayout.cardPadding),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[

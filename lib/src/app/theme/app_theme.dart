@@ -12,14 +12,8 @@ import 'package:mattermost_flutter/src/features/preferences/domain/repositories/
 abstract final class MattermostTheme {
   static const Color _brandBlue = Color(0xff0058cc);
 
-  /// Matches the pre-theme-preference application default exactly.
-  ///
-  /// Keep this branch free of component overrides: the existing light UI relies
-  /// on Material's seed-derived surface and outline tones.
-  static ThemeData light() => ThemeData(
-    colorScheme: ColorScheme.fromSeed(seedColor: _brandBlue),
-    useMaterial3: true,
-  );
+  static ThemeData light() =>
+      _theme(ColorScheme.fromSeed(seedColor: _brandBlue));
 
   static ThemeData dark() => _theme(
     ColorScheme.fromSeed(
@@ -55,10 +49,22 @@ abstract final class MattermostTheme {
 
   static ThemeData _theme(ColorScheme colors) {
     final bool isDark = colors.brightness == Brightness.dark;
-    return ThemeData(
+    final ThemeData base = ThemeData(
       colorScheme: colors,
-      useMaterial3: true,
       brightness: colors.brightness,
+      useMaterial3: true,
+    );
+    final TextTheme text = base.textTheme;
+    return base.copyWith(
+      textTheme: text.copyWith(
+        titleLarge: text.titleLarge!.copyWith(fontSize: 22, height: 28 / 22),
+        titleMedium: text.titleMedium!.copyWith(fontSize: 16, height: 24 / 16),
+        bodyLarge: text.bodyLarge!.copyWith(fontSize: 16, height: 24 / 16),
+        bodyMedium: text.bodyMedium!.copyWith(fontSize: 15, height: 22 / 15),
+        bodySmall: text.bodySmall!.copyWith(fontSize: 12, height: 16 / 12),
+        labelLarge: text.labelLarge!.copyWith(fontSize: 14, height: 20 / 14),
+        labelMedium: text.labelMedium!.copyWith(fontSize: 12, height: 16 / 12),
+      ),
       scaffoldBackgroundColor: colors.surface,
       canvasColor: colors.surface,
       dividerColor: colors.outlineVariant,

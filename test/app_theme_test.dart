@@ -11,14 +11,31 @@ import 'package:mattermost_flutter/src/features/preferences/domain/repositories/
 
 void main() {
   group('MattermostTheme', () {
-    test('keeps the pre-preference light theme appearance', () {
-      final ThemeData light = MattermostTheme.light();
-      final ThemeData expected = ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff0058cc)),
-        useMaterial3: true,
-      );
-
-      expect(light, expected);
+    test('uses the shared component theme in both modes', () {
+      for (final ThemeData theme in [
+        MattermostTheme.light(),
+        MattermostTheme.dark(),
+      ]) {
+        expect(theme.inputDecorationTheme.filled, isTrue);
+        expect(theme.appBarTheme.backgroundColor, theme.colorScheme.surface);
+        expect(
+          theme.navigationBarTheme.backgroundColor,
+          theme.colorScheme.surfaceContainerLow,
+        );
+        expect(
+          theme.dialogTheme.backgroundColor,
+          theme.colorScheme.surfaceContainerHigh,
+        );
+        expect(
+          theme.bottomSheetTheme.backgroundColor,
+          theme.colorScheme.surfaceContainerLow,
+        );
+        expect(theme.dividerTheme.color, theme.colorScheme.outlineVariant);
+        expect(
+          _contrast(theme.colorScheme.onSurface, theme.colorScheme.surface),
+          greaterThan(4.5),
+        );
+      }
     });
 
     test('supplies the dark theme', () {

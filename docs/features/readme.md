@@ -65,7 +65,9 @@ The app composition root owns the active `ThemeData` through a Riverpod
 notifier. Widgets read inherited theme values with `Theme.of(context)`; they do
 not depend on theme-selection state or construct application themes locally.
 The current choices are the Mattermost light and dark themes, with light as the
-safe default.
+safe default. Both schemes share component styling and an explicit semantic type
+scale; normal body text is 15 px with a 22 px line height. Shared spacing and
+layout constants live under `ui/core/layout`.
 
 ## State and data ownership
 

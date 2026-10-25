@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.da
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_avatar.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class ChannelSidebar extends ConsumerWidget {
@@ -436,7 +437,8 @@ class _ChannelSectionHeader extends StatelessWidget {
         ),
         onTap: onTap,
         dense: true,
-        visualDensity: const VisualDensity(vertical: -2),
+        minTileHeight: AppLayout.sidebarRowMinHeight,
+        minVerticalPadding: AppSpacing.xs,
       ),
     ),
   );
@@ -473,7 +475,8 @@ class _ChannelTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: ListTile(
           dense: true,
-          visualDensity: const VisualDensity(vertical: -2),
+          minTileHeight: AppLayout.sidebarRowMinHeight,
+          minVerticalPadding: AppSpacing.xs,
           selected: selected,
           shape: shape,
           leading: IconTheme(
@@ -493,12 +496,9 @@ class _ChannelTile extends StatelessWidget {
                 : channel.displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            // Let ListTile provide its established typography and colors.
-            // Unread rows only add their emphasis, keeping all other channel
-            // rows visually identical to the pre-unread-highlight sidebar.
-            style: highlightUnread
-                ? const TextStyle(fontWeight: FontWeight.w600)
-                : const TextStyle(fontWeight: FontWeight.w300),
+            style: theme.textTheme.bodyMedium!.copyWith(
+              fontWeight: highlightUnread ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
           onTap: onTap,
         ),

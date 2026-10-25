@@ -20,6 +20,7 @@ import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/resizable_pane_divider.dart';
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_strings.dart';
 import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
@@ -214,11 +215,11 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                           (BuildContext context, BoxConstraints constraints) {
                             final double maximumWidth =
                                 (constraints.maxWidth - 320).clamp(
-                                  200.0,
-                                  500.0,
+                                  AppLayout.sidebarMinWidth,
+                                  AppLayout.sidebarMaxWidth,
                                 );
                             final double sidebarWidth = _sidebarWidth.clamp(
-                              200.0,
+                              AppLayout.sidebarMinWidth,
                               maximumWidth,
                             );
                             return Stack(
@@ -253,7 +254,10 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                                     label: ShellStrings.resizeChannelsPane,
                                     onResize: (double delta) => setState(() {
                                       _sidebarWidth = (sidebarWidth + delta)
-                                          .clamp(200.0, maximumWidth);
+                                          .clamp(
+                                            AppLayout.sidebarMinWidth,
+                                            maximumWidth,
+                                          );
                                     }),
                                   ),
                                 ),

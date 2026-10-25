@@ -6,12 +6,11 @@ import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
 import 'package:mattermost_flutter/src/features/preferences/domain/models/theme_preference.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/profile_strings.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 
 /// Lets the signed-in user choose the application color scheme.
 class DisplaySettingsPage extends ConsumerWidget {
   const DisplaySettingsPage({super.key});
-
-  static const double _contentMaxWidth = 760;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,7 +28,9 @@ class DisplaySettingsPage extends ConsumerWidget {
                   constraints.maxWidth >= AppBreakpoints.compact;
               return Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
+                  constraints: const BoxConstraints(
+                    maxWidth: AppLayout.readableContentWidth,
+                  ),
                   child: ListView(
                     key: const ValueKey<String>('display-settings-scroll-view'),
                     padding: EdgeInsets.fromLTRB(
