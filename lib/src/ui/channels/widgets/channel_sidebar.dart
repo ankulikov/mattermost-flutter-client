@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/app/theme/app_typography.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
@@ -473,7 +474,7 @@ class _ChannelTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: ListTile(
           dense: true,
-          visualDensity: const VisualDensity(vertical: -3),
+          minTileHeight: 44,
           minVerticalPadding: 4,
           selected: selected,
           shape: shape,
@@ -494,7 +495,7 @@ class _ChannelTile extends StatelessWidget {
                 : channel.displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyLarge?.copyWith(
+            style: theme.textTheme.channelName.copyWith(
               fontWeight: highlightUnread ? FontWeight.w600 : FontWeight.w300,
             ),
           ),

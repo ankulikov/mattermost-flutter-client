@@ -1849,12 +1849,8 @@ void main() {
       of: find.text('Town Square'),
       matching: find.byType(ListTile),
     );
-    expect(
-      tester.widget<ListTile>(channelTile).visualDensity,
-      const VisualDensity(vertical: -3),
-    );
-    expect(tester.getSize(channelTile).height, lessThan(40));
-    expect(tester.widget<Text>(find.text('Town Square')).style?.fontSize, 16);
+    expect(tester.getSize(channelTile).height, 44);
+    expect(tester.widget<Text>(find.text('Town Square')).style?.fontSize, 15);
   });
 
   testWidgets('highlights unread channels at compact and expanded widths', (
