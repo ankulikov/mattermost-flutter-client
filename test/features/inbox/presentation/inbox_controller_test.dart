@@ -105,6 +105,40 @@ void main() {
     expect(repository.loadCalls, 1);
   });
 
+  test('tracks realtime connection when the initial snapshot fails', () async {
+    final StreamController<InboxRealtimeEvent> realtime =
+        StreamController<InboxRealtimeEvent>();
+    addTearDown(realtime.close);
+    final Completer<InboxSnapshot> loaded = Completer<InboxSnapshot>();
+    final _InboxRepository repository = _InboxRepository(
+      <Future<InboxSnapshot> Function()>[() => loaded.future],
+      realtime: realtime.stream,
+    );
+    final provider = _provider(repository);
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+
+    await container.read(provider.future);
+    await _waitUntil(() => repository.loadCalls == 1);
+    realtime.add(const InboxConnectionChanged(InboxConnectionStatus.connected));
+    await _waitUntil(
+      () =>
+          container.read(provider).requireValue.connectionStatus ==
+          InboxConnectionStatus.connected,
+    );
+
+    loaded.completeError(StateError('snapshot unavailable'));
+    await _waitUntil(
+      () =>
+          container.read(provider).requireValue.initialLoadStatus
+              is OperationFailed,
+    );
+    final InboxViewState state = container.read(provider).requireValue;
+    expect(state.hasLoadedSnapshot, isFalse);
+    expect(state.connectionStatus, InboxConnectionStatus.connected);
+  });
+
   test('resume reconnects realtime and reconciles missed events', () async {
     final _InboxRepository repository = _InboxRepository(
       <Future<InboxSnapshot> Function()>[

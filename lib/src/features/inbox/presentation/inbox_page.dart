@@ -16,12 +16,25 @@ import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
+import 'package:mattermost_flutter/src/ui/threads/followed_threads_strings.dart';
+import 'package:mattermost_flutter/src/ui/threads/widgets/followed_threads_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class InboxPage extends ConsumerStatefulWidget {
-  const InboxPage({required this.onOpenItem, super.key});
+  const InboxPage({
+    required this.onOpenItem,
+    this.team,
+    this.channelsById = const <String, SidebarChannel>{},
+    this.onSelectChannel,
+    this.threadsViewSelection,
+    super.key,
+  });
 
   final ValueChanged<InboxItem> onOpenItem;
+  final SidebarTeam? team;
+  final Map<String, SidebarChannel> channelsById;
+  final ValueChanged<String>? onSelectChannel;
+  final ValueNotifier<bool>? threadsViewSelection;
 
   @override
   ConsumerState<InboxPage> createState() => _InboxPageState();
@@ -30,11 +43,22 @@ class InboxPage extends ConsumerStatefulWidget {
 class _InboxPageState extends ConsumerState<InboxPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 2, vsync: this);
+  bool _showThreads = false;
+  bool _threadsVisited = false;
 
   @override
   void dispose() {
     _tabs.dispose();
     super.dispose();
+  }
+
+  void _selectView(bool threads) {
+    if (_showThreads == threads) return;
+    setState(() {
+      _showThreads = threads;
+      _threadsVisited |= threads;
+    });
+    widget.threadsViewSelection?.value = threads;
   }
 
   @override
@@ -45,116 +69,189 @@ class _InboxPageState extends ConsumerState<InboxPage>
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Text(InboxStrings.title),
-            const SizedBox(width: 10),
-            _ConnectionIndicator(
-              status:
-                  value.value?.connectionStatus ??
-                  InboxConnectionStatus.disconnected,
+            Flexible(
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
+                onPressed: () => _selectView(false),
+                child: FittedBox(
+                  child: Text(
+                    InboxStrings.title,
+                    style: TextStyle(
+                      fontWeight: _showThreads
+                          ? FontWeight.normal
+                          : FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
             ),
+            Flexible(
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
+                onPressed: () => _selectView(true),
+                child: FittedBox(
+                  child: Text(
+                    FollowedThreadsStrings.title,
+                    style: TextStyle(
+                      fontWeight: _showThreads
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            if (!_showThreads)
+              _ConnectionIndicator(
+                status:
+                    value.value?.connectionStatus ??
+                    InboxConnectionStatus.disconnected,
+              ),
           ],
         ),
         actions: <Widget>[
           IconButton(
-            tooltip: InboxStrings.refresh,
-            onPressed: () =>
-                unawaited(ref.read(inboxProvider.notifier).refresh()),
+            tooltip: _showThreads
+                ? FollowedThreadsStrings.refresh
+                : InboxStrings.refresh,
+            onPressed: () {
+              if (_showThreads) {
+                final String? teamId = widget.team?.id;
+                if (teamId != null) {
+                  unawaited(
+                    ref
+                        .read(followedThreadsProvider(teamId).notifier)
+                        .refresh(),
+                  );
+                }
+              } else {
+                unawaited(ref.read(inboxProvider.notifier).refresh());
+              }
+            },
             icon: const Icon(Icons.refresh),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: <Widget>[
-            _InboxTab(
-              label: InboxStrings.newItems,
-              count: value.value?.newMessageCount ?? 0,
-              countKey: const ValueKey<String>('inbox-new-count'),
-            ),
-            _InboxTab(
-              label: InboxStrings.postponed,
-              count: value.value?.postponedMessageCount ?? 0,
-              countKey: const ValueKey<String>('inbox-postponed-count'),
-            ),
-          ],
-        ),
-      ),
-      body: value.when(
-        loading: () => Semantics(
-          label: InboxStrings.loading,
-          child: const Center(child: CircularProgressIndicator()),
-        ),
-        error: (Object error, StackTrace stackTrace) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              const Text(InboxStrings.loadFailed),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => ref.invalidate(inboxProvider),
-                child: const Text(InboxStrings.retry),
+        bottom: _showThreads
+            ? null
+            : TabBar(
+                controller: _tabs,
+                tabs: <Widget>[
+                  _InboxTab(
+                    label: InboxStrings.newItems,
+                    count: value.value?.newMessageCount ?? 0,
+                    countKey: const ValueKey<String>('inbox-new-count'),
+                  ),
+                  _InboxTab(
+                    label: InboxStrings.postponed,
+                    count: value.value?.postponedMessageCount ?? 0,
+                    countKey: const ValueKey<String>('inbox-postponed-count'),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-        data: (InboxViewState state) {
-          if (!state.hasLoadedSnapshot) {
-            if (state.initialLoadStatus is OperationFailed) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const Text(InboxStrings.loadFailed),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: () => unawaited(
-                        ref.read(inboxProvider.notifier).retryInitialLoad(),
-                      ),
-                      child: const Text(InboxStrings.retry),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return Semantics(
+      ),
+      body: IndexedStack(
+        index: _showThreads ? 1 : 0,
+        children: <Widget>[
+          value.when(
+            loading: () => Semantics(
               label: InboxStrings.loading,
               child: const Center(child: CircularProgressIndicator()),
-            );
-          }
-          return Column(
-            children: <Widget>[
-              if (state.refreshStatus is OperationInProgress)
-                const LinearProgressIndicator(minHeight: 2),
-              if (state.refreshStatus is OperationFailed)
-                const MaterialBanner(
-                  content: Text(InboxStrings.refreshFailed),
-                  actions: <Widget>[SizedBox.shrink()],
-                ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabs,
-                  children: <Widget>[
-                    _InboxList(
-                      items: state.snapshot.newItems,
-                      empty: InboxStrings.emptyNew,
-                      onRefresh: () =>
-                          ref.read(inboxProvider.notifier).refresh(),
-                      onOpenItem: widget.onOpenItem,
-                      isPostponed: false,
-                    ),
-                    _InboxList(
-                      items: state.snapshot.postponedItems,
-                      empty: InboxStrings.emptyPostponed,
-                      onRefresh: () =>
-                          ref.read(inboxProvider.notifier).refresh(),
-                      onOpenItem: widget.onOpenItem,
-                      isPostponed: true,
-                    ),
-                  ],
-                ),
+            ),
+            error: (Object error, StackTrace stackTrace) => Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Text(InboxStrings.loadFailed),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: () => ref.invalidate(inboxProvider),
+                    child: const Text(InboxStrings.retry),
+                  ),
+                ],
               ),
-            ],
-          );
-        },
+            ),
+            data: (InboxViewState state) {
+              if (!state.hasLoadedSnapshot) {
+                if (state.initialLoadStatus is OperationFailed) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const Text(InboxStrings.loadFailed),
+                        const SizedBox(height: 12),
+                        OutlinedButton(
+                          onPressed: () => unawaited(
+                            ref.read(inboxProvider.notifier).retryInitialLoad(),
+                          ),
+                          child: const Text(InboxStrings.retry),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return Semantics(
+                  label: InboxStrings.loading,
+                  child: const Center(child: CircularProgressIndicator()),
+                );
+              }
+              return Column(
+                children: <Widget>[
+                  if (state.refreshStatus is OperationInProgress)
+                    const LinearProgressIndicator(minHeight: 2),
+                  if (state.refreshStatus is OperationFailed)
+                    const MaterialBanner(
+                      content: Text(InboxStrings.refreshFailed),
+                      actions: <Widget>[SizedBox.shrink()],
+                    ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabs,
+                      children: <Widget>[
+                        _InboxList(
+                          items: state.snapshot.newItems,
+                          empty: InboxStrings.emptyNew,
+                          onRefresh: () =>
+                              ref.read(inboxProvider.notifier).refresh(),
+                          onOpenItem: widget.onOpenItem,
+                          isPostponed: false,
+                        ),
+                        _InboxList(
+                          items: state.snapshot.postponedItems,
+                          empty: InboxStrings.emptyPostponed,
+                          onRefresh: () =>
+                              ref.read(inboxProvider.notifier).refresh(),
+                          onOpenItem: widget.onOpenItem,
+                          isPostponed: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          if (_threadsVisited)
+            widget.team == null
+                ? const Center(child: Text(FollowedThreadsStrings.noTeam))
+                : FollowedThreadsPane(
+                    team: widget.team!,
+                    channelsById: widget.channelsById,
+                    onSelectChannel: widget.onSelectChannel,
+                    showHeader: false,
+                    onThreadRead: (String rootPostId) =>
+                        unawaited(ref.read(inboxProvider.notifier).refresh()),
+                    onThreadUnfollowed: (String rootPostId) => ref
+                        .read(inboxProvider.notifier)
+                        .removeUnfollowedThread(rootPostId),
+                  )
+          else
+            const SizedBox.shrink(),
+        ],
       ),
     );
   }
@@ -414,9 +511,14 @@ class _InboxRow extends ConsumerWidget {
   }
 
   Future<void> _markRead(BuildContext context, WidgetRef ref) async {
-    if (!await ref.read(inboxProvider.notifier).markRead(item) &&
-        context.mounted) {
+    final bool marked = await ref.read(inboxProvider.notifier).markRead(item);
+    if (!context.mounted) return;
+    if (!marked) {
       _showFailure(context, InboxStrings.markReadFailed);
+      return;
+    }
+    if (item case ThreadInboxItem(:final teamId)) {
+      unawaited(ref.read(followedThreadsProvider(teamId).notifier).refresh());
     }
   }
 

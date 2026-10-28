@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
-import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
@@ -20,12 +19,18 @@ class FollowedThreadsPane extends ConsumerStatefulWidget {
     required this.team,
     required this.channelsById,
     this.onSelectChannel,
+    this.onThreadRead,
+    this.onThreadUnfollowed,
+    this.showHeader = true,
     super.key,
   });
 
   final SidebarTeam team;
   final Map<String, SidebarChannel> channelsById;
   final ValueChanged<String>? onSelectChannel;
+  final ValueChanged<String>? onThreadRead;
+  final ValueChanged<String>? onThreadUnfollowed;
+  final bool showHeader;
 
   @override
   ConsumerState<FollowedThreadsPane> createState() =>
@@ -46,11 +51,7 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
     final AsyncValue<FollowedThreadsViewState> value = ref.watch(
       followedThreadsProvider(widget.team.id),
     );
-    final Uri? serverUrl = ref.watch(
-      authControllerProvider.select(
-        (AuthState state) => state.session?.serverUrl,
-      ),
-    );
+    final Uri? serverUrl = ref.watch(authSessionProvider)?.serverUrl;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool showSideThread =
@@ -58,8 +59,10 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
         final Widget listPane = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const _ThreadsHeader(),
-            const Divider(height: 1),
+            if (widget.showHeader) ...<Widget>[
+              const _ThreadsHeader(),
+              const Divider(height: 1),
+            ],
             Expanded(
               child: value.when(
                 loading: () => const _Loading(),
@@ -106,12 +109,9 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
           unreadReplies: selected.unreadReplies,
           positionAtEndWhenRead: true,
           onSelectChannel: widget.onSelectChannel,
-          onThreadRead: (DateTime timestamp) => ref
-              .read(followedThreadsProvider(widget.team.id).notifier)
-              .recordThreadRead(rootPostId: selected.id, timestamp: timestamp),
-          onThreadUnfollowed: (String rootPostId) => ref
-              .read(followedThreadsProvider(widget.team.id).notifier)
-              .removeUnfollowedThread(rootPostId),
+          onThreadRead: (DateTime timestamp) =>
+              _recordThreadRead(selected.id, timestamp),
+          onThreadUnfollowed: _removeUnfollowedThread,
           onClose: () => setState(() => _selectedThreadId = null),
         );
         if (showSideThread) {
@@ -162,14 +162,28 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
                 widget.onSelectChannel!(name);
                 if (context.mounted) context.pop();
               },
-        onThreadRead: (DateTime timestamp) => ref
-            .read(followedThreadsProvider(widget.team.id).notifier)
-            .recordThreadRead(rootPostId: thread.id, timestamp: timestamp),
-        onThreadUnfollowed: (String rootPostId) => ref
-            .read(followedThreadsProvider(widget.team.id).notifier)
-            .removeUnfollowedThread(rootPostId),
+        onThreadRead: (DateTime timestamp) =>
+            _recordThreadRead(thread.id, timestamp),
+        onThreadUnfollowed: _removeUnfollowedThread,
       ),
     );
+  }
+
+  void _recordThreadRead(String rootPostId, DateTime timestamp) {
+    ref
+        .read(followedThreadsProvider(widget.team.id).notifier)
+        .recordThreadRead(rootPostId: rootPostId, timestamp: timestamp);
+    widget.onThreadRead?.call(rootPostId);
+  }
+
+  void _removeUnfollowedThread(String rootPostId) {
+    ref
+        .read(followedThreadsProvider(widget.team.id).notifier)
+        .removeUnfollowedThread(rootPostId);
+    widget.onThreadUnfollowed?.call(rootPostId);
+    if (mounted && _selectedThreadId == rootPostId) {
+      setState(() => _selectedThreadId = null);
+    }
   }
 }
 
@@ -211,15 +225,36 @@ class _ThreadsBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (state.items.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: () =>
-            ref.read(followedThreadsProvider(teamId).notifier).refresh(),
-        child: ListView(
-          children: const <Widget>[
-            SizedBox(height: 160),
-            Center(child: Text(FollowedThreadsStrings.empty)),
-          ],
-        ),
+      return Column(
+        children: <Widget>[
+          if (state.refreshStatus is OperationInProgress)
+            const LinearProgressIndicator(minHeight: 2),
+          if (state.refreshStatus is OperationFailed)
+            MaterialBanner(
+              content: const Text(FollowedThreadsStrings.refreshFailed),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => ref
+                      .read(followedThreadsProvider(teamId).notifier)
+                      .refresh(),
+                  child: const Text(FollowedThreadsStrings.retry),
+                ),
+              ],
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () =>
+                  ref.read(followedThreadsProvider(teamId).notifier).refresh(),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const <Widget>[
+                  SizedBox(height: 160),
+                  Center(child: Text(FollowedThreadsStrings.empty)),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     }
     return Column(
@@ -239,33 +274,45 @@ class _ThreadsBody extends ConsumerWidget {
             ],
           ),
         Expanded(
-          child: RefreshIndicator(
-            onRefresh: () =>
-                ref.read(followedThreadsProvider(teamId).notifier).refresh(),
-            child: ListView.builder(
-              key: PageStorageKey<String>('followed-threads-$teamId'),
-              itemCount: state.items.length + (state.hasMore ? 1 : 0),
-              itemBuilder: (BuildContext context, int index) {
-                if (index == state.items.length) {
-                  return _LoadMore(
-                    loading: state.paginationStatus is OperationInProgress,
-                    failed: state.paginationStatus is OperationFailed,
-                    onPressed: () => ref
-                        .read(followedThreadsProvider(teamId).notifier)
-                        .loadMore(),
-                  );
-                }
-                final FollowedThread thread = state.items[index];
-                return _ThreadTile(
-                  key: ValueKey<String>('followed-thread-tile-${thread.id}'),
-                  thread: thread,
-                  channelName:
-                      channelsById[thread.channelId]?.displayName ??
-                      thread.channelId,
-                  selected: thread.id == selectedThreadId,
-                  onTap: () => onSelect(thread),
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (ScrollNotification notification) {
+              if (notification.metrics.extentAfter < 400 &&
+                  state.hasMore &&
+                  state.paginationStatus is OperationIdle) {
+                unawaited(
+                  ref.read(followedThreadsProvider(teamId).notifier).loadMore(),
                 );
-              },
+              }
+              return false;
+            },
+            child: RefreshIndicator(
+              onRefresh: () =>
+                  ref.read(followedThreadsProvider(teamId).notifier).refresh(),
+              child: ListView.builder(
+                key: PageStorageKey<String>('followed-threads-$teamId'),
+                itemCount: state.items.length + (state.hasMore ? 1 : 0),
+                itemBuilder: (BuildContext context, int index) {
+                  if (index == state.items.length) {
+                    return _LoadMore(
+                      loading: state.paginationStatus is OperationInProgress,
+                      failed: state.paginationStatus is OperationFailed,
+                      onPressed: () => ref
+                          .read(followedThreadsProvider(teamId).notifier)
+                          .loadMore(),
+                    );
+                  }
+                  final FollowedThread thread = state.items[index];
+                  return _ThreadTile(
+                    key: ValueKey<String>('followed-thread-tile-${thread.id}'),
+                    thread: thread,
+                    channelName:
+                        channelsById[thread.channelId]?.displayName ??
+                        thread.channelId,
+                    selected: thread.id == selectedThreadId,
+                    onTap: () => onSelect(thread),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -296,7 +343,11 @@ class _ThreadTile extends StatelessWidget {
     ).formatTimeOfDay(TimeOfDay.fromDateTime(thread.lastReplyAt));
     return Semantics(
       button: true,
-      label: _semanticLabel(),
+      label: FollowedThreadsStrings.rowLabel(
+        author: thread.root.author.displayName,
+        context: channelName,
+        unreadReplies: thread.unreadReplies,
+      ),
       child: InkWell(
         onTap: onTap,
         child: Container(
@@ -359,16 +410,6 @@ class _ThreadTile extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _semanticLabel() {
-    if (thread.unreadMentions > 0) {
-      return FollowedThreadsStrings.mentions(thread.unreadMentions);
-    }
-    if (thread.unreadReplies > 0) {
-      return FollowedThreadsStrings.unreadReplies(thread.unreadReplies);
-    }
-    return FollowedThreadsStrings.replies(thread.replyCount);
   }
 }
 

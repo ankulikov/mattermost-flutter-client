@@ -272,8 +272,8 @@ final class _ThreadApi implements MattermostApi {
   Future<MattermostUserThreadsDto> getUserThreads({
     required String userId,
     required String teamId,
-    int perPage = 60,
     String? before,
+    int perPage = 60,
     bool extended = true,
     bool unread = false,
   }) => throw UnimplementedError();

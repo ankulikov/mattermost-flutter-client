@@ -7,8 +7,11 @@ Inbox.
 ## Followed threads
 
 The list requests
-`GET /users/{user_id}/teams/{team_id}/threads?extended=true` in pages of 60.
-Pagination uses `before=<root_post_id>`. The response already includes the root,
+`GET /users/{user_id}/teams/{team_id}/threads?extended=true&per_page=60`.
+Further pages use `before=<last_root_post_id>` in the request. Although the
+published OpenAPI description lists `page`, the Mattermost server handler reads
+`before` and ignores `page`; using `page` caused Inbox's all-page snapshot to
+repeat the first page. The response already includes the root,
 reply and unread counters, mention counters, and participants. Root authors not
 present in `participants` are fetched in one `/users/ids` batch. The list never
 loads every full thread to render its rows.
@@ -40,6 +43,14 @@ exception: opening an Inbox thread positions the unread boundary but leaves it
 unread until the user selects Done on its Inbox card.
 
 ## Presentation
+
+The Inbox destination has peer Inbox and Threads views. New and Postponed stay
+under Inbox; Threads shows all followed threads for the selected team, including
+read threads. The list state belongs to the open destination, while Inbox's
+New/Postponed snapshot belongs to the signed-in session. Switching views keeps
+their positions and the selected Inbox tab. Successful Threads read operations
+refresh the New Inbox projection; opening an Inbox card remains explicitly
+completed with Done.
 
 When the content pane is at least `AppBreakpoints.sideThread` wide, `ThreadPane`
 opens beside the channel or Inbox content. Narrower layouts route to

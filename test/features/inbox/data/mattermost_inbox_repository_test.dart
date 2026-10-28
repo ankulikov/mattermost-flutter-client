@@ -29,6 +29,76 @@ void main() {
     username: 'me',
   );
 
+  test('requests only unread followed threads for Inbox', () async {
+    const MattermostUserThreadDto readThread = MattermostUserThreadDto(
+      id: 'read-root',
+      replyCount: 0,
+      lastReplyAt: 1,
+      lastViewedAt: 1,
+      participants: <MattermostUserDto>[],
+      unreadReplies: 0,
+      unreadMentions: 0,
+      post: MattermostPostDto(
+        id: 'read-root',
+        userId: 'other',
+        channelId: 'channel',
+        message: 'Read',
+        createAt: 1,
+      ),
+    );
+    const MattermostUserThreadDto unreadThread = MattermostUserThreadDto(
+      id: 'unread-root',
+      replyCount: 1,
+      lastReplyAt: 2,
+      lastViewedAt: 1,
+      participants: <MattermostUserDto>[],
+      unreadReplies: 1,
+      unreadMentions: 0,
+      post: MattermostPostDto(
+        id: 'unread-root',
+        userId: 'other',
+        channelId: 'channel',
+        message: 'Unread',
+        createAt: 2,
+      ),
+    );
+    final _InboxApi api = _InboxApi(
+      teams: const <MattermostTeamDto>[
+        MattermostTeamDto(id: 'team', name: 'team', displayName: 'Team'),
+      ],
+      channels: const <MattermostChannelDto>[
+        MattermostChannelDto(
+          id: 'channel',
+          teamId: 'team',
+          type: 'O',
+          name: 'channel',
+          displayName: 'Channel',
+        ),
+      ],
+      members: const <MattermostChannelMemberDto>[
+        MattermostChannelMemberDto(channelId: 'channel', userId: 'me'),
+      ],
+      unread: const <MattermostPostDto>[],
+      threadPages: const <List<MattermostUserThreadDto>>[
+        <MattermostUserThreadDto>[readThread],
+        <MattermostUserThreadDto>[unreadThread],
+      ],
+    );
+
+    final InboxSnapshot snapshot = await _repository(
+      api,
+    ).load(session: session);
+
+    expect(api.requestedThreadCursors, <String?>[null]);
+    expect(api.requestedUnreadFilters, <bool>[true]);
+    expect(snapshot.newItems, hasLength(1));
+    expect(snapshot.newItems.single, isA<ThreadInboxItem>());
+    expect(
+      (snapshot.newItems.single as ThreadInboxItem).thread.id,
+      'unread-root',
+    );
+  });
+
   test('deduplicates a direct channel returned by multiple teams', () async {
     final _InboxApi api = _InboxApi(
       teams: const <MattermostTeamDto>[
@@ -1389,6 +1459,7 @@ final class _InboxApi extends Fake implements MattermostApi {
     ),
     this.groups = const <MattermostGroupDto>[],
     this.threads = const <MattermostUserThreadDto>[],
+    this.threadPages,
     this.threadPosts = const <String, List<MattermostPostDto>>{},
     this.groupLookupError,
     this.failUserLookup = false,
@@ -1401,6 +1472,9 @@ final class _InboxApi extends Fake implements MattermostApi {
   final MattermostGroupChannelUsersDto groupUsers;
   final List<MattermostGroupDto> groups;
   final List<MattermostUserThreadDto> threads;
+  final List<List<MattermostUserThreadDto>>? threadPages;
+  final List<String?> requestedThreadCursors = <String?>[];
+  final List<bool> requestedUnreadFilters = <bool>[];
   final Map<String, List<MattermostPostDto>> threadPosts;
   final Object? groupLookupError;
   final bool failUserLookup;
@@ -1433,20 +1507,40 @@ final class _InboxApi extends Fake implements MattermostApi {
   Future<MattermostUserThreadsDto> getUserThreads({
     required String userId,
     required String teamId,
-    int perPage = 60,
     String? before,
+    int perPage = 60,
     bool extended = true,
     bool unread = false,
-  }) async => MattermostUserThreadsDto(
-    total: threads.length,
-    totalUnreadThreads: threads.length,
-    totalUnreadMentions: threads.fold<int>(
-      0,
-      (int count, MattermostUserThreadDto thread) =>
-          count + thread.unreadMentions,
-    ),
-    threads: threads,
-  );
+  }) async {
+    requestedThreadCursors.add(before);
+    requestedUnreadFilters.add(unread);
+    final List<MattermostUserThreadDto> available = <MattermostUserThreadDto>[
+      ...?threadPages?.expand((page) => page),
+      if (threadPages == null) ...threads,
+    ];
+    final List<MattermostUserThreadDto> filtered = unread
+        ? available.where((thread) => thread.unreadReplies > 0).toList()
+        : available;
+    final int offset = before == null
+        ? 0
+        : filtered.indexWhere((thread) => thread.id == before) + 1;
+    final List<MattermostUserThreadDto> selected = filtered
+        .skip(offset)
+        .take(perPage)
+        .toList();
+    return MattermostUserThreadsDto(
+      total: filtered.length,
+      totalUnreadThreads: available
+          .where((thread) => thread.unreadReplies > 0)
+          .length,
+      totalUnreadMentions: threads.fold<int>(
+        0,
+        (int count, MattermostUserThreadDto thread) =>
+            count + thread.unreadMentions,
+      ),
+      threads: selected,
+    );
+  }
 
   @override
   Future<MattermostPostListDto> getPostThread({

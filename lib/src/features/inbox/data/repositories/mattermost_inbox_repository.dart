@@ -675,20 +675,29 @@ final class MattermostInboxRepository extends InboxRepository {
     required String teamId,
   }) async {
     final List<MattermostUserThreadDto> result = <MattermostUserThreadDto>[];
+    final Set<String> seen = <String>{};
     String? before;
-    final Set<String> cursors = <String>{};
     while (true) {
       final MattermostUserThreadsDto page = await _api.getUserThreads(
         userId: userId,
         teamId: teamId,
         before: before,
+        perPage: 60,
         unread: true,
       );
-      result.addAll(page.threads);
-      if (page.threads.length < 60) return result;
-      final String next = page.threads.last.id;
-      if (!cursors.add(next)) return result;
-      before = next;
+      var newItems = 0;
+      for (final MattermostUserThreadDto thread in page.threads) {
+        if (!seen.add(thread.id)) continue;
+        newItems += 1;
+        if (thread.unreadReplies > 0) result.add(thread);
+      }
+      if (page.threads.isEmpty || seen.length >= page.total) return result;
+      if (newItems == 0) {
+        throw const FormatException(
+          'Followed thread pagination did not advance',
+        );
+      }
+      before = page.threads.last.id;
     }
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
@@ -90,6 +91,7 @@ class InboxThreadHost extends ConsumerStatefulWidget {
     required this.background,
     required this.showAdjacentWorkspace,
     this.onSelectChannel,
+    this.threadsViewSelection,
     this.inboxWidth = AppLayout.sidePaneWidth,
     super.key,
   });
@@ -98,6 +100,7 @@ class InboxThreadHost extends ConsumerStatefulWidget {
   final Widget background;
   final bool showAdjacentWorkspace;
   final ValueChanged<String>? onSelectChannel;
+  final ValueListenable<bool>? threadsViewSelection;
   final double inboxWidth;
 
   @override
@@ -158,57 +161,70 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
 
     final InboxThreadTarget? target = _selectedTarget;
     final SidebarChannel? channel = _selectedChannel;
-    return Row(
+    Widget adjacent(bool threadsSelected, double availableWidth) => Row(
       key: const ValueKey<String>('inbox-thread-host-wide'),
       children: <Widget>[
         SizedBox(
           key: const ValueKey<String>('inbox-thread-list-pane'),
-          width: widget.inboxWidth,
+          width: threadsSelected ? availableWidth : widget.inboxWidth,
           child: inbox,
         ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: IndexedStack(
-            index: channel != null
-                ? 2
-                : target != null
-                ? 1
-                : 0,
-            children: <Widget>[
-              widget.background,
-              if (target == null)
-                const SizedBox.shrink()
-              else
-                ThreadPane(
-                  key: ValueKey<String>('inbox-thread-${target.rootPostId}'),
-                  rootPostId: target.rootPostId,
-                  highlightedPostId: target.highlightedPostId,
-                  channel: target.channel,
-                  serverUrl: serverUrl,
-                  teamId: target.teamId,
-                  unreadReplies: target.unreadReplies,
-                  positionAtEndWhenRead: target.positionAtEndWhenRead,
-                  markReadOnOpen: false,
-                  onSelectChannel: widget.onSelectChannel,
-                  onThreadUnfollowed: _removeUnfollowedThread,
-                  onClose: () => setState(() => _selectedTarget = null),
-                ),
-              if (channel == null)
-                const SizedBox.shrink()
-              else
-                Material(
-                  color: Theme.of(context).colorScheme.surface,
-                  child: ChannelPostsPane(
-                    key: ValueKey<String>('inbox-channel-${channel.id}'),
-                    channel: channel,
+        if (!threadsSelected) const VerticalDivider(width: 1),
+        if (!threadsSelected)
+          Expanded(
+            child: IndexedStack(
+              index: channel != null
+                  ? 2
+                  : target != null
+                  ? 1
+                  : 0,
+              children: <Widget>[
+                widget.background,
+                if (target == null)
+                  const SizedBox.shrink()
+                else
+                  ThreadPane(
+                    key: ValueKey<String>('inbox-thread-${target.rootPostId}'),
+                    rootPostId: target.rootPostId,
+                    highlightedPostId: target.highlightedPostId,
+                    channel: target.channel,
+                    serverUrl: serverUrl,
+                    teamId: target.teamId,
+                    unreadReplies: target.unreadReplies,
+                    positionAtEndWhenRead: target.positionAtEndWhenRead,
+                    markReadOnOpen: false,
                     onSelectChannel: widget.onSelectChannel,
-                    onBack: () => setState(() => _selectedChannel = null),
+                    onThreadUnfollowed: (String rootPostId) =>
+                        _removeUnfollowedThread(rootPostId, target.teamId),
+                    onClose: () => setState(() => _selectedTarget = null),
                   ),
-                ),
-            ],
+                if (channel == null)
+                  const SizedBox.shrink()
+                else
+                  Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    child: ChannelPostsPane(
+                      key: ValueKey<String>('inbox-channel-${channel.id}'),
+                      channel: channel,
+                      onSelectChannel: widget.onSelectChannel,
+                      onBack: () => setState(() => _selectedChannel = null),
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
       ],
+    );
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final ValueListenable<bool>? threadsView = widget.threadsViewSelection;
+        if (threadsView == null) return adjacent(false, constraints.maxWidth);
+        return ValueListenableBuilder<bool>(
+          valueListenable: threadsView,
+          builder: (BuildContext context, bool selected, Widget? child) =>
+              adjacent(selected, constraints.maxWidth),
+        );
+      },
     );
   }
 
@@ -233,12 +249,16 @@ class _InboxThreadHostState extends ConsumerState<InboxThreadHost> {
               widget.onSelectChannel!(name);
               if (context.mounted) Navigator.of(context).pop();
             },
-      onThreadUnfollowed: _removeUnfollowedThread,
+      onThreadUnfollowed: (String rootPostId) =>
+          _removeUnfollowedThread(rootPostId, target.teamId),
     ),
   );
 
-  void _removeUnfollowedThread(String rootPostId) {
+  void _removeUnfollowedThread(String rootPostId, String teamId) {
     ref.read(inboxProvider.notifier).removeUnfollowedThread(rootPostId);
+    ref
+        .read(followedThreadsProvider(teamId).notifier)
+        .removeUnfollowedThread(rootPostId);
     if (mounted && _selectedTarget?.rootPostId == rootPostId) {
       setState(() => _selectedTarget = null);
     }

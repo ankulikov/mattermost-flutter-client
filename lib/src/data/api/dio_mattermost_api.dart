@@ -656,17 +656,17 @@ final class DioMattermostApi
   Future<MattermostUserThreadsDto> getUserThreads({
     required String userId,
     required String teamId,
-    int perPage = 60,
     String? before,
+    int perPage = 60,
     bool extended = true,
     bool unread = false,
   }) async {
     final Response<Object?> response = await _get(
       '/users/$userId/teams/$teamId/threads',
       queryParameters: <String, Object?>{
+        'before': ?before,
         'per_page': perPage,
         'extended': extended,
-        if (before case final String value) 'before': value,
         if (unread) 'unread': true,
       },
     );

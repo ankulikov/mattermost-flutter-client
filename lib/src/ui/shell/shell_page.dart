@@ -29,6 +29,14 @@ import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 const Duration _inboxNotificationDuration = Duration(seconds: 5);
 
+Map<String, SidebarChannel> _sidebarChannelsById(
+  ChannelSidebarSnapshot? snapshot,
+) => <String, SidebarChannel>{
+  for (final SidebarSection section
+      in snapshot?.sections ?? const <SidebarSection>[])
+    for (final SidebarChannel channel in section.channels) channel.id: channel,
+};
+
 class BootstrapPage extends ConsumerStatefulWidget {
   const BootstrapPage({super.key});
 
@@ -39,6 +47,9 @@ class BootstrapPage extends ConsumerStatefulWidget {
 class _BootstrapPageState extends ConsumerState<BootstrapPage>
     with WidgetsBindingObserver {
   bool _showCompactChannel = false;
+  final ValueNotifier<bool> _inboxThreadsViewSelection = ValueNotifier<bool>(
+    false,
+  );
   double _sidebarWidth = 280;
   late final ProviderSubscription<InboxInAppNotification?>
   _notificationSubscription;
@@ -74,6 +85,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
 
   @override
   void dispose() {
+    _inboxThreadsViewSelection.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _notificationSubscription.close();
     _channelPresentationSubscription.close();
@@ -201,11 +213,18 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                     )
                   : threadsSelected
                   ? InboxThreadHost(
+                      threadsViewSelection: _inboxThreadsViewSelection,
                       inboxBuilder:
                           (
                             BuildContext context,
                             ValueChanged<InboxItem> onOpenItem,
-                          ) => InboxPage(onOpenItem: onOpenItem),
+                          ) => InboxPage(
+                            onOpenItem: onOpenItem,
+                            team: sidebar?.team,
+                            channelsById: _sidebarChannelsById(sidebar),
+                            onSelectChannel: _selectChannelNamed,
+                            threadsViewSelection: _inboxThreadsViewSelection,
+                          ),
                       background: mainContent,
                       showAdjacentWorkspace: true,
                       onSelectChannel: _selectChannelNamed,
@@ -379,6 +398,9 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _showThreadsDestination() {
+    if (ref.read(shellDestinationProvider) != ShellDestination.inbox) {
+      _inboxThreadsViewSelection.value = false;
+    }
     ref.read(shellDestinationProvider.notifier).select(ShellDestination.inbox);
     if (_showCompactChannel) {
       setState(() => _showCompactChannel = false);
@@ -699,11 +721,16 @@ class _MainContent extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (auth.phase == AuthPhase.signedIn) {
-      if (threadsSelected && sidebar?.team != null) {
+      if (threadsSelected) {
         return InboxThreadHost(
           inboxBuilder:
               (BuildContext context, ValueChanged<InboxItem> onOpenItem) =>
-                  InboxPage(onOpenItem: onOpenItem),
+                  InboxPage(
+                    onOpenItem: onOpenItem,
+                    team: sidebar?.team,
+                    channelsById: _sidebarChannelsById(sidebar),
+                    onSelectChannel: onSelectChannel,
+                  ),
           background: const SizedBox.shrink(),
           showAdjacentWorkspace: false,
           onSelectChannel: onSelectChannel,

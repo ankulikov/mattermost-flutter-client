@@ -1,6 +1,7 @@
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
+import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -15,10 +16,12 @@ final class MattermostThreadRepository extends ThreadRepository {
     required MattermostApi api,
     required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
     required UserRepository users,
+    SessionRealtimeService? realtime,
     DateTime Function()? now,
   }) : _api = api,
        _messageMapper = messageMapper,
        _users = users,
+       _realtime = realtime,
        _now = now ?? DateTime.now;
 
   static const int pageSize = 60;
@@ -26,6 +29,7 @@ final class MattermostThreadRepository extends ThreadRepository {
   final MattermostApi _api;
   final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
   final UserRepository _users;
+  final SessionRealtimeService? _realtime;
   final DateTime Function() _now;
 
   @override
@@ -113,12 +117,13 @@ final class MattermostThreadRepository extends ThreadRepository {
     required AuthSession session,
     required String teamId,
     String? before,
+    int perPage = pageSize,
   }) async {
     final MattermostUserThreadsDto response = await _api.getUserThreads(
       userId: session.userId,
       teamId: teamId,
-      perPage: pageSize,
       before: before,
+      perPage: perPage,
       extended: true,
     );
     final List<MattermostUserThreadDto> rawThreads = response.threads
@@ -143,46 +148,79 @@ final class MattermostThreadRepository extends ThreadRepository {
         // Thread content remains useful with an id as the author fallback.
       }
     }
-    final List<FollowedThread> items = rawThreads
-        .map((raw) {
-          final MattermostPostDto post = raw.post!;
-          final ChannelPost root = _messageMapper
-              .map(
-                posts: <MattermostPostDto>[post],
-                users: usersById.values,
-                currentUserId: session.userId,
-                includeDeleted: true,
-              )
-              .single;
-          return FollowedThread(
-            root: root.withThreadSummary(
-              replyCount: raw.replyCount,
-              lastReplyAt: _dateOrNull(raw.lastReplyAt),
-            ),
-            replyCount: raw.replyCount,
-            lastReplyAt: _dateOrEpoch(raw.lastReplyAt),
-            lastViewedAt: _dateOrEpoch(raw.lastViewedAt),
-            unreadReplies: raw.unreadReplies,
-            unreadMentions: raw.unreadMentions,
-            participants: List<PostAuthor>.unmodifiable(
-              raw.participants.map((MattermostUserDto rawUser) {
-                final UserSummary user = mapUserSummary(rawUser);
-                return PostAuthor(
-                  id: user.id,
-                  displayName: user.fullName,
-                  profileImageUpdatedAt: user.profileImageUpdatedAt,
-                );
-              }),
-            ),
-          );
-        })
-        .toList(growable: false);
+    final List<FollowedThread> items =
+        rawThreads
+            .map((raw) {
+              final MattermostPostDto post = raw.post!;
+              final ChannelPost root = _messageMapper
+                  .map(
+                    posts: <MattermostPostDto>[post],
+                    users: usersById.values,
+                    currentUserId: session.userId,
+                    includeDeleted: true,
+                  )
+                  .single;
+              return FollowedThread(
+                root: root.withThreadSummary(
+                  replyCount: raw.replyCount,
+                  lastReplyAt: _dateOrNull(raw.lastReplyAt),
+                ),
+                replyCount: raw.replyCount,
+                lastReplyAt: raw.lastReplyAt > 0
+                    ? _dateOrEpoch(raw.lastReplyAt)
+                    : root.sentAt,
+                lastViewedAt: _dateOrEpoch(raw.lastViewedAt),
+                unreadReplies: raw.unreadReplies,
+                unreadMentions: raw.unreadMentions,
+                participants: List<PostAuthor>.unmodifiable(
+                  raw.participants.map((MattermostUserDto rawUser) {
+                    final UserSummary user = mapUserSummary(rawUser);
+                    return PostAuthor(
+                      id: user.id,
+                      displayName: user.fullName,
+                      profileImageUpdatedAt: user.profileImageUpdatedAt,
+                    );
+                  }),
+                ),
+              );
+            })
+            .toList(growable: false)
+          ..sort((FollowedThread a, FollowedThread b) {
+            final int byActivity = b.lastReplyAt.compareTo(a.lastReplyAt);
+            return byActivity != 0 ? byActivity : a.id.compareTo(b.id);
+          });
     return FollowedThreadsPage(
       items: List<FollowedThread>.unmodifiable(items),
       total: response.total,
       totalUnreadThreads: response.totalUnreadThreads,
       totalUnreadMentions: response.totalUnreadMentions,
     );
+  }
+
+  @override
+  Stream<void> watchFollowed({
+    required AuthSession session,
+    required String teamId,
+  }) {
+    final SessionRealtimeService? realtime = _realtime;
+    if (realtime == null) return const Stream<void>.empty();
+    return realtime
+        .watch(
+          session: session,
+          subscription: const SessionRealtimeSubscription(
+            eventNames: <String>{
+              'thread_updated',
+              'thread_follow_changed',
+              'thread_read_changed',
+            },
+          ),
+        )
+        .where(
+          (SessionRealtimeSignal signal) =>
+              signal is SessionRealtimeRecoveryRequired ||
+              signal is SessionRealtimeEventReceived,
+        )
+        .map((SessionRealtimeSignal _) {});
   }
 
   @override

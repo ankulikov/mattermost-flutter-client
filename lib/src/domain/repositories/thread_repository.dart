@@ -21,7 +21,14 @@ abstract class ThreadRepository {
     required AuthSession session,
     required String teamId,
     String? before,
+    int perPage = 60,
   }) => throw UnimplementedError();
+
+  /// Requests an authoritative reload when followed-thread state may change.
+  Stream<void> watchFollowed({
+    required AuthSession session,
+    required String teamId,
+  }) => const Stream<void>.empty();
 
   /// Whether the current user follows this CRT thread.
   Future<bool> isFollowing({

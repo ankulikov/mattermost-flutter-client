@@ -21,6 +21,42 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.da
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
+  testWidgets('Threads is a peer view and handles no selected team', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(_session),
+          inboxRepositoryProvider.overrideWithValue(
+            _InboxRepository(InboxSnapshot()),
+          ),
+          postponedRepositoryProvider.overrideWithValue(
+            const _PostponedRepository(),
+          ),
+        ],
+        child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(InboxStrings.newItems), findsOneWidget);
+    await tester.tap(find.text(InboxStrings.postponed));
+    await tester.pumpAndSettle();
+    expect(find.text(InboxStrings.emptyPostponed), findsOneWidget);
+    await tester.tap(find.text('Threads'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Select a team to see followed threads'), findsOneWidget);
+    expect(find.text(InboxStrings.newItems), findsNothing);
+    expect(find.byTooltip('Refresh threads'), findsOneWidget);
+
+    await tester.tap(find.text(InboxStrings.title));
+    await tester.pumpAndSettle();
+    expect(find.text(InboxStrings.newItems), findsOneWidget);
+    expect(find.text(InboxStrings.emptyPostponed), findsOneWidget);
+  });
+
   testWidgets('shows stored tab counts while the first snapshot is loading', (
     WidgetTester tester,
   ) async {
@@ -293,7 +329,7 @@ void main() {
 
       expect(find.text('Mentions'), findsNothing);
       expect(find.text('Direct Messages'), findsNothing);
-      expect(find.text('Threads'), findsNothing);
+      expect(find.text('Threads'), findsOneWidget);
       expect(find.text('Thread in Town Square'), findsNothing);
       expect(find.text('@dev-team in Town Square'), findsNothing);
       expect(find.text('You mentioned in Town Square'), findsNothing);

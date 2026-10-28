@@ -718,7 +718,7 @@ void main() {
     });
   });
 
-  test('requests an extended followed-threads page with a cursor', () async {
+  test('requests an extended followed-threads page by root cursor', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:
           '{"total":0,"total_unread_threads":0,'
@@ -728,17 +728,32 @@ void main() {
       ..httpClientAdapter = adapter;
     final DioMattermostApi api = DioMattermostApi(dio: dio);
 
-    await api.getUserThreads(
-      userId: 'me',
-      teamId: 'team-1',
-      before: 'root-200',
-    );
+    await api.getUserThreads(userId: 'me', teamId: 'team-1', before: 'root-3');
 
     expect(adapter.request?.path, '/users/me/teams/team-1/threads');
     expect(adapter.request?.queryParameters, <String, Object?>{
+      'before': 'root-3',
       'per_page': 60,
       'extended': true,
-      'before': 'root-200',
+    });
+  });
+
+  test('filters followed threads to unread for Inbox', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"total":0,"total_unread_threads":0,'
+          '"total_unread_mentions":0,"threads":[]}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final DioMattermostApi api = DioMattermostApi(dio: dio);
+
+    await api.getUserThreads(userId: 'me', teamId: 'team-1', unread: true);
+
+    expect(adapter.request?.queryParameters, <String, Object?>{
+      'per_page': 60,
+      'extended': true,
+      'unread': true,
     });
   });
 

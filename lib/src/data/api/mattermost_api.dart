@@ -232,14 +232,14 @@ abstract interface class MattermostApi {
 
   /// Returns followed CRT threads ordered by their latest activity.
   ///
-  /// [before] is the root-post cursor for the next older page. Setting
-  /// [extended] lets the server include participant profiles in the same
-  /// response, avoiding a profile request per thread.
+  /// [before] is the last root thread ID from the preceding page. [unread]
+  /// restricts results to threads with unread replies. [extended] includes
+  /// participant profiles in the same response.
   Future<MattermostUserThreadsDto> getUserThreads({
     required String userId,
     required String teamId,
-    int perPage = 60,
     String? before,
+    int perPage = 60,
     bool extended = true,
     bool unread = false,
   });

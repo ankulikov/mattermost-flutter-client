@@ -5,7 +5,8 @@ separate from the official Mattermost clients and combines unread followed
 threads, mentions, eligible channel messages, direct messages, and integration
 messages in one destination.
 
-The UI has two queues. `New` is reconstructed from Mattermost REST data and
+The Inbox destination contains peer Inbox and Threads views. The Inbox view has
+two queues. `New` is reconstructed from Mattermost REST data and
 updated from the active session's realtime stream. `Postponed` stores only
 content-free references in Mattermost user preferences. Message text is never
 written to preferences or Drift.
@@ -102,8 +103,11 @@ authoritative load, realtime change, and successful local Inbox action replaces
 those two stored integers. No message IDs, bodies, pagination state, or realtime
 sequence metadata are persisted with them.
 
-Unread channel requests run in bounded groups of four. Followed threads page by
-`before=<root_post_id>` until a page has fewer than 60 items or a cursor repeats.
+Unread channel requests run in bounded groups of four. Inbox requests followed
+threads with `unread=true`, then pages that filtered set by `before` and
+`per_page` until the reported total is reached or the server returns an empty
+page. The server handler uses the cursor and unread filter despite the published
+OpenAPI description listing `page`.
 For followed threads whose CRT projection reports unread mentions, thread posts
 newer than `last_viewed_at` are paged in bounded groups of four. Post and author
 hydration uses bounded ID batches.

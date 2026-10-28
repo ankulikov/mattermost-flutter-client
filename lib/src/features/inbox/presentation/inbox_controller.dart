@@ -158,6 +158,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     if (_cancellation?.isCancelled != false || generation != _buildGeneration) {
       return;
     }
+    _listenRealtime(session: session, inbox: inbox, generation: generation);
     await _loadInitial(session: session, inbox: inbox, generation: generation);
   }
 
@@ -206,7 +207,6 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         ),
       );
       _persistCounters(counters);
-      _listenRealtime(session: session, inbox: inbox, generation: generation);
     } on Object catch (error) {
       if (_cancellation?.isCancelled == false &&
           generation == _buildGeneration) {
@@ -258,6 +258,10 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   void _onRealtimeEvent(InboxRealtimeEvent event) {
     final InboxViewState? current = state.value;
     if (current == null) return;
+    if (!current.hasLoadedSnapshot && event is! InboxConnectionChanged) {
+      _realtimeRefreshQueued = true;
+      return;
+    }
     switch (event) {
       case InboxConnectionChanged(:final status):
         _setConnectionStatus(status);

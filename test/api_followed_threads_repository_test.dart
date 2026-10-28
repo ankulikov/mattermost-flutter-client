@@ -29,11 +29,12 @@ void main() {
         ),
         teamId: 'team-1',
         before: 'older-root',
+        perPage: 40,
       );
 
       expect(api.threadCalls, 1);
-      expect(api.perPage, 60);
       expect(api.before, 'older-root');
+      expect(api.perPage, 40);
       expect(api.extended, isTrue);
       expect(users.requestedIdBatches, <List<String>>[
         <String>['missing-author'],
@@ -42,10 +43,10 @@ void main() {
       expect(page.totalUnreadThreads, 2);
       expect(page.totalUnreadMentions, 1);
       expect(page.items, hasLength(2));
-      expect(page.items.first.root.author.displayName, 'Ada Lovelace');
-      expect(page.items.first.unreadMentions, 1);
-      expect(page.items.last.root.author.displayName, 'Grace Hopper');
-      expect(page.items.last.unreadReplies, 3);
+      expect(page.items.first.root.author.displayName, 'Grace Hopper');
+      expect(page.items.first.unreadReplies, 3);
+      expect(page.items.last.root.author.displayName, 'Ada Lovelace');
+      expect(page.items.last.unreadMentions, 1);
     },
   );
 }
@@ -70,8 +71,8 @@ final class _ThreadsApi implements MattermostApi {
   }) => throw UnimplementedError();
 
   int threadCalls = 0;
-  int? perPage;
   String? before;
+  int? perPage;
   bool? extended;
   final List<List<String>> userIdBatches = <List<String>>[];
 
@@ -79,14 +80,14 @@ final class _ThreadsApi implements MattermostApi {
   Future<MattermostUserThreadsDto> getUserThreads({
     required String userId,
     required String teamId,
-    int perPage = 60,
     String? before,
+    int perPage = 60,
     bool extended = true,
     bool unread = false,
   }) async {
     threadCalls += 1;
-    this.perPage = perPage;
     this.before = before;
+    this.perPage = perPage;
     this.extended = extended;
     return MattermostUserThreadsDto(
       total: 2,
