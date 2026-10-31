@@ -12,6 +12,7 @@ import 'package:mattermost_flutter/src/domain/models/channel.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
 import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
+import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
@@ -32,6 +33,7 @@ import 'package:mattermost_flutter/src/features/profile/domain/repositories/curr
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -428,6 +430,188 @@ void main() {
   });
 
   testWidgets(
+    'opens Threads as the sole selection with channel-matched sidebar sizing',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+            threadRepositoryProvider.overrideWithValue(
+              const _ThreadRepository(),
+            ),
+          ],
+          child: const MaterialApp(home: BootstrapPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder search = find.byKey(
+        const ValueKey<String>('channel-search-field'),
+      );
+      final Finder threadsTile = find.byKey(
+        const ValueKey<String>('threads-sidebar-tile'),
+      );
+      final Finder channelSelectionSurface = find.byKey(
+        const ValueKey<String>('channel-selection-surface-town-square'),
+      );
+      expect(
+        tester.getSize(threadsTile).width,
+        tester.getSize(channelSelectionSurface).width,
+      );
+      expect(tester.getSize(search).width, tester.getSize(threadsTile).width);
+      expect(
+        tester.getSize(channelSelectionSurface).width,
+        tester
+            .getSize(
+              find.byKey(const PageStorageKey<String>('channel-sidebar')),
+            )
+            .width,
+      );
+      expect(
+        tester.widget<Text>(find.text(ChannelSidebarStrings.threads)).style,
+        Theme.of(tester.element(threadsTile)).textTheme.bodyMedium,
+      );
+      expect(
+        (tester.widget<Material>(threadsTile).shape! as RoundedRectangleBorder)
+            .borderRadius,
+        BorderRadius.zero,
+      );
+      final Finder searchIcon = find.descendant(
+        of: search,
+        matching: find.byIcon(Icons.search),
+      );
+      final Finder threadsIcon = find.descendant(
+        of: threadsTile,
+        matching: find.byIcon(Icons.forum_outlined),
+      );
+      final Finder channelIcon = find.descendant(
+        of: channelSelectionSurface,
+        matching: find.byIcon(Icons.tag),
+      );
+      expect(
+        tester.getTopLeft(searchIcon).dx,
+        tester.getTopLeft(threadsIcon).dx,
+      );
+      expect(
+        tester.getTopLeft(threadsIcon).dx,
+        tester.getTopLeft(channelIcon).dx,
+      );
+      expect(
+        tester.getTopLeft(find.text(ChannelSidebarStrings.searchHint)).dx -
+            (tester.getTopLeft(searchIcon).dx +
+                tester.getSize(searchIcon).width),
+        AppSpacing.lg,
+      );
+
+      await tester.tap(find.text('Town Square'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<Material>(channelSelectionSurface).color,
+        Theme.of(
+          tester.element(channelSelectionSurface),
+        ).colorScheme.secondaryContainer,
+      );
+
+      await tester.tap(threadsTile);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<Material>(channelSelectionSurface).color,
+        Colors.transparent,
+      );
+      expect(
+        tester.widget<Material>(threadsTile).color,
+        Theme.of(tester.element(threadsTile)).colorScheme.secondaryContainer,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('channels-side-pane')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('followed-threads-list-pane')),
+        findsOneWidget,
+      );
+      expect(find.text('Unread followed thread'), findsOneWidget);
+      expect(find.text('Read followed thread'), findsOneWidget);
+      expect(find.text('All your threads'), findsNothing);
+      expect(find.text('Unreads'), findsNothing);
+      expect(find.text('Done'), findsNothing);
+      expect(find.text('Postpone'), findsNothing);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('followed-thread-card-unread-root')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ThreadPane), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('channels-side-pane')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('followed-threads-list-pane')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('stacks followed threads from the compact channel list', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          threadRepositoryProvider.overrideWithValue(const _ThreadRepository()),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('threads-sidebar-tile')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('followed-threads-list-pane')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+      findsNothing,
+    );
+    expect(find.byType(BackButton), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const PageStorageKey<String>('channel-sidebar')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
     'filters loaded channels and dialogs by display name in their categories',
     (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -451,22 +635,33 @@ void main() {
       );
       expect(search, findsOneWidget);
       expect(tester.getSize(search).height, 56);
-      final InputDecoration decoration = tester
-          .widget<TextField>(search)
-          .decoration!;
+      final TextField searchField = tester.widget<TextField>(search);
+      final InputDecoration decoration = searchField.decoration!;
+      expect(searchField.style, isNull);
+      expect(searchField.textAlignVertical, isNull);
+      expect(decoration.hintStyle, isNull);
       expect(decoration.isDense, isNull);
-      expect(decoration.constraints, isNull);
+      expect(decoration.constraints, AppLayout.sidebarSearchConstraints);
       expect(decoration.contentPadding, isNull);
       expect(decoration.filled, isNull);
-      expect(decoration.prefixIconConstraints, isNull);
-      final OutlineInputBorder border =
-          decoration.border! as OutlineInputBorder;
-      expect(border.borderRadius, BorderRadius.circular(10));
-      expect(border.borderSide.width, 1);
+      expect(
+        decoration.prefixIconConstraints,
+        AppLayout.sidebarSearchPrefixIconConstraints,
+      );
+      expect(decoration.border, InputBorder.none);
+      expect(decoration.enabledBorder, InputBorder.none);
+      expect(decoration.focusedBorder, InputBorder.none);
+      expect(decoration.errorBorder, InputBorder.none);
+      expect(decoration.focusedErrorBorder, InputBorder.none);
+      expect(decoration.disabledBorder, InputBorder.none);
       expect(find.text('Public channels'), findsOneWidget);
       expect(find.text('Town Square'), findsNothing);
       expect(find.text('Direct messages'), findsOneWidget);
       expect(find.text('Ada Lovelace'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('threads-sidebar-tile')),
+        findsOneWidget,
+      );
 
       await tester.tap(search);
       await tester.pump();
@@ -478,6 +673,10 @@ void main() {
       expect(find.text('Town Square'), findsOneWidget);
       expect(find.text('Direct messages'), findsNothing);
       expect(find.text('Ada Lovelace'), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('threads-sidebar-tile')),
+        findsNothing,
+      );
 
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pump();
@@ -491,6 +690,10 @@ void main() {
       expect(find.text('Direct messages'), findsOneWidget);
       expect(find.text('Ada Lovelace'), findsOneWidget);
       expect(find.byTooltip(ChannelSidebarStrings.clearSearch), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('threads-sidebar-tile')),
+        findsOneWidget,
+      );
 
       await tester.enterText(search, 'ada');
       await tester.pump();
@@ -1798,6 +2001,10 @@ void main() {
     );
     expect(material.clipBehavior, Clip.antiAlias);
     expect(
+      (material.shape! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.zero,
+    );
+    expect(
       tester
           .widget<ListTile>(
             find.descendant(
@@ -2236,6 +2443,56 @@ final class _ThreadRepository extends ThreadRepository {
     required String rootPostId,
     required DateTime timestamp,
   }) async {}
+
+  @override
+  Future<FollowedThreadsPage> loadFollowed({
+    required AuthSession session,
+    required String teamId,
+    String? before,
+  }) async {
+    FollowedThread thread({
+      required String id,
+      required String message,
+      required int unreadReplies,
+    }) => FollowedThread(
+      root: ChannelPost(
+        id: id,
+        channelId: 'town-square',
+        author: const PostAuthor(id: 'grace', displayName: 'Grace Hopper'),
+        sentAt: DateTime(2026, 8, 24, 10, 30),
+        message: message,
+        replyCount: 2,
+      ),
+      replyCount: 2,
+      lastReplyAt: DateTime(2026, 8, 24, 10, 35),
+      lastViewedAt: DateTime(2026, 8, 24, 10, 32),
+      unreadReplies: unreadReplies,
+      unreadMentions: unreadReplies > 0 ? 1 : 0,
+      participants: const <PostAuthor>[
+        PostAuthor(id: 'ada', displayName: 'Ada Lovelace'),
+      ],
+    );
+
+    return FollowedThreadsPage(
+      items: <FollowedThread>[
+        thread(
+          id: 'unread-root',
+          message: 'Unread followed thread',
+          unreadReplies: 2,
+        ),
+        thread(
+          id: 'read-root',
+          message: 'Read followed thread',
+          unreadReplies: 0,
+        ),
+      ],
+      total: 2,
+      totalUnreadThreads: 1,
+      totalUnreadMentions: 1,
+      hasMore: false,
+      nextBefore: 'read-root',
+    );
+  }
 }
 
 final class _RecordingPostRepository extends _DelayedPostRepository {

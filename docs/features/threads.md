@@ -11,7 +11,9 @@ The list requests
 Pagination uses `before=<root_post_id>`. The response already includes the root,
 reply and unread counters, mention counters, and participants. Root authors not
 present in `participants` are fetched in one `/users/ids` batch. The list never
-loads every full thread to render its rows.
+loads every full thread to render its rows. The next cursor comes from the last
+raw server thread, including a deleted thread that is omitted from presentation;
+a short page or repeated cursor ends pagination.
 
 ## Opening a thread
 
@@ -40,6 +42,13 @@ exception: opening an Inbox thread positions the unread boundary but leaves it
 unread until the user selects Done on its Inbox card.
 
 ## Presentation
+
+Threads is a channel-sidebar destination. Its one activity-ordered list includes
+both read and unread followed threads; it does not split into All and Unread
+tabs. Expanded layouts keep the channel sidebar, thread-card list, and selected
+thread visible as three panes. Compact layouts stack those same destinations.
+Thread cards share the Inbox message-card surface but omit Inbox's Done and
+Postpone actions.
 
 When the content pane is at least `AppBreakpoints.sideThread` wide, `ThreadPane`
 opens beside the channel or Inbox content. Narrower layouts route to

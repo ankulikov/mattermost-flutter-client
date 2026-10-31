@@ -1,5 +1,5 @@
 abstract final class FollowedThreadsStrings {
-  static const String title = 'Threads';
+  static const String title = 'Followed threads';
   static const String subtitle =
       'Threads you participate in or follow appear here';
   static const String loading = 'Loading threads';

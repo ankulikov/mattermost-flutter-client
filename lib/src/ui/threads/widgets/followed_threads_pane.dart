@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_preview_card.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_strings.dart';
@@ -20,12 +22,14 @@ class FollowedThreadsPane extends ConsumerStatefulWidget {
     required this.team,
     required this.channelsById,
     this.onSelectChannel,
+    this.onBack,
     super.key,
   });
 
   final SidebarTeam team;
   final Map<String, SidebarChannel> channelsById;
   final ValueChanged<String>? onSelectChannel;
+  final VoidCallback? onBack;
 
   @override
   ConsumerState<FollowedThreadsPane> createState() =>
@@ -56,9 +60,10 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
         final bool showSideThread =
             constraints.maxWidth >= AppBreakpoints.sideThread;
         final Widget listPane = Column(
+          key: const ValueKey<String>('followed-threads-list-pane'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const _ThreadsHeader(),
+            _ThreadsHeader(onBack: widget.onBack),
             const Divider(height: 1),
             Expanded(
               child: value.when(
@@ -72,6 +77,7 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
                   state: state,
                   selectedThreadId: _selectedThreadId,
                   channelsById: widget.channelsById,
+                  serverUrl: serverUrl,
                   onSelect: (FollowedThread thread) {
                     if (showSideThread) {
                       setState(() => _selectedThreadId = thread.id);
@@ -174,20 +180,33 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
 }
 
 class _ThreadsHeader extends StatelessWidget {
-  const _ThreadsHeader();
+  const _ThreadsHeader({this.onBack});
+
+  final VoidCallback? onBack;
 
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.fromLTRB(20, 14, 20, 12),
-    child: Column(
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(onBack == null ? 20 : 4, 14, 20, 12),
+    child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          FollowedThreadsStrings.title,
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        if (onBack case final VoidCallback onBack) ...<Widget>[
+          BackButton(onPressed: onBack),
+          const SizedBox(width: 4),
+        ],
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                FollowedThreadsStrings.title,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 2),
+              Text(FollowedThreadsStrings.subtitle),
+            ],
+          ),
         ),
-        SizedBox(height: 2),
-        Text(FollowedThreadsStrings.subtitle),
       ],
     ),
   );
@@ -199,6 +218,7 @@ class _ThreadsBody extends ConsumerWidget {
     required this.state,
     required this.selectedThreadId,
     required this.channelsById,
+    required this.serverUrl,
     required this.onSelect,
   });
 
@@ -206,11 +226,12 @@ class _ThreadsBody extends ConsumerWidget {
   final FollowedThreadsViewState state;
   final String? selectedThreadId;
   final Map<String, SidebarChannel> channelsById;
+  final Uri? serverUrl;
   final ValueChanged<FollowedThread> onSelect;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (state.items.isEmpty) {
+    if (state.items.isEmpty && !state.hasMore) {
       return RefreshIndicator(
         onRefresh: () =>
             ref.read(followedThreadsProvider(teamId).notifier).refresh(),
@@ -218,6 +239,24 @@ class _ThreadsBody extends ConsumerWidget {
           children: const <Widget>[
             SizedBox(height: 160),
             Center(child: Text(FollowedThreadsStrings.empty)),
+          ],
+        ),
+      );
+    }
+    if (state.items.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () =>
+            ref.read(followedThreadsProvider(teamId).notifier).refresh(),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: <Widget>[
+            const SizedBox(height: 120),
+            _LoadMore(
+              loading: state.paginationStatus is OperationInProgress,
+              failed: state.paginationStatus is OperationFailed,
+              onPressed: () =>
+                  ref.read(followedThreadsProvider(teamId).notifier).loadMore(),
+            ),
           ],
         ),
       );
@@ -256,14 +295,18 @@ class _ThreadsBody extends ConsumerWidget {
                   );
                 }
                 final FollowedThread thread = state.items[index];
-                return _ThreadTile(
+                return Padding(
                   key: ValueKey<String>('followed-thread-tile-${thread.id}'),
-                  thread: thread,
-                  channelName:
-                      channelsById[thread.channelId]?.displayName ??
-                      thread.channelId,
-                  selected: thread.id == selectedThreadId,
-                  onTap: () => onSelect(thread),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: _ThreadCard(
+                    thread: thread,
+                    channelName:
+                        channelsById[thread.channelId]?.displayName ??
+                        thread.channelId,
+                    serverUrl: serverUrl,
+                    selected: thread.id == selectedThreadId,
+                    onTap: () => onSelect(thread),
+                  ),
                 );
               },
             ),
@@ -274,89 +317,33 @@ class _ThreadsBody extends ConsumerWidget {
   }
 }
 
-class _ThreadTile extends StatelessWidget {
-  const _ThreadTile({
-    required super.key,
+class _ThreadCard extends StatelessWidget {
+  const _ThreadCard({
     required this.thread,
     required this.channelName,
+    required this.serverUrl,
     required this.selected,
     required this.onTap,
   });
 
   final FollowedThread thread;
   final String channelName;
+  final Uri? serverUrl;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final String time = MaterialLocalizations.of(
-      context,
-    ).formatTimeOfDay(TimeOfDay.fromDateTime(thread.lastReplyAt));
     return Semantics(
-      button: true,
       label: _semanticLabel(),
-      child: InkWell(
+      child: MessagePreviewCard(
+        interactionKey: ValueKey<String>('followed-thread-card-${thread.id}'),
+        header: channelName,
+        post: thread.root,
+        serverUrl: serverUrl,
+        selected: selected,
         onTap: onTap,
-        child: Container(
-          color: selected ? theme.colorScheme.secondaryContainer : null,
-          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              MessageAvatar(author: thread.root.author, radius: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            thread.root.author.displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(time, style: theme.textTheme.labelMedium),
-                        const SizedBox(width: 8),
-                        _UnreadIndicator(thread: thread),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      channelName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      thread.root.message,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      FollowedThreadsStrings.replies(thread.replyCount),
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        details: _ThreadSummary(thread: thread),
       ),
     );
   }
@@ -369,6 +356,66 @@ class _ThreadTile extends StatelessWidget {
       return FollowedThreadsStrings.unreadReplies(thread.unreadReplies);
     }
     return FollowedThreadsStrings.replies(thread.replyCount);
+  }
+}
+
+class _ThreadSummary extends StatelessWidget {
+  const _ThreadSummary({required this.thread});
+
+  final FollowedThread thread;
+
+  static const double _avatarHitTarget = 44;
+  static const double _avatarRadius = 12;
+  static const double _avatarOverlap = 4;
+
+  double get _participantStripWidth =>
+      _avatarHitTarget +
+      (thread.participants.take(4).length - 1) *
+          (_avatarRadius * 2 - _avatarOverlap);
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final List<PostAuthor> participants = thread.participants.take(4).toList();
+    return Padding(
+      key: ValueKey<String>('thread-participant-summary-${thread.id}'),
+      // MessageAvatar reserves a 44 px accessible target, while the visible
+      // avatar is 24 px wide. Offset the summary so its visible avatars align
+      // with the root message body rather than the card edge.
+      padding: const EdgeInsetsDirectional.fromSTEB(62, 10, 16, 10),
+      child: Row(
+        children: <Widget>[
+          if (participants.isNotEmpty)
+            SizedBox(
+              width: _participantStripWidth,
+              height: _avatarHitTarget,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: <Widget>[
+                  for (int index = 0; index < participants.length; index += 1)
+                    PositionedDirectional(
+                      start: index * (_avatarRadius * 2 - _avatarOverlap),
+                      child: MessageAvatar(
+                        author: participants[index],
+                        radius: _avatarRadius,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (participants.isNotEmpty) const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              FollowedThreadsStrings.replies(thread.replyCount),
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          _UnreadIndicator(thread: thread),
+        ],
+      ),
+    );
   }
 }
 

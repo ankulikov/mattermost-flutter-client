@@ -41,6 +41,8 @@ void main() {
       expect(page.total, 2);
       expect(page.totalUnreadThreads, 2);
       expect(page.totalUnreadMentions, 1);
+      expect(page.hasMore, isFalse);
+      expect(page.nextBefore, 'root-2');
       expect(page.items, hasLength(2));
       expect(page.items.first.root.author.displayName, 'Ada Lovelace');
       expect(page.items.first.unreadMentions, 1);

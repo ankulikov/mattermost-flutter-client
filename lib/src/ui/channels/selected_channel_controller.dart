@@ -37,7 +37,7 @@ final class ChannelPresentationController extends Notifier<bool> {
 }
 
 /// The mutually-exclusive destinations owned by the application shell.
-enum ShellDestination { channels, inbox, search, profile }
+enum ShellDestination { channels, threads, inbox, search, profile }
 
 final NotifierProvider<ShellDestinationController, ShellDestination>
 shellDestinationProvider =
@@ -49,7 +49,12 @@ final class ShellDestinationController extends Notifier<ShellDestination> {
   @override
   ShellDestination build() => ShellDestination.channels;
 
-  void select(ShellDestination destination) => state = destination;
+  void select(ShellDestination destination) {
+    if (destination == ShellDestination.threads) {
+      ref.read(selectedChannelProvider.notifier).clear();
+    }
+    state = destination;
+  }
 }
 
 /// A one-shot request for Search.  The screen itself owns consumption so a

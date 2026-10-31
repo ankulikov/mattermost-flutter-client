@@ -11,6 +11,8 @@ final class FollowedThreadsViewState {
     this.total = 0,
     this.totalUnreadThreads = 0,
     this.totalUnreadMentions = 0,
+    this.hasMore = false,
+    this.nextBefore,
     this.paginationStatus = const OperationStatus.idle(),
     this.refreshStatus = const OperationStatus.idle(),
   });
@@ -19,16 +21,18 @@ final class FollowedThreadsViewState {
   final int total;
   final int totalUnreadThreads;
   final int totalUnreadMentions;
+  final bool hasMore;
+  final String? nextBefore;
   final OperationStatus paginationStatus;
   final OperationStatus refreshStatus;
-
-  bool get hasMore => items.length < total;
 
   FollowedThreadsViewState copyWith({
     List<FollowedThread>? items,
     int? total,
     int? totalUnreadThreads,
     int? totalUnreadMentions,
+    bool? hasMore,
+    String? nextBefore,
     OperationStatus? paginationStatus,
     OperationStatus? refreshStatus,
   }) => FollowedThreadsViewState(
@@ -36,6 +40,8 @@ final class FollowedThreadsViewState {
     total: total ?? this.total,
     totalUnreadThreads: totalUnreadThreads ?? this.totalUnreadThreads,
     totalUnreadMentions: totalUnreadMentions ?? this.totalUnreadMentions,
+    hasMore: hasMore ?? this.hasMore,
+    nextBefore: nextBefore ?? this.nextBefore,
     paginationStatus: paginationStatus ?? this.paginationStatus,
     refreshStatus: refreshStatus ?? this.refreshStatus,
   );
@@ -111,7 +117,7 @@ final class FollowedThreadsController
         current.refreshStatus is OperationInProgress ||
         current.paginationStatus is OperationInProgress ||
         !current.hasMore ||
-        current.items.isEmpty) {
+        current.nextBefore == null) {
       return;
     }
     final AuthSession? session = _session;
@@ -126,19 +132,23 @@ final class FollowedThreadsController
         () => repository.loadFollowed(
           session: session,
           teamId: teamId,
-          before: current.items.last.id,
+          before: current.nextBefore,
         ),
       );
       final Map<String, FollowedThread> merged = <String, FollowedThread>{
         for (final FollowedThread item in current.items) item.id: item,
         for (final FollowedThread item in page.items) item.id: item,
       };
+      final bool cursorAdvanced =
+          page.nextBefore != null && page.nextBefore != current.nextBefore;
       state = AsyncData(
         FollowedThreadsViewState(
           items: List<FollowedThread>.unmodifiable(merged.values),
           total: page.total,
           totalUnreadThreads: page.totalUnreadThreads,
           totalUnreadMentions: page.totalUnreadMentions,
+          hasMore: page.hasMore && cursorAdvanced && merged.length < page.total,
+          nextBefore: cursorAdvanced ? page.nextBefore : current.nextBefore,
         ),
       );
     } on Object catch (error) {
@@ -213,5 +223,10 @@ final class FollowedThreadsController
         total: page.total,
         totalUnreadThreads: page.totalUnreadThreads,
         totalUnreadMentions: page.totalUnreadMentions,
+        hasMore:
+            page.hasMore &&
+            page.nextBefore != null &&
+            page.items.length < page.total,
+        nextBefore: page.nextBefore,
       );
 }
