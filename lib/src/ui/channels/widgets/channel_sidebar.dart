@@ -179,7 +179,7 @@ class _SidebarContentState extends State<_SidebarContent> {
             onTapOutside: (_) => _searchFocusNode.unfocus(),
             decoration: InputDecoration(
               hintText: ChannelSidebarStrings.searchHint,
-              constraints: AppLayout.sidebarSearchConstraints,
+              // constraints: AppLayout.sidebarSearchConstraints,
               prefixIcon: const Padding(
                 padding: AppLayout.sidebarSearchIconPadding,
                 child: Icon(Icons.search),
@@ -194,12 +194,9 @@ class _SidebarContentState extends State<_SidebarContent> {
                       icon: const Icon(Icons.close),
                     )
                   : null,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
+              // hack to fix text alignment, don't replace with `InputBorder.none`
+              enabledBorder: OutlineInputBorder(borderSide: BorderSide(width: 0, style: BorderStyle.none), borderRadius: BorderRadius.zero, gapPadding: 0),
+              focusedBorder:  OutlineInputBorder(borderSide: BorderSide(width: 0, style: BorderStyle.none),borderRadius: BorderRadius.zero, gapPadding: 0),
             ),
           ),
         ),
