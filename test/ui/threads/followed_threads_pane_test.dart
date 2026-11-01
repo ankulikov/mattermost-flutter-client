@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -78,7 +79,124 @@ void main() {
       lessThan(tester.getBottomRight(firstAvatar).dx),
     );
   });
+
+  testWidgets('shows all four participant avatars without an overflow count', (
+    WidgetTester tester,
+  ) async {
+    await _pumpThreads(tester, participantCount: 4);
+
+    for (int index = 1; index <= 4; index += 1) {
+      expect(
+        find.byKey(ValueKey<String>('user-avatar-fallback-participant-$index')),
+        findsOneWidget,
+      );
+    }
+    expect(
+      find.byKey(
+        const ValueKey<String>('thread-additional-participants-thread-1'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+    'shows three avatars and names the remaining participants on hover',
+    (WidgetTester tester) async {
+      await _pumpThreads(tester, participantCount: 5);
+
+      for (int index = 1; index <= 3; index += 1) {
+        expect(
+          find.byKey(
+            ValueKey<String>('user-avatar-fallback-participant-$index'),
+          ),
+          findsOneWidget,
+        );
+      }
+      for (int index = 4; index <= 5; index += 1) {
+        expect(
+          find.byKey(
+            ValueKey<String>('user-avatar-fallback-participant-$index'),
+          ),
+          findsNothing,
+        );
+      }
+
+      final Finder overflow = find.byKey(
+        const ValueKey<String>('thread-additional-participants-thread-1'),
+      );
+      expect(overflow, findsOneWidget);
+      expect(find.text('+2'), findsOneWidget);
+
+      final TestGesture mouse = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+      );
+      await mouse.addPointer(location: tester.getCenter(overflow));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('Participant four, Participant five'), findsOneWidget);
+    },
+  );
 }
+
+Future<void> _pumpThreads(
+  WidgetTester tester, {
+  required int participantCount,
+}) async {
+  final List<PostAuthor> participants = List<PostAuthor>.generate(
+    participantCount,
+    (int index) => PostAuthor(
+      id: 'participant-${index + 1}',
+      displayName: 'Participant ${_numberName(index + 1)}',
+    ),
+  );
+  final FollowedThread thread = FollowedThread(
+    root: ChannelPost(
+      id: 'thread-1',
+      channelId: 'channel-1',
+      author: PostAuthor(id: 'root-author', displayName: 'Root author'),
+      sentAt: DateTime(2026, 10, 31),
+      message: 'Root message',
+    ),
+    replyCount: 2,
+    lastReplyAt: DateTime(2026, 10, 31),
+    lastViewedAt: DateTime(2026, 10, 30),
+    unreadReplies: 0,
+    unreadMentions: 0,
+    participants: participants,
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        authSessionProvider.overrideWithValue(
+          AuthSession(
+            serverUrl: Uri.parse('https://chat.example.com'),
+            userId: 'me',
+            username: 'ada',
+          ),
+        ),
+        threadRepositoryProvider.overrideWithValue(_ThreadRepository(thread)),
+        userAvatarProvider.overrideWith(
+          (Ref ref, UserAvatarRequest request) async => null,
+        ),
+      ],
+      child: const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 500,
+            child: FollowedThreadsPane(
+              team: SidebarTeam(id: 'team-1', displayName: 'Team'),
+              channelsById: <String, SidebarChannel>{},
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+String _numberName(int number) =>
+    <String>['one', 'two', 'three', 'four', 'five'][number - 1];
 
 final class _ThreadRepository extends ThreadRepository {
   const _ThreadRepository(this.thread);

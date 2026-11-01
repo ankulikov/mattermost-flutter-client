@@ -368,15 +368,26 @@ class _ThreadSummary extends StatelessWidget {
   static const double _avatarRadius = 12;
   static const double _avatarOverlap = 4;
 
+  List<PostAuthor> get _visibleParticipants => thread.participants.length > 4
+      ? thread.participants.take(3).toList(growable: false)
+      : thread.participants.take(4).toList(growable: false);
+
+  List<PostAuthor> get _remainingParticipants => thread.participants.length > 4
+      ? thread.participants.skip(3).toList(growable: false)
+      : const <PostAuthor>[];
+
   double get _participantStripWidth =>
       _avatarHitTarget +
-      (thread.participants.take(4).length - 1) *
+      (_visibleParticipants.length +
+              (_remainingParticipants.isEmpty ? 0 : 1) -
+              1) *
           (_avatarRadius * 2 - _avatarOverlap);
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final List<PostAuthor> participants = thread.participants.take(4).toList();
+    final List<PostAuthor> participants = _visibleParticipants;
+    final List<PostAuthor> remainingParticipants = _remainingParticipants;
     return Padding(
       key: ValueKey<String>('thread-participant-summary-${thread.id}'),
       // MessageAvatar reserves a 44 px accessible target, while the visible
@@ -400,6 +411,16 @@ class _ThreadSummary extends StatelessWidget {
                         radius: _avatarRadius,
                       ),
                     ),
+                  if (remainingParticipants.isNotEmpty)
+                    PositionedDirectional(
+                      start:
+                          participants.length *
+                          (_avatarRadius * 2 - _avatarOverlap),
+                      child: _RemainingParticipantsCounter(
+                        threadId: thread.id,
+                        participants: remainingParticipants,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -416,6 +437,74 @@ class _ThreadSummary extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _RemainingParticipantsCounter extends StatelessWidget {
+  const _RemainingParticipantsCounter({
+    required this.threadId,
+    required this.participants,
+  });
+
+  final String threadId;
+  final List<PostAuthor> participants;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme colors = theme.colorScheme;
+    final String names = _tooltipNames(participants);
+    return Tooltip(
+      message: names,
+      child: Semantics(
+        label: FollowedThreadsStrings.additionalParticipants(
+          participants.length,
+        ),
+        child: SizedBox.square(
+          dimension: _ThreadSummary._avatarHitTarget,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.basic,
+            child: Center(
+              child: DecoratedBox(
+                key: ValueKey<String>(
+                  'thread-additional-participants-$threadId',
+                ),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest,
+                  shape: BoxShape.circle,
+                ),
+                child: SizedBox.square(
+                  dimension: _ThreadSummary._avatarRadius * 2,
+                  child: Center(
+                    child: Text(
+                      '+${participants.length}',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _tooltipNames(List<PostAuthor> participants) {
+    final List<String> rows = <String>[];
+    for (int index = 0; index < participants.length; index += 2) {
+      rows.add(
+        participants
+            .skip(index)
+            .take(2)
+            .map((PostAuthor participant) => participant.displayName)
+            .join(', '),
+      );
+    }
+    return rows.join('\n');
   }
 }
 

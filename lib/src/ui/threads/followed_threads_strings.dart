@@ -16,4 +16,7 @@ abstract final class FollowedThreadsStrings {
       count == 1 ? '1 unread reply' : '$count unread replies';
   static String mentions(int count) =>
       count == 1 ? '1 unread mention' : '$count unread mentions';
+  static String additionalParticipants(int count) => count == 1
+      ? '1 additional participant'
+      : '$count additional participants';
 }
