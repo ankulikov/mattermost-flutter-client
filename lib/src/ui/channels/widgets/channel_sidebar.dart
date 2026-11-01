@@ -149,6 +149,7 @@ class _SidebarContentState extends State<_SidebarContent> {
   }
 
   bool get _hasSearchQuery => _query.trim().isNotEmpty;
+
   bool get _hasSearchText => _query.isNotEmpty;
 
   @override
@@ -195,8 +196,16 @@ class _SidebarContentState extends State<_SidebarContent> {
                     )
                   : null,
               // hack to fix text alignment, don't replace with `InputBorder.none`
-              enabledBorder: OutlineInputBorder(borderSide: BorderSide(width: 0, style: BorderStyle.none), borderRadius: BorderRadius.zero, gapPadding: 0),
-              focusedBorder:  OutlineInputBorder(borderSide: BorderSide(width: 0, style: BorderStyle.none),borderRadius: BorderRadius.zero, gapPadding: 0),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(width: 0, style: BorderStyle.none),
+                borderRadius: BorderRadius.zero,
+                gapPadding: 0,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(width: 0, style: BorderStyle.none),
+                borderRadius: BorderRadius.zero,
+                gapPadding: 0,
+              ),
             ),
           ),
         ),
