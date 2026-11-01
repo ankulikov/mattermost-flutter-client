@@ -19,4 +19,8 @@ abstract final class FollowedThreadsStrings {
   static String additionalParticipants(int count) => count == 1
       ? '1 additional participant'
       : '$count additional participants';
+  static String minutesAgo(int count) =>
+      count == 1 ? '1 minute ago' : '$count minutes ago';
+  static String hoursAgo(int count) =>
+      count == 1 ? '1 hour ago' : '$count hours ago';
 }

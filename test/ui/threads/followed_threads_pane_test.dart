@@ -11,6 +11,95 @@ import 'package:mattermost_flutter/src/ui/threads/widgets/followed_threads_pane.
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
+  testWidgets('shows the latest reply time in the card header', (
+    WidgetTester tester,
+  ) async {
+    final DateTime now = DateTime.now();
+    final FollowedThread thread = FollowedThread(
+      root: ChannelPost(
+        id: 'thread-1',
+        channelId: 'channel-1',
+        author: PostAuthor(id: 'root-author', displayName: 'Root author'),
+        sentAt: DateTime(2026, 1, 1),
+        message: 'Root message',
+      ),
+      replyCount: 2,
+      lastReplyAt: now.subtract(const Duration(minutes: 5)),
+      lastViewedAt: now.subtract(const Duration(days: 1)),
+      unreadReplies: 0,
+      unreadMentions: 0,
+    );
+    await _pumpThread(tester, thread: thread);
+
+    final Finder header = find.text('channel-1');
+    final Finder time = find.byKey(
+      const ValueKey<String>('followed-thread-last-reply-time-thread-1'),
+    );
+    expect(time, findsOneWidget);
+    expect(find.text('5 minutes ago'), findsOneWidget);
+    expect(
+      tester.getTopLeft(time).dx,
+      greaterThan(tester.getTopLeft(header).dx),
+    );
+    expect(
+      (tester.getTopLeft(time).dy - tester.getTopLeft(header).dy).abs(),
+      lessThanOrEqualTo(4),
+    );
+  });
+
+  testWidgets('formats latest-reply times across age ranges', (
+    WidgetTester tester,
+  ) async {
+    await _pumpThreads(tester, participantCount: 0);
+    final MaterialLocalizations localizations = MaterialLocalizations.of(
+      tester.element(find.byType(FollowedThreadsPane)),
+    );
+    final DateTime now = DateTime(2026, 10, 30, 12);
+
+    expect(
+      formatFollowedThreadLastReplyTime(
+        lastReplyAt: now.subtract(const Duration(minutes: 1)),
+        now: now,
+        localizations: localizations,
+      ),
+      '1 minute ago',
+    );
+    expect(
+      formatFollowedThreadLastReplyTime(
+        lastReplyAt: now.subtract(const Duration(minutes: 59)),
+        now: now,
+        localizations: localizations,
+      ),
+      '59 minutes ago',
+    );
+    expect(
+      formatFollowedThreadLastReplyTime(
+        lastReplyAt: now.subtract(const Duration(hours: 1)),
+        now: now,
+        localizations: localizations,
+      ),
+      '1 hour ago',
+    );
+    expect(
+      formatFollowedThreadLastReplyTime(
+        lastReplyAt: now.subtract(const Duration(hours: 23)),
+        now: now,
+        localizations: localizations,
+      ),
+      '23 hours ago',
+    );
+
+    final DateTime olderReply = now.subtract(const Duration(days: 2));
+    expect(
+      formatFollowedThreadLastReplyTime(
+        lastReplyAt: olderReply,
+        now: now,
+        localizations: localizations,
+      ),
+      localizations.formatMediumDate(olderReply),
+    );
+  });
+
   testWidgets('aligns and slightly overlaps thread participant avatars', (
     WidgetTester tester,
   ) async {
@@ -164,6 +253,41 @@ Future<void> _pumpThreads(
     unreadMentions: 0,
     participants: participants,
   );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        authSessionProvider.overrideWithValue(
+          AuthSession(
+            serverUrl: Uri.parse('https://chat.example.com'),
+            userId: 'me',
+            username: 'ada',
+          ),
+        ),
+        threadRepositoryProvider.overrideWithValue(_ThreadRepository(thread)),
+        userAvatarProvider.overrideWith(
+          (Ref ref, UserAvatarRequest request) async => null,
+        ),
+      ],
+      child: const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 500,
+            child: FollowedThreadsPane(
+              team: SidebarTeam(id: 'team-1', displayName: 'Team'),
+              channelsById: <String, SidebarChannel>{},
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _pumpThread(
+  WidgetTester tester, {
+  required FollowedThread thread,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [

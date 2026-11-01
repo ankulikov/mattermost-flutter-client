@@ -38,6 +38,23 @@ class FollowedThreadsPane extends ConsumerStatefulWidget {
 
 class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
   String? _selectedThreadId;
+  late DateTime _now;
+  Timer? _clockTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   void didUpdateWidget(covariant FollowedThreadsPane oldWidget) {
@@ -78,6 +95,7 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
                   selectedThreadId: _selectedThreadId,
                   channelsById: widget.channelsById,
                   serverUrl: serverUrl,
+                  now: _now,
                   onSelect: (FollowedThread thread) {
                     if (showSideThread) {
                       setState(() => _selectedThreadId = thread.id);
@@ -219,6 +237,7 @@ class _ThreadsBody extends ConsumerWidget {
     required this.selectedThreadId,
     required this.channelsById,
     required this.serverUrl,
+    required this.now,
     required this.onSelect,
   });
 
@@ -227,6 +246,7 @@ class _ThreadsBody extends ConsumerWidget {
   final String? selectedThreadId;
   final Map<String, SidebarChannel> channelsById;
   final Uri? serverUrl;
+  final DateTime now;
   final ValueChanged<FollowedThread> onSelect;
 
   @override
@@ -304,6 +324,7 @@ class _ThreadsBody extends ConsumerWidget {
                         channelsById[thread.channelId]?.displayName ??
                         thread.channelId,
                     serverUrl: serverUrl,
+                    now: now,
                     selected: thread.id == selectedThreadId,
                     onTap: () => onSelect(thread),
                   ),
@@ -322,6 +343,7 @@ class _ThreadCard extends StatelessWidget {
     required this.thread,
     required this.channelName,
     required this.serverUrl,
+    required this.now,
     required this.selected,
     required this.onTap,
   });
@@ -329,6 +351,7 @@ class _ThreadCard extends StatelessWidget {
   final FollowedThread thread;
   final String channelName;
   final Uri? serverUrl;
+  final DateTime now;
   final bool selected;
   final VoidCallback onTap;
 
@@ -343,6 +366,12 @@ class _ThreadCard extends StatelessWidget {
         serverUrl: serverUrl,
         selected: selected,
         onTap: onTap,
+        showSentAt: false,
+        headerTrailing: _LastReplyTime(
+          threadId: thread.id,
+          lastReplyAt: thread.lastReplyAt,
+          now: now,
+        ),
         details: _ThreadSummary(thread: thread),
       ),
     );
@@ -357,6 +386,49 @@ class _ThreadCard extends StatelessWidget {
     }
     return FollowedThreadsStrings.replies(thread.replyCount);
   }
+}
+
+class _LastReplyTime extends StatelessWidget {
+  const _LastReplyTime({
+    required this.threadId,
+    required this.lastReplyAt,
+    required this.now,
+  });
+
+  final String threadId;
+  final DateTime lastReplyAt;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Text(
+      formatFollowedThreadLastReplyTime(
+        lastReplyAt: lastReplyAt,
+        now: now,
+        localizations: MaterialLocalizations.of(context),
+      ),
+      key: ValueKey<String>('followed-thread-last-reply-time-$threadId'),
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+String formatFollowedThreadLastReplyTime({
+  required DateTime lastReplyAt,
+  required DateTime now,
+  required MaterialLocalizations localizations,
+}) {
+  final Duration elapsed = now.toLocal().difference(lastReplyAt.toLocal());
+  final int minutes = elapsed.isNegative ? 0 : elapsed.inMinutes;
+  if (minutes < 60) return FollowedThreadsStrings.minutesAgo(minutes);
+
+  final int hours = elapsed.inHours;
+  if (hours < 24) return FollowedThreadsStrings.hoursAgo(hours);
+
+  return localizations.formatMediumDate(lastReplyAt.toLocal());
 }
 
 class _ThreadSummary extends StatelessWidget {

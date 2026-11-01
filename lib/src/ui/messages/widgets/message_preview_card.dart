@@ -15,9 +15,11 @@ class MessagePreviewCard extends StatelessWidget {
     required this.onTap,
     this.serverUrl,
     this.headerKey,
+    this.headerTrailing,
     this.details,
     this.actions,
     this.selected = false,
+    this.showSentAt = true,
     super.key,
   });
 
@@ -27,9 +29,11 @@ class MessagePreviewCard extends StatelessWidget {
   final VoidCallback onTap;
   final Uri? serverUrl;
   final Key? headerKey;
+  final Widget? headerTrailing;
   final Widget? details;
   final Widget? actions;
   final bool selected;
+  final bool showSentAt;
 
   @override
   Widget build(BuildContext context) {
@@ -63,12 +67,31 @@ class MessagePreviewCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          Text(
-                            header,
-                            key: headerKey,
-                            style: theme.textTheme.labelLarge,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: <Widget>[
+                              Expanded(
+                                child: Text(
+                                  header,
+                                  key: headerKey,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelLarge,
+                                ),
+                              ),
+                              if (headerTrailing
+                                  case final Widget trailing) ...<Widget>[
+                                const SizedBox(width: 8),
+                                trailing,
+                              ],
+                            ],
                           ),
-                          _AuthorLine(author: post.author, sentAt: post.sentAt),
+                          _AuthorLine(
+                            author: post.author,
+                            sentAt: post.sentAt,
+                            showSentAt: showSentAt,
+                          ),
                           const SizedBox(height: 6),
                           MessageContent(
                             post: post,
@@ -98,10 +121,15 @@ class MessagePreviewCard extends StatelessWidget {
 }
 
 class _AuthorLine extends StatelessWidget {
-  const _AuthorLine({required this.author, required this.sentAt});
+  const _AuthorLine({
+    required this.author,
+    required this.sentAt,
+    required this.showSentAt,
+  });
 
   final PostAuthor author;
   final DateTime sentAt;
+  final bool showSentAt;
 
   @override
   Widget build(BuildContext context) {
@@ -117,15 +145,16 @@ class _AuthorLine extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        Text(
-          formatMessageTimestamp(
-            sentAt: sentAt,
-            locale: Localizations.localeOf(context).toLanguageTag(),
+        if (showSentAt)
+          Text(
+            formatMessageTimestamp(
+              sentAt: sentAt,
+              locale: Localizations.localeOf(context).toLanguageTag(),
+            ),
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
       ],
     );
   }
