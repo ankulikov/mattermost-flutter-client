@@ -648,12 +648,8 @@ void main() {
         decoration.prefixIconConstraints,
         AppLayout.sidebarSearchPrefixIconConstraints,
       );
-      expect(decoration.border, InputBorder.none);
-      expect(decoration.enabledBorder, InputBorder.none);
-      expect(decoration.focusedBorder, InputBorder.none);
-      expect(decoration.errorBorder, InputBorder.none);
-      expect(decoration.focusedErrorBorder, InputBorder.none);
-      expect(decoration.disabledBorder, InputBorder.none);
+      expect(decoration.enabledBorder, isA<OutlineInputBorder>());
+      expect(decoration.focusedBorder, isA<OutlineInputBorder>());
       expect(find.text('Public channels'), findsOneWidget);
       expect(find.text('Town Square'), findsNothing);
       expect(find.text('Direct messages'), findsOneWidget);

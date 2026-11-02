@@ -180,7 +180,7 @@ class _SidebarContentState extends State<_SidebarContent> {
             onTapOutside: (_) => _searchFocusNode.unfocus(),
             decoration: InputDecoration(
               hintText: ChannelSidebarStrings.searchHint,
-              // constraints: AppLayout.sidebarSearchConstraints,
+              constraints: AppLayout.sidebarSearchConstraints,
               prefixIcon: const Padding(
                 padding: AppLayout.sidebarSearchIconPadding,
                 child: Icon(Icons.search),
