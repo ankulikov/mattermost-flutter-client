@@ -14,7 +14,7 @@ import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_control
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
-import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_preview_card.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
@@ -289,7 +289,7 @@ class _InboxList extends StatelessWidget {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _InboxRow(
+                    child: _InboxItemCard(
                       item: item,
                       onOpen: () => onOpenItem(item),
                       isPostponed: isPostponed,
@@ -321,8 +321,8 @@ class _InboxList extends StatelessWidget {
   }
 }
 
-class _InboxRow extends ConsumerWidget {
-  const _InboxRow({
+class _InboxItemCard extends ConsumerWidget {
+  const _InboxItemCard({
     required this.item,
     required this.onOpen,
     required this.isPostponed,
@@ -336,79 +336,30 @@ class _InboxRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final _Preview preview = _preview(item);
     final AuthSession? session = ref.watch(authSessionProvider);
-    final ThemeData theme = Theme.of(context);
-    return Semantics(
-      container: true,
-      child: Card(
-        margin: EdgeInsets.zero,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
-        child: InkWell(
-          key: ValueKey<String>('inbox-item-${item.key}'),
-          onTap: onOpen,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.all(AppLayout.cardPadding),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    MessageAvatar(author: preview.post.author),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            preview.header,
-                            key: ValueKey<String>('inbox-source-${item.key}'),
-                            style: theme.textTheme.labelLarge,
-                          ),
-                          _InboxAuthorLine(
-                            author: preview.post.author,
-                            sentAt: preview.post.sentAt,
-                          ),
-                          const SizedBox(height: 6),
-                          MessageContent(
-                            post: preview.post,
-                            serverUrl: session?.serverUrl,
-                            enableTextSelection: false,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+    return MessagePreviewCard(
+      interactionKey: ValueKey<String>('inbox-item-${item.key}'),
+      header: preview.header,
+      headerKey: ValueKey<String>('inbox-source-${item.key}'),
+      post: preview.post,
+      serverUrl: session?.serverUrl,
+      onTap: onOpen,
+      details: !isPostponed && _showsUpdates(item)
+          ? _InboxUpdates(item: item)
+          : null,
+      actions: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: isPostponed
+            ? TextButton.icon(
+                key: ValueKey<String>('remove-${item.key}'),
+                onPressed: () => unawaited(_remove(context, ref)),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text(InboxStrings.remove),
+              )
+            : _NewItemActions(
+                itemKey: item.key,
+                onRead: () => unawaited(_markRead(context, ref)),
+                onPostpone: () => unawaited(_postpone(context, ref)),
               ),
-              if (!isPostponed && _showsUpdates(item)) ...<Widget>[
-                Divider(height: 1, color: theme.colorScheme.outlineVariant),
-                _InboxUpdates(item: item),
-              ],
-              Divider(height: 1, color: theme.colorScheme.outlineVariant),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: isPostponed
-                    ? TextButton.icon(
-                        key: ValueKey<String>('remove-${item.key}'),
-                        onPressed: () => unawaited(_remove(context, ref)),
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text(InboxStrings.remove),
-                      )
-                    : _NewItemActions(
-                        itemKey: item.key,
-                        onRead: () => unawaited(_markRead(context, ref)),
-                        onPostpone: () => unawaited(_postpone(context, ref)),
-                      ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -697,40 +648,6 @@ class _NewItemActions extends StatelessWidget {
       );
     },
   );
-}
-
-class _InboxAuthorLine extends StatelessWidget {
-  const _InboxAuthorLine({required this.author, required this.sentAt});
-
-  final PostAuthor author;
-  final DateTime sentAt;
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    return Wrap(
-      spacing: 8,
-      runSpacing: 2,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: <Widget>[
-        Text(
-          author.displayName,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        Text(
-          formatMessageTimestamp(
-            sentAt: sentAt,
-            locale: Localizations.localeOf(context).toLanguageTag(),
-          ),
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 final class _Preview {

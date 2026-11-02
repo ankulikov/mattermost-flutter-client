@@ -182,6 +182,8 @@ final class MattermostThreadRepository extends ThreadRepository {
       total: response.total,
       totalUnreadThreads: response.totalUnreadThreads,
       totalUnreadMentions: response.totalUnreadMentions,
+      hasMore: response.threads.length == pageSize,
+      nextBefore: response.threads.lastOrNull?.id,
     );
   }
 

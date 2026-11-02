@@ -25,6 +25,7 @@ import 'package:mattermost_flutter/src/ui/core/layout/resizable_pane_divider.dar
 import 'package:mattermost_flutter/src/ui/posts/channel_posts_strings.dart';
 import 'package:mattermost_flutter/src/ui/posts/widgets/channel_posts_pane.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_strings.dart';
+import 'package:mattermost_flutter/src/ui/threads/widgets/followed_threads_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 const Duration _inboxNotificationDuration = Duration(seconds: 5);
@@ -101,7 +102,9 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     }
     final SidebarChannel? selectedChannel = ref.watch(selectedChannelProvider);
     final ShellDestination destination = ref.watch(shellDestinationProvider);
-    final bool threadsSelected = destination == ShellDestination.inbox;
+    final bool followedThreadsSelected =
+        destination == ShellDestination.threads;
+    final bool inboxSelected = destination == ShellDestination.inbox;
     final bool profileSelected = destination == ShellDestination.profile;
     final bool searchSelected = destination == ShellDestination.search;
     final ChannelSidebarSnapshot? sidebar = ref
@@ -122,7 +125,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           return _buildCompact(
             auth: auth,
             selectedChannel: selectedChannel,
-            threadsSelected: threadsSelected,
+            followedThreadsSelected: followedThreadsSelected,
+            inboxSelected: inboxSelected,
             sidebar: sidebar,
             inboxHasNewItems: inboxHasNewItems,
             currentUserProfile: currentUserProfile,
@@ -133,7 +137,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         return _buildDesktop(
           auth: auth,
           selectedChannel: selectedChannel,
-          threadsSelected: threadsSelected,
+          followedThreadsSelected: followedThreadsSelected,
+          inboxSelected: inboxSelected,
           sidebar: sidebar,
           inboxHasNewItems: inboxHasNewItems,
           currentUserProfile: currentUserProfile,
@@ -151,7 +156,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   Widget _buildDesktop({
     required AuthState auth,
     required SidebarChannel? selectedChannel,
-    required bool threadsSelected,
+    required bool followedThreadsSelected,
+    required bool inboxSelected,
     required ChannelSidebarSnapshot? sidebar,
     required bool inboxHasNewItems,
     required CurrentUserProfile? currentUserProfile,
@@ -162,7 +168,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     final Widget mainContent = _MainContent(
       auth: auth,
       selectedChannel: selectedChannel,
-      threadsSelected: false,
+      followedThreadsSelected: followedThreadsSelected,
+      inboxSelected: false,
       sidebar: sidebar,
       onSelectChannel: _selectChannelNamed,
       onSearchInChannel: _openSearchInChannel,
@@ -177,7 +184,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                   ? null
                   : searchSelected
                   ? 2
-                  : threadsSelected
+                  : inboxSelected
                   ? 1
                   : 0,
               inboxHasNewItems: inboxHasNewItems,
@@ -199,7 +206,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                           ref.watch(searchLaunchIntentProvider)
                               as SearchLaunchIntent?,
                     )
-                  : threadsSelected
+                  : inboxSelected
                   ? InboxThreadHost(
                       inboxBuilder:
                           (
@@ -235,6 +242,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                                         child: ChannelSidebar(
                                           onChannelSelected:
                                               _showSelectedChannel,
+                                          onThreadsSelected:
+                                              _showFollowedThreadsDestination,
                                         ),
                                       ),
                                       Expanded(child: mainContent),
@@ -275,7 +284,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   Widget _buildCompact({
     required AuthState auth,
     required SidebarChannel? selectedChannel,
-    required bool threadsSelected,
+    required bool followedThreadsSelected,
+    required bool inboxSelected,
     required ChannelSidebarSnapshot? sidebar,
     required bool inboxHasNewItems,
     required CurrentUserProfile? currentUserProfile,
@@ -284,7 +294,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }) {
     final bool showChannel =
         _showCompactChannel &&
-        !threadsSelected &&
+        !followedThreadsSelected &&
+        !inboxSelected &&
         !searchSelected &&
         !profileSelected &&
         selectedChannel != null;
@@ -297,7 +308,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       pane = _MainContent(
         auth: auth,
         selectedChannel: selectedChannel,
-        threadsSelected: false,
+        followedThreadsSelected: false,
+        inboxSelected: false,
         sidebar: sidebar,
         onSelectChannel: _selectChannelNamed,
         onSearchInChannel: _openSearchInChannel,
@@ -308,28 +320,45 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         launchIntent:
             ref.watch(searchLaunchIntentProvider) as SearchLaunchIntent?,
       );
-    } else if (threadsSelected) {
+    } else if (inboxSelected) {
       pane = _MainContent(
         auth: auth,
         selectedChannel: selectedChannel,
-        threadsSelected: true,
+        followedThreadsSelected: false,
+        inboxSelected: true,
         sidebar: sidebar,
         onSelectChannel: _selectChannelNamed,
         onSearchInChannel: _openSearchInChannel,
       );
+    } else if (followedThreadsSelected) {
+      pane = _MainContent(
+        auth: auth,
+        selectedChannel: selectedChannel,
+        followedThreadsSelected: true,
+        inboxSelected: false,
+        sidebar: sidebar,
+        onSelectChannel: _selectChannelNamed,
+        onSearchInChannel: _openSearchInChannel,
+        onBackToChannels: _showChannelsDestination,
+      );
     } else {
-      pane = ChannelSidebar(onChannelSelected: _showSelectedChannel);
+      pane = ChannelSidebar(
+        onChannelSelected: _showSelectedChannel,
+        onThreadsSelected: _showFollowedThreadsDestination,
+      );
     }
 
+    final bool showStackedContent = showChannel || followedThreadsSelected;
+
     return PopScope<void>(
-      canPop: !showChannel,
+      canPop: !showStackedContent,
       onPopInvokedWithResult: (bool didPop, void result) {
-        if (!didPop && showChannel) _showChannelsDestination();
+        if (!didPop && showStackedContent) _showChannelsDestination();
       },
       child: CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
           const SingleActivator(LogicalKeyboardKey.escape): () {
-            if (showChannel) _showChannelsDestination();
+            if (showStackedContent) _showChannelsDestination();
           },
         },
         child: Focus(
@@ -337,14 +366,14 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           child: Scaffold(
             key: const ValueKey<String>('compact-layout'),
             body: SafeArea(child: pane),
-            bottomNavigationBar: showChannel
+            bottomNavigationBar: showStackedContent
                 ? null
                 : _BottomDestinations(
                     selectedIndex: profileSelected
                         ? 3
                         : searchSelected
                         ? 2
-                        : threadsSelected
+                        : inboxSelected
                         ? 1
                         : 0,
                     inboxHasNewItems: inboxHasNewItems,
@@ -363,7 +392,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     } else if (index == 2) {
       _showSearchDestination();
     } else if (index == 1) {
-      _showThreadsDestination();
+      _showInboxDestination();
     } else {
       _showChannelsDestination();
     }
@@ -378,8 +407,17 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     }
   }
 
-  void _showThreadsDestination() {
+  void _showInboxDestination() {
     ref.read(shellDestinationProvider.notifier).select(ShellDestination.inbox);
+    if (_showCompactChannel) {
+      setState(() => _showCompactChannel = false);
+    }
+  }
+
+  void _showFollowedThreadsDestination() {
+    ref
+        .read(shellDestinationProvider.notifier)
+        .select(ShellDestination.threads);
     if (_showCompactChannel) {
       setState(() => _showCompactChannel = false);
     }
@@ -420,7 +458,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           ),
           action: SnackBarAction(
             label: ShellStrings.openInbox,
-            onPressed: _showThreadsDestination,
+            onPressed: _showInboxDestination,
           ),
         ),
       );
@@ -678,7 +716,8 @@ class _MainContent extends StatelessWidget {
   const _MainContent({
     required this.auth,
     required this.selectedChannel,
-    required this.threadsSelected,
+    required this.followedThreadsSelected,
+    required this.inboxSelected,
     required this.sidebar,
     required this.onSelectChannel,
     required this.onSearchInChannel,
@@ -687,7 +726,8 @@ class _MainContent extends StatelessWidget {
 
   final AuthState auth;
   final SidebarChannel? selectedChannel;
-  final bool threadsSelected;
+  final bool followedThreadsSelected;
+  final bool inboxSelected;
   final ChannelSidebarSnapshot? sidebar;
   final ValueChanged<String> onSelectChannel;
   final ValueChanged<SidebarChannel> onSearchInChannel;
@@ -699,7 +739,7 @@ class _MainContent extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (auth.phase == AuthPhase.signedIn) {
-      if (threadsSelected && sidebar?.team != null) {
+      if (inboxSelected && sidebar?.team != null) {
         return InboxThreadHost(
           inboxBuilder:
               (BuildContext context, ValueChanged<InboxItem> onOpenItem) =>
@@ -707,6 +747,19 @@ class _MainContent extends StatelessWidget {
           background: const SizedBox.shrink(),
           showAdjacentWorkspace: false,
           onSelectChannel: onSelectChannel,
+        );
+      }
+      final SidebarTeam? team = sidebar?.team;
+      if (followedThreadsSelected && team != null) {
+        return FollowedThreadsPane(
+          team: team,
+          channelsById: <String, SidebarChannel>{
+            for (final SidebarSection section in sidebar!.sections)
+              for (final SidebarChannel channel in section.channels)
+                channel.id: channel,
+          },
+          onSelectChannel: onSelectChannel,
+          onBack: onBackToChannels,
         );
       }
       if (selectedChannel case final SidebarChannel channel) {

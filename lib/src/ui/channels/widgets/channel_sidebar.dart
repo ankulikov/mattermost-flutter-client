@@ -13,9 +13,14 @@ import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class ChannelSidebar extends ConsumerWidget {
-  const ChannelSidebar({this.onChannelSelected, super.key});
+  const ChannelSidebar({
+    this.onChannelSelected,
+    this.onThreadsSelected,
+    super.key,
+  });
 
   final VoidCallback? onChannelSelected;
+  final VoidCallback? onThreadsSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -44,6 +49,14 @@ class ChannelSidebar extends ConsumerWidget {
           refreshStatus: viewState.refreshStatus,
           onRefresh: () => refreshChannelSidebar(ref),
           onChannelSelected: onChannelSelected,
+          threadsSelected:
+              ref.watch(shellDestinationProvider) == ShellDestination.threads,
+          onThreadsSelected: () {
+            ref
+                .read(shellDestinationProvider.notifier)
+                .select(ShellDestination.threads);
+            onThreadsSelected?.call();
+          },
         ),
       ),
     );
@@ -58,7 +71,7 @@ class _InitialError extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(AppSpacing.xxl),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
@@ -66,7 +79,7 @@ class _InitialError extends StatelessWidget {
             ChannelSidebarStrings.loadFailed,
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           OutlinedButton(
             onPressed: onRetry,
             child: const Text(ChannelSidebarStrings.retry),
@@ -83,12 +96,16 @@ class _SidebarContent extends StatefulWidget {
     required this.refreshStatus,
     required this.onRefresh,
     required this.onChannelSelected,
+    required this.threadsSelected,
+    required this.onThreadsSelected,
   });
 
   final ChannelSidebarSnapshot snapshot;
   final OperationStatus refreshStatus;
   final RefreshCallback onRefresh;
   final VoidCallback? onChannelSelected;
+  final bool threadsSelected;
+  final VoidCallback onThreadsSelected;
 
   @override
   State<_SidebarContent> createState() => _SidebarContentState();
@@ -132,6 +149,7 @@ class _SidebarContentState extends State<_SidebarContent> {
   }
 
   bool get _hasSearchQuery => _query.trim().isNotEmpty;
+
   bool get _hasSearchText => _query.isNotEmpty;
 
   @override
@@ -147,10 +165,10 @@ class _SidebarContentState extends State<_SidebarContent> {
           const MaterialBanner(
             content: Text(ChannelSidebarStrings.refreshFailed),
             actions: <Widget>[SizedBox.shrink()],
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: AppLayout.sidebarBannerPadding,
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: AppLayout.sidebarSearchVerticalPadding,
           child: TextField(
             key: const ValueKey<String>('channel-search-field'),
             controller: _searchController,
@@ -162,7 +180,14 @@ class _SidebarContentState extends State<_SidebarContent> {
             onTapOutside: (_) => _searchFocusNode.unfocus(),
             decoration: InputDecoration(
               hintText: ChannelSidebarStrings.searchHint,
-              prefixIcon: const Icon(Icons.search),
+              constraints: AppLayout.sidebarSearchConstraints,
+              prefixIcon: const Padding(
+                padding: AppLayout.sidebarSearchIconPadding,
+                child: Icon(Icons.search),
+              ),
+              prefixIconConstraints:
+                  AppLayout.sidebarSearchPrefixIconConstraints,
+              prefix: const SizedBox(width: AppSpacing.md),
               suffixIcon: _hasSearchText
                   ? IconButton(
                       tooltip: ChannelSidebarStrings.clearSearch,
@@ -170,13 +195,25 @@ class _SidebarContentState extends State<_SidebarContent> {
                       icon: const Icon(Icons.close),
                     )
                   : null,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(width: 1),
+              // hack to fix text alignment, don't replace with `InputBorder.none`
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(width: 0, style: BorderStyle.none),
+                borderRadius: BorderRadius.zero,
+                gapPadding: 0,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(width: 0, style: BorderStyle.none),
+                borderRadius: BorderRadius.zero,
+                gapPadding: 0,
               ),
             ),
           ),
         ),
+        if (!_hasSearchQuery)
+          _ThreadsTile(
+            selected: widget.threadsSelected,
+            onTap: widget.onThreadsSelected,
+          ),
         Expanded(
           child: filteredSections.isEmpty
               ? Center(
@@ -207,6 +244,44 @@ class _SidebarContentState extends State<_SidebarContent> {
   void _clearSearch() {
     _searchController.clear();
     _updateQuery('');
+  }
+}
+
+class _ThreadsTile extends StatelessWidget {
+  const _ThreadsTile({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme colors = theme.colorScheme;
+    return Material(
+      key: const ValueKey<String>('threads-sidebar-tile'),
+      color: selected ? colors.secondaryContainer : Colors.transparent,
+      shape: const RoundedRectangleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        dense: true,
+        contentPadding: AppLayout.sidebarRowContentPadding,
+        minTileHeight: AppLayout.sidebarRowMinHeight,
+        minVerticalPadding: AppSpacing.xs,
+        selected: selected,
+        shape: const RoundedRectangleBorder(),
+        leading: Icon(
+          Icons.forum_outlined,
+          color: selected
+              ? colors.onSecondaryContainer
+              : colors.onSurfaceVariant,
+        ),
+        title: Text(
+          ChannelSidebarStrings.threads,
+          style: theme.textTheme.bodyMedium,
+        ),
+        onTap: onTap,
+      ),
+    );
   }
 }
 
@@ -463,22 +538,20 @@ class _ChannelTile extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
     final bool highlightUnread = channel.isUnread && !muted;
-    final RoundedRectangleBorder shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(8),
-    );
     return Opacity(
       opacity: muted ? 0.55 : 1,
       child: Material(
         key: ValueKey<String>('channel-selection-surface-${channel.id}'),
         color: selected ? colors.secondaryContainer : Colors.transparent,
-        shape: shape,
+        shape: const RoundedRectangleBorder(),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
           dense: true,
+          contentPadding: AppLayout.sidebarRowContentPadding,
           minTileHeight: AppLayout.sidebarRowMinHeight,
           minVerticalPadding: AppSpacing.xs,
           selected: selected,
-          shape: shape,
+          shape: const RoundedRectangleBorder(),
           leading: IconTheme(
             data: theme.iconTheme.copyWith(
               color: selected

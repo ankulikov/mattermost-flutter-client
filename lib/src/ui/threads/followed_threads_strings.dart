@@ -1,5 +1,5 @@
 abstract final class FollowedThreadsStrings {
-  static const String title = 'Threads';
+  static const String title = 'Followed threads';
   static const String subtitle =
       'Threads you participate in or follow appear here';
   static const String loading = 'Loading threads';
@@ -16,4 +16,11 @@ abstract final class FollowedThreadsStrings {
       count == 1 ? '1 unread reply' : '$count unread replies';
   static String mentions(int count) =>
       count == 1 ? '1 unread mention' : '$count unread mentions';
+  static String additionalParticipants(int count) => count == 1
+      ? '1 additional participant'
+      : '$count additional participants';
+  static String minutesAgo(int count) =>
+      count == 1 ? '1 minute ago' : '$count minutes ago';
+  static String hoursAgo(int count) =>
+      count == 1 ? '1 hour ago' : '$count hours ago';
 }

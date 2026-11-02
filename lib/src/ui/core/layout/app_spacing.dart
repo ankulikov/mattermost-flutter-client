@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart';
+
 abstract final class AppSpacing {
   static const double xxs = 2;
   static const double xs = 4;
@@ -16,6 +18,32 @@ abstract final class AppLayout {
   static const double sidebarRowMinHeight = 40;
   static const double sidebarMinWidth = 200;
   static const double sidebarMaxWidth = 500;
+  static const double sidebarLeadingIconInset = AppSpacing.xxxl;
+  static const double sidebarSearchIconSlotWidth =
+      sidebarLeadingIconInset + AppSpacing.xxl;
+  static const double sidebarSearchMinHeight =
+      sidebarRowMinHeight + AppSpacing.lg;
+
+  /// Shared horizontal grid for the search, Threads, and channel rows.
+  static const EdgeInsets sidebarSearchVerticalPadding = EdgeInsets.only(
+    top: AppSpacing.md,
+    bottom: AppSpacing.xs,
+  );
+  static const EdgeInsets sidebarBannerPadding = EdgeInsets.symmetric(
+    horizontal: AppSpacing.lg,
+    vertical: AppSpacing.xs,
+  );
+  static const EdgeInsets sidebarSearchIconPadding = EdgeInsets.only(
+    left: sidebarLeadingIconInset,
+  );
+  static const EdgeInsets sidebarRowContentPadding = EdgeInsets.symmetric(
+    horizontal: sidebarLeadingIconInset,
+  );
+  static const BoxConstraints sidebarSearchPrefixIconConstraints =
+      BoxConstraints(minWidth: sidebarSearchIconSlotWidth);
+  static const BoxConstraints sidebarSearchConstraints = BoxConstraints(
+    minHeight: sidebarSearchMinHeight,
+  );
   static const double readableContentWidth = 760;
   static const double compactPageGutter = AppSpacing.sm;
   static const double expandedPageGutter = AppSpacing.xxl;

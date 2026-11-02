@@ -44,10 +44,14 @@ final class FollowedThreadsPage {
     required this.total,
     required this.totalUnreadThreads,
     required this.totalUnreadMentions,
+    required this.hasMore,
+    this.nextBefore,
   });
 
   final List<FollowedThread> items;
   final int total;
   final int totalUnreadThreads;
   final int totalUnreadMentions;
+  final bool hasMore;
+  final String? nextBefore;
 }
