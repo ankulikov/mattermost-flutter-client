@@ -204,10 +204,13 @@ class _SidebarContentState extends State<_SidebarContent> {
                   AppLayout.sidebarSearchPrefixIconConstraints,
               prefix: const SizedBox(width: AppSpacing.md),
               suffixIcon: _hasSearchText
-                  ? IconButton(
-                      tooltip: ChannelSidebarStrings.clearSearch,
-                      onPressed: _clearSearch,
-                      icon: const Icon(Icons.close),
+                  ? Transform.translate(
+                      offset: const Offset(-AppSpacing.md, 0),
+                      child: IconButton(
+                        tooltip: ChannelSidebarStrings.clearSearch,
+                        onPressed: _clearSearch,
+                        icon: const Icon(Icons.close),
+                      ),
                     )
                   : null,
               // hack to fix text alignment, don't replace with `InputBorder.none`
@@ -327,10 +330,13 @@ class _TeamHeader extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.titleMedium,
     ),
-    trailing: IconButton(
-      tooltip: ChannelSidebarStrings.refresh,
-      onPressed: () => unawaited(onRefresh()),
-      icon: const Icon(Icons.refresh),
+    trailing: Transform.translate(
+      offset: const Offset(AppSpacing.md, 0),
+      child: IconButton(
+        tooltip: ChannelSidebarStrings.refresh,
+        onPressed: () => unawaited(onRefresh()),
+        icon: const Icon(Icons.refresh),
+      ),
     ),
   );
 }
