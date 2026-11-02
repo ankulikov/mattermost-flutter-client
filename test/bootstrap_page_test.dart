@@ -473,7 +473,9 @@ void main() {
       );
       expect(
         tester.widget<Text>(find.text(ChannelSidebarStrings.threads)).style,
-        Theme.of(tester.element(threadsTile)).textTheme.bodyMedium,
+        Theme.of(
+          tester.element(threadsTile),
+        ).textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.w600),
       );
       expect(
         (tester.widget<Material>(threadsTile).shape! as RoundedRectangleBorder)

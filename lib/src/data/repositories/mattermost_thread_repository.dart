@@ -1,6 +1,7 @@
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
+import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
 import 'package:mattermost_flutter/src/domain/models/post.dart';
@@ -10,15 +11,18 @@ import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 
-final class MattermostThreadRepository extends ThreadRepository {
+final class MattermostThreadRepository extends ThreadRepository
+    implements FollowedThreadsRealtimeRepository {
   MattermostThreadRepository({
     required MattermostApi api,
     required MessageMapper<MattermostPostDto, UserSummary> messageMapper,
     required UserRepository users,
+    SessionRealtimeService? realtime,
     DateTime Function()? now,
   }) : _api = api,
        _messageMapper = messageMapper,
        _users = users,
+       _realtime = realtime,
        _now = now ?? DateTime.now;
 
   static const int pageSize = 60;
@@ -26,6 +30,7 @@ final class MattermostThreadRepository extends ThreadRepository {
   final MattermostApi _api;
   final MessageMapper<MattermostPostDto, UserSummary> _messageMapper;
   final UserRepository _users;
+  final SessionRealtimeService? _realtime;
   final DateTime Function() _now;
 
   @override
@@ -185,6 +190,48 @@ final class MattermostThreadRepository extends ThreadRepository {
       hasMore: response.threads.length == pageSize,
       nextBefore: response.threads.lastOrNull?.id,
     );
+  }
+
+  @override
+  Stream<FollowedThreadsRealtimeEvent> watchFollowedThreads({
+    required AuthSession session,
+    required String teamId,
+  }) {
+    final SessionRealtimeService? realtime = _realtime;
+    if (realtime == null) {
+      return const Stream<FollowedThreadsRealtimeEvent>.empty();
+    }
+    return realtime
+        .watch(
+          session: session,
+          subscription: const SessionRealtimeSubscription(
+            eventNames: <String>{
+              'thread_updated',
+              'thread_follow_changed',
+              'thread_read_changed',
+            },
+          ),
+        )
+        .map((SessionRealtimeSignal signal) {
+          switch (signal) {
+            case SessionRealtimeRecoveryRequired():
+              return const FollowedThreadsRefreshRequired();
+            case SessionRealtimeEventReceived():
+              final Object? eventTeamId =
+                  signal.event.broadcast['team_id'] ??
+                  signal.event.data['team_id'];
+              if (eventTeamId is String &&
+                  eventTeamId.isNotEmpty &&
+                  eventTeamId != teamId) {
+                return null;
+              }
+              return const FollowedThreadsRefreshRequired();
+            case SessionRealtimeConnectionChanged():
+              return null;
+          }
+        })
+        .where((FollowedThreadsRealtimeEvent? event) => event != null)
+        .cast<FollowedThreadsRealtimeEvent>();
   }
 
   @override

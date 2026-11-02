@@ -42,3 +42,25 @@ abstract class ThreadRepository {
     required String rootPostId,
   }) => throw UnimplementedError();
 }
+
+/// Optional realtime capability for the followed-thread summary.
+///
+/// Thread socket payloads are deliberately not exposed to presentation: a
+/// refresh from the followed-threads endpoint is the authoritative source for
+/// its aggregate unread counters.
+abstract interface class FollowedThreadsRealtimeRepository {
+  Stream<FollowedThreadsRealtimeEvent> watchFollowedThreads({
+    required AuthSession session,
+    required String teamId,
+  });
+}
+
+sealed class FollowedThreadsRealtimeEvent {
+  const FollowedThreadsRealtimeEvent();
+}
+
+/// The followed-thread projection, including unread totals, must be reloaded.
+final class FollowedThreadsRefreshRequired
+    extends FollowedThreadsRealtimeEvent {
+  const FollowedThreadsRefreshRequired();
+}
