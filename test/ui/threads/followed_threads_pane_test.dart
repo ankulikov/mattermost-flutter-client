@@ -58,6 +58,14 @@ void main() {
 
     expect(
       formatFollowedThreadLastReplyTime(
+        lastReplyAt: now.subtract(const Duration(seconds: 30)),
+        now: now,
+        localizations: localizations,
+      ),
+      'now',
+    );
+    expect(
+      formatFollowedThreadLastReplyTime(
         lastReplyAt: now.subtract(const Duration(minutes: 1)),
         now: now,
         localizations: localizations,
