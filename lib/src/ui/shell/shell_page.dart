@@ -525,6 +525,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
             initialQuery: query,
             focus: true,
             nonce: Object(),
+            replacesSearch: true,
           ),
         );
     _showSearchDestination();
