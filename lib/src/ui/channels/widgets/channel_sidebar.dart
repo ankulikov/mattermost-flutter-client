@@ -551,7 +551,7 @@ final class _ChannelListIndex {
       final List<int> visible = <int>[
         for (final (int i, SidebarChannel channel) in section.channels.indexed)
           if (!collapsedSectionIds.contains(section.id) ||
-              channel.isUnread ||
+              (channel.isUnread && !channel.muted && !section.muted) ||
               channel.id == selectedChannelId)
             i,
       ];
