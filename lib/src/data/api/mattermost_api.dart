@@ -26,6 +26,13 @@ abstract interface class MattermostApi {
     required String teamId,
   });
 
+  Future<void> setSidebarCategoryCollapsed({
+    required String userId,
+    required String teamId,
+    required String categoryId,
+    required bool collapsed,
+  }) => throw UnimplementedError();
+
   /// Returns the current user's membership counters and notification settings
   /// for every channel in [teamId].
   Future<List<MattermostChannelMemberDto>> getChannelMembersForUser({

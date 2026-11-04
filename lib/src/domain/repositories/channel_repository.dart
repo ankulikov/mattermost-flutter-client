@@ -12,6 +12,15 @@ abstract interface class ChannelRepository {
   });
 }
 
+abstract interface class ChannelSidebarCategoryRepository {
+  Future<void> setCategoryCollapsed({
+    required AuthSession session,
+    required String teamId,
+    required String categoryId,
+    required bool collapsed,
+  });
+}
+
 /// Optional realtime capability for a channel sidebar repository.
 ///
 /// Keeping this separate from [ChannelRepository] leaves simple/offline

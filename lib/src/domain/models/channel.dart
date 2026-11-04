@@ -112,6 +112,7 @@ final class SidebarSection {
     this.collapsed = false,
     this.muted = false,
     this.sorting = ChannelSorting.manual,
+    this.serverCategory = false,
   });
 
   final String id;
@@ -120,6 +121,7 @@ final class SidebarSection {
   final bool collapsed;
   final bool muted;
   final ChannelSorting sorting;
+  final bool serverCategory;
 }
 
 final class ChannelSidebarSnapshot {

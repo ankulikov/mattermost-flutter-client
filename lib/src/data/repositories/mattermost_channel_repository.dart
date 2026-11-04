@@ -14,7 +14,10 @@ import 'package:mattermost_flutter/src/domain/repositories/channel_repository.da
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 
 final class MattermostChannelRepository
-    implements ChannelRepository, ChannelSidebarRealtimeRepository {
+    implements
+        ChannelRepository,
+        ChannelSidebarRealtimeRepository,
+        ChannelSidebarCategoryRepository {
   const MattermostChannelRepository({
     required MattermostApi api,
     required UserRepository users,
@@ -33,6 +36,19 @@ final class MattermostChannelRepository
   final MattermostApi _api;
   final UserRepository _users;
   final SessionRealtimeService? _realtime;
+
+  @override
+  Future<void> setCategoryCollapsed({
+    required AuthSession session,
+    required String teamId,
+    required String categoryId,
+    required bool collapsed,
+  }) => _api.setSidebarCategoryCollapsed(
+    userId: session.userId,
+    teamId: teamId,
+    categoryId: categoryId,
+    collapsed: collapsed,
+  );
 
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async {
@@ -174,6 +190,9 @@ final class MattermostChannelRepository
         return channelId.isEmpty
             ? const ChannelSidebarRefreshRequired()
             : ChannelSidebarUnreadChanged(channelId: channelId, isUnread: true);
+      case 'sidebar_category_updated':
+      case 'sidebar_category_created':
+      case 'sidebar_category_deleted':
       case 'channel_member_updated':
         return const ChannelSidebarRefreshRequired();
       default:

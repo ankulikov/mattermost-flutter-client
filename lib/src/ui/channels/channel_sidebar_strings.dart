@@ -7,6 +7,8 @@ abstract final class ChannelSidebarStrings {
   static const String refreshFailed =
       'Could not refresh. Showing previously loaded data.';
   static const String retry = 'Retry';
+  static const String categoryUpdateFailed =
+      'Category changed locally; could not sync with server.';
   static const String refresh = 'Refresh channels';
   static const String inbox = 'Inbox';
   static const String searchHint = 'Find channels and dialogs';
