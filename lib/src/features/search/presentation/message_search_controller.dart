@@ -39,12 +39,17 @@ final class SearchLaunchIntent {
     required this.initialQuery,
     required this.focus,
     required this.nonce,
+    this.replacesSearch = false,
   });
 
   final String teamId;
   final String initialQuery;
   final bool focus;
   final Object nonce;
+
+  /// An explicit contextual action, such as "Search in channel", replaces an
+  /// earlier Search draft and result snapshot.
+  final bool replacesSearch;
 }
 
 final class MessageSearchViewState {
@@ -167,7 +172,7 @@ final class MessageSearchController extends ChangeNotifier {
   }
 
   /// Consumes a matching shell intent at most once. Existing user input wins
-  /// over a late navigation intent.
+  /// over a late navigation intent unless it is an explicit replacement.
   bool consumeLaunchIntent(SearchLaunchIntent intent) {
     if (_disposed ||
         intent.teamId != _teamId ||
@@ -175,12 +180,14 @@ final class MessageSearchController extends ChangeNotifier {
       return false;
     }
     _lastLaunchNonce = intent.nonce;
-    if (_state.draftQuery.isNotEmpty) return false;
+    if (_state.draftQuery.isNotEmpty && !intent.replacesSearch) return false;
+    if (intent.replacesSearch) _cancelRequest();
     _setState(
-      _state.copyWith(
-        draftQuery: intent.initialQuery,
-        focusRequestNonce: intent.focus ? intent.nonce : null,
-      ),
+      (intent.replacesSearch ? const MessageSearchViewState() : _state)
+          .copyWith(
+            draftQuery: intent.initialQuery,
+            focusRequestNonce: intent.focus ? intent.nonce : null,
+          ),
     );
     return true;
   }

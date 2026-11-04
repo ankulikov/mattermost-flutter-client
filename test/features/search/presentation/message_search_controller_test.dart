@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
@@ -9,9 +11,83 @@ import 'package:mattermost_flutter/src/features/search/domain/models/message_sea
 import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_repository.dart';
 import 'package:mattermost_flutter/src/features/search/domain/repositories/message_search_timezone_repository.dart';
 import 'package:mattermost_flutter/src/features/search/presentation/message_search_controller.dart';
+import 'package:mattermost_flutter/src/features/search/presentation/message_search_page.dart'
+    as search_page;
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
   group('MessageSearchController', () {
+    testWidgets('switching away from Search keeps its draft', (
+      WidgetTester tester,
+    ) async {
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          messageSearchRepositoryProvider.overrideWithValue(
+            _SearchRepository(),
+          ),
+          messageSearchTimezoneRepositoryProvider.overrideWithValue(
+            const _TimezoneRepository(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const _SearchTabHarness(),
+        ),
+      );
+      final Finder field = find.byKey(
+        const ValueKey<String>('message-search-field'),
+      );
+      await tester.enterText(field, 'release notes');
+      await tester.tap(find.byKey(const ValueKey<String>('show-channels')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey<String>('show-search')));
+      await tester.pump();
+
+      expect(field, findsOneWidget);
+      expect(tester.widget<TextField>(field).controller!.text, 'release notes');
+    });
+
+    test(
+      'sidebar refresh keeps the screen-owned controller and its draft',
+      () async {
+        final ProviderContainer container = ProviderContainer(
+          overrides: [
+            messageSearchRepositoryProvider.overrideWithValue(
+              _SearchRepository(),
+            ),
+            messageSearchTimezoneRepositoryProvider.overrideWithValue(
+              const _TimezoneRepository(),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final ProviderSubscription<MessageSearchController> subscription =
+            container.listen<MessageSearchController>(
+              search_page.messageSearchControllerProvider,
+              (_, _) {},
+              fireImmediately: true,
+            );
+        addTearDown(subscription.close);
+
+        final MessageSearchController controller = container.read(
+          search_page.messageSearchControllerProvider,
+        )..updateDraft('release notes');
+
+        container.invalidate(channelSidebarProvider);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          container.read(search_page.messageSearchControllerProvider),
+          same(controller),
+        );
+        expect(controller.state.draftQuery, 'release notes');
+      },
+    );
+
     test('keeps draft separate and submits its normalized value', () async {
       final _SearchRepository repository = _SearchRepository();
       final MessageSearchController controller = _controller(repository);
@@ -189,6 +265,22 @@ void main() {
           isFalse,
         );
         expect(controller.state.draftQuery, 'typed');
+
+        expect(
+          controller.consumeLaunchIntent(
+            const SearchLaunchIntent(
+              teamId: 'other',
+              initialQuery: 'in:town ',
+              focus: true,
+              nonce: 'three',
+              replacesSearch: true,
+            ),
+          ),
+          isTrue,
+        );
+        expect(controller.state.draftQuery, 'in:town ');
+        expect(controller.state.submittedQuery, isNull);
+        expect(controller.state.results, isEmpty);
         controller.dispose();
       },
     );
@@ -214,6 +306,42 @@ Future<void> _waitForRequests(_SearchRepository repository, int count) async {
   while (repository.requests.length < count) {
     await Future<void>.delayed(Duration.zero);
   }
+}
+
+class _SearchTabHarness extends StatefulWidget {
+  const _SearchTabHarness();
+
+  @override
+  State<_SearchTabHarness> createState() => _SearchTabHarnessState();
+}
+
+class _SearchTabHarnessState extends State<_SearchTabHarness> {
+  bool _showSearch = true;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Scaffold(
+      body: Column(
+        children: <Widget>[
+          TextButton(
+            key: const ValueKey<String>('show-search'),
+            onPressed: () => setState(() => _showSearch = true),
+            child: const Text('Search'),
+          ),
+          TextButton(
+            key: const ValueKey<String>('show-channels'),
+            onPressed: () => setState(() => _showSearch = false),
+            child: const Text('Channels'),
+          ),
+          Expanded(
+            child: _showSearch
+                ? const search_page.MessageSearchPage()
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 MessageSearchPage _page(

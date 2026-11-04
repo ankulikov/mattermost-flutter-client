@@ -33,29 +33,68 @@ abstract final class MessageSearchStrings {
   static const String suggestionsFailed = 'Could not load suggestions.';
 }
 
-final messageSearchControllerProvider =
-    Provider.autoDispose<MessageSearchController>((Ref ref) {
-      final AuthSession? session = ref.watch(authSessionProvider);
-      final ChannelSidebarSnapshot? snapshot = ref
-          .watch(channelSidebarProvider)
-          .value
-          ?.snapshot;
-      final String? teamId = snapshot?.team?.id;
-      final List<SidebarChannel> channels = snapshot == null
-          ? const <SidebarChannel>[]
-          : snapshot.sections
-                .expand((SidebarSection section) => section.channels)
-                .toList(growable: false);
-      final MessageSearchController controller = MessageSearchController(
-        repository: ref.watch(messageSearchRepositoryProvider),
-        timezoneRepository: ref.watch(messageSearchTimezoneRepositoryProvider),
-        session: session,
-        teamId: teamId,
-        knownChannels: channels,
-      );
-      ref.onDispose(controller.dispose);
-      return controller;
-    });
+final messageSearchControllerProvider = Provider<MessageSearchController>((
+  Ref ref,
+) {
+  final _MessageSearchContext initialContext = _messageSearchContext(ref);
+  final MessageSearchController controller = MessageSearchController(
+    repository: ref.watch(messageSearchRepositoryProvider),
+    timezoneRepository: ref.watch(messageSearchTimezoneRepositoryProvider),
+    session: initialContext.session,
+    teamId: initialContext.teamId,
+    knownChannels: initialContext.channels,
+  );
+  // Context changes must update the existing screen-owned controller. Using
+  // watch here recreates it whenever the sidebar refreshes (including after
+  // an app resume), which loses the active search snapshot beneath a
+  // permalink route.
+  ref.listen<AuthSession?>(authSessionProvider, (_, AuthSession? session) {
+    final _MessageSearchContext context = _messageSearchContext(ref);
+    controller.updateContext(
+      session: session,
+      teamId: context.teamId,
+      knownChannels: context.channels,
+    );
+  });
+  ref.listen(channelSidebarProvider, (_, _) {
+    final _MessageSearchContext context = _messageSearchContext(ref);
+    controller.updateContext(
+      session: context.session,
+      teamId: context.teamId,
+      knownChannels: context.channels,
+    );
+  });
+  ref.onDispose(controller.dispose);
+  return controller;
+});
+
+_MessageSearchContext _messageSearchContext(Ref ref) {
+  final ChannelSidebarSnapshot? snapshot = ref
+      .read(channelSidebarProvider)
+      .value
+      ?.snapshot;
+  return _MessageSearchContext(
+    session: ref.read(authSessionProvider),
+    teamId: snapshot?.team?.id,
+    channels: snapshot == null
+        ? const <SidebarChannel>[]
+        : snapshot.sections
+              .expand((SidebarSection section) => section.channels)
+              .toList(growable: false),
+  );
+}
+
+final class _MessageSearchContext {
+  const _MessageSearchContext({
+    required this.session,
+    required this.teamId,
+    required this.channels,
+  });
+
+  final AuthSession? session;
+  final String? teamId;
+  final List<SidebarChannel> channels;
+}
 
 final messageSearchSuggestionsProvider =
     Provider.autoDispose<MessageSearchSuggestionsController>((Ref ref) {

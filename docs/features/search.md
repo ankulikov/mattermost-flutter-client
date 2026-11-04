@@ -26,11 +26,11 @@ server snapshot.
 An initial failure shows a retry state. Refresh and pagination failures keep
 existing results on screen and provide a local retry action.
 
-"Search in channel" passes a launch intent that can insert a canonical `in:`
-token and focus the field. It does not submit an empty search. Selecting a
-result opens the shared permalink route, so root and reply resolution stays
-consistent across layouts. Back returns to the saved query, result list, and
-scroll position.
+"Search in channel" passes a launch intent that replaces any existing Search
+snapshot with a canonical `in:` token and focuses the field. It does not submit
+an empty search. Selecting a result opens the shared permalink route, so root
+and reply resolution stays consistent across layouts. Back returns to the saved
+query, result list, and scroll position.
 
 ## Relevant code
 
