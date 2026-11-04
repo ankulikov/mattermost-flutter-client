@@ -155,6 +155,7 @@ class _SidebarContentState extends State<_SidebarContent> {
             displayName: section.displayName,
             channels: channels,
             collapsed: section.collapsed,
+            serverCategory: section.serverCategory,
             muted: section.muted,
             sorting: section.sorting,
           );
@@ -362,6 +363,9 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
   final Set<String> _collapsedSectionIds = <String>{};
   final Set<String> _initializedSectionIds = <String>{};
   bool _restoredFromPageStorage = false;
+  final Set<String> _savingSectionIds = <String>{};
+  final Set<String> _unsyncedSectionIds = <String>{};
+  final Map<String, bool> _pendingSectionStates = <String, bool>{};
 
   @override
   void didChangeDependencies() {
@@ -384,12 +388,36 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
         widget.sections.map((SidebarSection section) => section.id),
       );
     }
+    if (storedIds case <String, Object?>{'unsynced': final List<Object?> ids}) {
+      _unsyncedSectionIds.addAll(ids.whereType<String>());
+    }
+    for (final SidebarSection section in widget.sections) {
+      if (section.serverCategory && !_unsyncedSectionIds.contains(section.id)) {
+        _initializedSectionIds.remove(section.id);
+        _collapsedSectionIds.remove(section.id);
+      }
+    }
     _applyServerDefaults();
   }
 
   @override
   void didUpdateWidget(_LazyChannelList oldWidget) {
     super.didUpdateWidget(oldWidget);
+    for (final SidebarSection section in widget.sections) {
+      final SidebarSection? old = oldWidget.sections
+          .where((SidebarSection item) => item.id == section.id)
+          .firstOrNull;
+      if (old != null &&
+          old.collapsed != section.collapsed &&
+          !_savingSectionIds.contains(section.id) &&
+          !_unsyncedSectionIds.contains(section.id)) {
+        if (section.collapsed) {
+          _collapsedSectionIds.add(section.id);
+        } else {
+          _collapsedSectionIds.remove(section.id);
+        }
+      }
+    }
     _applyServerDefaults();
   }
 
@@ -406,7 +434,11 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
     final Set<String> collapsedSectionIds = widget.expandSections
         ? const <String>{}
         : _collapsedSectionIds;
+    final String? selectedChannelId = ref.watch(
+      selectedChannelProvider.select((SidebarChannel? channel) => channel?.id),
+    );
     final _ChannelListIndex index = _ChannelListIndex(
+      selectedChannelId: selectedChannelId,
       sections: widget.sections,
       collapsedSectionIds: collapsedSectionIds,
     );
@@ -422,9 +454,7 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
             key: ValueKey<String>('channel-section-${section.id}'),
             section: section,
             isExpanded: isExpanded,
-            onTap: widget.expandSections
-                ? null
-                : () => _toggleSection(section.id),
+            onTap: widget.expandSections ? null : () => _toggleSection(section),
           );
         }
         final SidebarChannel channel = section.channels[row.channelIndex!];
@@ -432,26 +462,66 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
           key: ValueKey<String>('channel-${channel.id}'),
           channel: channel,
           muted: section.muted || channel.muted,
-          selected: ref.watch(
-            selectedChannelProvider.select(
-              (SidebarChannel? selected) => selected?.id == channel.id,
-            ),
-          ),
+          selected: selectedChannelId == channel.id,
           onTap: () => _selectChannel(channel),
         );
       },
     );
   }
 
-  void _toggleSection(String sectionId) {
+  void _toggleSection(SidebarSection section) {
+    final String sectionId = section.id;
+    final bool collapsed = !_collapsedSectionIds.contains(sectionId);
     setState(() {
-      if (!_collapsedSectionIds.add(sectionId)) {
+      if (collapsed) {
+        _collapsedSectionIds.add(sectionId);
+      } else {
         _collapsedSectionIds.remove(sectionId);
       }
+      if (section.serverCategory) _unsyncedSectionIds.add(sectionId);
     });
+    _saveExpansionState();
+    if (!section.serverCategory) return;
+    _pendingSectionStates[sectionId] = collapsed;
+    if (_savingSectionIds.add(sectionId)) {
+      unawaited(_syncSection(sectionId));
+    }
+  }
+
+  Future<void> _syncSection(String sectionId) async {
+    try {
+      while (mounted && _pendingSectionStates.containsKey(sectionId)) {
+        final bool collapsed = _pendingSectionStates.remove(sectionId)!;
+        try {
+          await ref
+              .read(channelSidebarProvider.notifier)
+              .setCategoryCollapsed(sectionId, collapsed);
+          if (!mounted) return;
+          if (!_pendingSectionStates.containsKey(sectionId)) {
+            _unsyncedSectionIds.remove(sectionId);
+            _saveExpansionState();
+          }
+        } on Object {
+          if (!mounted) return;
+          if (!_pendingSectionStates.containsKey(sectionId)) {
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+              const SnackBar(
+                content: Text(ChannelSidebarStrings.categoryUpdateFailed),
+              ),
+            );
+          }
+        }
+      }
+    } finally {
+      _savingSectionIds.remove(sectionId);
+    }
+  }
+
+  void _saveExpansionState() {
     PageStorage.maybeOf(context)?.writeState(context, <String, Object?>{
       'collapsed': _collapsedSectionIds.toList(growable: false),
       'initialized': _initializedSectionIds.toList(growable: false),
+      'unsynced': _unsyncedSectionIds.toList(growable: false),
     }, identifier: _pageStorageIdentifier);
   }
 
@@ -472,20 +542,28 @@ final class _ChannelListIndex {
   _ChannelListIndex({
     required this.sections,
     required Set<String> collapsedSectionIds,
+    required String? selectedChannelId,
   }) {
     var nextStart = 0;
     for (final SidebarSection section in sections) {
       _sectionStarts.add(nextStart);
       nextStart += 1;
-      if (!collapsedSectionIds.contains(section.id)) {
-        nextStart += section.channels.length;
-      }
+      final List<int> visible = <int>[
+        for (final (int i, SidebarChannel channel) in section.channels.indexed)
+          if (!collapsedSectionIds.contains(section.id) ||
+              channel.isUnread ||
+              channel.id == selectedChannelId)
+            i,
+      ];
+      _visibleChannelIndices.add(visible);
+      nextStart += visible.length;
     }
     rowCount = nextStart;
   }
 
   final List<SidebarSection> sections;
   final List<int> _sectionStarts = <int>[];
+  final List<List<int>> _visibleChannelIndices = <List<int>>[];
   late final int rowCount;
 
   _ChannelListRow rowAt(int rowIndex) {
@@ -502,7 +580,9 @@ final class _ChannelListIndex {
     final int offset = rowIndex - _sectionStarts[low];
     return _ChannelListRow(
       sectionIndex: low,
-      channelIndex: offset == 0 ? null : offset - 1,
+      channelIndex: offset == 0
+          ? null
+          : _visibleChannelIndices[low][offset - 1],
     );
   }
 }

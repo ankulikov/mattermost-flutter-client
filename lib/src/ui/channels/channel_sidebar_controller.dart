@@ -140,6 +140,45 @@ final class ChannelSidebarController
     }
   }
 
+  Future<void> setCategoryCollapsed(String categoryId, bool collapsed) async {
+    final AuthSession? session = _session;
+    final ChannelRepository? repository = _repository;
+    final String? teamId = state.value?.snapshot.team?.id;
+    if (session == null ||
+        teamId == null ||
+        repository is! ChannelSidebarCategoryRepository) {
+      return;
+    }
+    await _cancellation.run(
+      () =>
+          (repository as ChannelSidebarCategoryRepository).setCategoryCollapsed(
+            session: session,
+            teamId: teamId,
+            categoryId: categoryId,
+            collapsed: collapsed,
+          ),
+    );
+    final ChannelSidebarViewState? current = state.value;
+    if (current == null || _cancellation.isCancelled) return;
+    final List<SidebarSection> sections = current.snapshot.sections
+        .map((section) {
+          if (section.id != categoryId) return section;
+          return SidebarSection(
+            id: section.id,
+            displayName: section.displayName,
+            channels: section.channels,
+            collapsed: collapsed,
+            muted: section.muted,
+            sorting: section.sorting,
+            serverCategory: section.serverCategory,
+          );
+        })
+        .toList(growable: false);
+    state = AsyncData(
+      current.copyWith(snapshot: current.snapshot.copyWith(sections: sections)),
+    );
+  }
+
   Future<void> openDirectMessage(UserProfile profile) async {
     final AuthSession? session = _session;
     final ChannelRepository? repository = _repository;
@@ -289,6 +328,7 @@ final class ChannelSidebarController
             displayName: section.displayName,
             channels: channels,
             collapsed: section.collapsed,
+            serverCategory: section.serverCategory,
             muted: section.muted,
             sorting: section.sorting,
           );

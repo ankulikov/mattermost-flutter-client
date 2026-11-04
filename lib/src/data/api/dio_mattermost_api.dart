@@ -84,6 +84,25 @@ final class DioMattermostApi
   }
 
   @override
+  Future<void> setSidebarCategoryCollapsed({
+    required String userId,
+    required String teamId,
+    required String categoryId,
+    required bool collapsed,
+  }) async {
+    final String path =
+        '/users/${Uri.encodeComponent(userId)}'
+        '/teams/${Uri.encodeComponent(teamId)}/channels/categories/'
+        '${Uri.encodeComponent(categoryId)}';
+    final Response<Object?> response = await _get(path);
+    final Map<String, Object?> category = Map<String, Object?>.of(
+      _object(response.data),
+    );
+    category['collapsed'] = collapsed;
+    await _put(path, data: category);
+  }
+
+  @override
   Future<List<MattermostChannelMemberDto>> getChannelMembersForUser({
     required String userId,
     required String teamId,

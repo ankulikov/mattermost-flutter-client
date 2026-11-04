@@ -32,6 +32,7 @@ import 'package:mattermost_flutter/src/features/profile/domain/models/current_us
 import 'package:mattermost_flutter/src/features/profile/domain/repositories/current_user_profile_repository.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
+import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
@@ -2136,6 +2137,7 @@ void main() {
 
     expect(find.text('Muted category'), findsOneWidget);
     expect(find.text('Quiet channel'), findsNothing);
+    expect(find.text('Unread in category'), findsOneWidget);
     expect(
       tester
           .widgetList<Opacity>(
@@ -2162,6 +2164,97 @@ void main() {
           .any((Opacity opacity) => opacity.opacity == 0.55),
       isTrue,
     );
+  });
+
+  testWidgets('keeps the selected read channel in a collapsed category', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _CollapsedMutedSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unread in category'));
+    await tester.pumpAndSettle();
+    final ProviderContainer container = ProviderScope.containerOf(
+      tester.element(find.byType(ChannelSidebar)),
+    );
+    final channel = container
+        .read(channelSidebarProvider)
+        .requireValue
+        .snapshot
+        .sections
+        .single
+        .channels
+        .first;
+    expect(channel.isUnread, isFalse);
+    expect(
+      find.byKey(const ValueKey<String>('channel-unread-category')),
+      findsOneWidget,
+    );
+    expect(find.text('Quiet channel'), findsNothing);
+
+    container
+        .read(selectedChannelProvider.notifier)
+        .select(
+          const SidebarChannel(
+            id: 'quiet',
+            teamId: 'team-1',
+            name: 'quiet',
+            displayName: 'Quiet channel',
+            kind: ChannelKind.publicChannel,
+          ),
+        );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('channel-quiet')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-unread-category')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('keeps category toggles local when the server rejects updates', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _CollapsedMutedSidebarRepository repository =
+        _CollapsedMutedSidebarRepository(failUpdate: true);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Muted category'));
+    await tester.pumpAndSettle();
+    expect(repository.lastCollapsed, isFalse);
+    expect(find.text('Quiet channel'), findsOneWidget);
+    expect(find.text('Unread in category'), findsOneWidget);
+    expect(
+      find.text('Category changed locally; could not sync with server.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Muted category'));
+    await tester.pumpAndSettle();
+    expect(repository.lastCollapsed, isTrue);
+    expect(find.text('Quiet channel'), findsNothing);
+    await tester.tap(find.text('Muted category'));
+    await tester.pumpAndSettle();
+    expect(find.text('Quiet channel'), findsOneWidget);
   });
 
   testWidgets('shows the compact channel list at large text scale', (
@@ -2990,7 +3083,38 @@ final class _LargeSidebarRepository implements ChannelRepository {
       );
 }
 
-final class _CollapsedMutedSidebarRepository implements ChannelRepository {
+final class _CollapsedMutedSidebarRepository
+    implements
+        ChannelRepository,
+        ChannelSidebarCategoryRepository,
+        ChannelSidebarRealtimeRepository {
+  _CollapsedMutedSidebarRepository({this.failUpdate = false});
+  final bool failUpdate;
+  bool? lastCollapsed;
+
+  @override
+  Stream<ChannelSidebarRealtimeEvent> watchSidebar({
+    required AuthSession session,
+  }) => const Stream<ChannelSidebarRealtimeEvent>.empty();
+
+  @override
+  Future<void> markChannelViewed({
+    required AuthSession session,
+    required String channelId,
+    String? previousChannelId,
+  }) async {}
+
+  @override
+  Future<void> setCategoryCollapsed({
+    required AuthSession session,
+    required String teamId,
+    required String categoryId,
+    required bool collapsed,
+  }) async {
+    lastCollapsed = collapsed;
+    if (failUpdate) throw StateError('failed');
+  }
+
   @override
   Future<SidebarChannel> openDirectMessage({
     required String currentUserId,
@@ -3006,9 +3130,18 @@ final class _CollapsedMutedSidebarRepository implements ChannelRepository {
           SidebarSection(
             id: 'muted',
             displayName: 'Muted category',
+            serverCategory: true,
             collapsed: true,
             muted: true,
             channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'unread-category',
+                teamId: 'team-1',
+                name: 'unread-category',
+                displayName: 'Unread in category',
+                kind: ChannelKind.publicChannel,
+                isUnread: true,
+              ),
               SidebarChannel(
                 id: 'quiet',
                 teamId: 'team-1',

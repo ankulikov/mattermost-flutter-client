@@ -24,6 +24,12 @@ Direct and group-message names are resolved through the users API. An initial
 failure shows a retry state. Manual refresh keeps the existing snapshot visible
 until the replacement succeeds and reports a non-blocking failure otherwise.
 
+Collapsing a server category updates its collapse state through the v4
+single-category endpoint. If an update fails, the local choice remains usable
+and the sidebar reports that it could not be synchronized. Collapsed categories
+continue to display unread channels and the selected channel. Synthetic
+uncategorized sections keep their expansion state locally.
+
 Sidebar search filters the loaded snapshot locally by the displayed channel or
 conversation name. Matches remain in their original categories. Search expands
 matching categories temporarily and restores their previous expansion state

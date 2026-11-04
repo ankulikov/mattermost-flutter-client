@@ -114,6 +114,7 @@ List<SidebarSection> mapSections({
         displayName: _categoryDisplayName(category),
         channels: categoryChannels,
         collapsed: category.collapsed,
+        serverCategory: true,
         muted: category.muted,
         sorting: sorting,
       ),

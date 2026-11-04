@@ -9,6 +9,32 @@ import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 
 void main() {
+  test('updates category collapse while preserving category fields', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"id":"cat","collapsed":false,"channel_ids":["a","b"],"sorting":"recent"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    await DioMattermostApi(dio: dio).setSidebarCategoryCollapsed(
+      userId: 'user',
+      teamId: 'team',
+      categoryId: 'cat',
+      collapsed: true,
+    );
+    expect(adapter.request?.method, 'PUT');
+    expect(
+      adapter.request?.path,
+      '/users/user/teams/team/channels/categories/cat',
+    );
+    expect(adapter.request?.data, <String, Object?>{
+      'id': 'cat',
+      'collapsed': true,
+      'channel_ids': <String>['a', 'b'],
+      'sorting': 'recent',
+    });
+  });
+
   test('loads channel statistics', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body: '{"channel_id":"channel-1","member_count":42}',
