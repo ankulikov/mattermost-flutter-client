@@ -2137,7 +2137,7 @@ void main() {
 
     expect(find.text('Muted category'), findsOneWidget);
     expect(find.text('Quiet channel'), findsNothing);
-    expect(find.text('Unread in category'), findsOneWidget);
+    expect(find.text('Unread in category'), findsNothing);
     expect(
       tester
           .widgetList<Opacity>(
@@ -2166,6 +2166,34 @@ void main() {
     );
   });
 
+  testWidgets('collapsed categories hide individually muted unread channels', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _UnreadSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Muted unread channel'), findsOneWidget);
+    await tester.tap(find.text('Channels').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Unread channel'), findsOneWidget);
+    expect(find.text('Muted unread channel'), findsNothing);
+    expect(find.text('Read channel'), findsNothing);
+    await tester.tap(find.text('Channels').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Muted unread channel'), findsOneWidget);
+  });
+
   testWidgets('keeps the selected read channel in a collapsed category', (
     WidgetTester tester,
   ) async {
@@ -2183,7 +2211,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Muted category'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Unread in category'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Muted category'));
     await tester.pumpAndSettle();
     final ProviderContainer container = ProviderScope.containerOf(
       tester.element(find.byType(ChannelSidebar)),
