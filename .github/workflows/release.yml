@@ -248,8 +248,9 @@ jobs:
     name: macOS ARM64 and iOS
     needs: verify
     # connectivity_plus 7.3.1 uses NWPath.isUltraConstrained, introduced in the
-    # macOS 26 SDK. macos-26 provides the required Xcode SDK and is ARM64.
-    runs-on: macos-26
+    # macOS 26 SDK. macos-latest currently provides that SDK and is ARM64;
+    # its image and Xcode version can change as GitHub updates the label.
+    runs-on: macos-latest
     steps:
       - name: Check out sources
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
