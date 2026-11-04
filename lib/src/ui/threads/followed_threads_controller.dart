@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
@@ -61,12 +63,18 @@ final class FollowedThreadsController
   late RequestCancellation _cancellation;
   AuthSession? _session;
   ThreadRepository? _repository;
+  StreamSubscription<FollowedThreadsRealtimeEvent>? _realtimeSubscription;
+  bool _realtimeRefreshPending = false;
+  bool _realtimeRefreshRunning = false;
 
   @override
   Future<FollowedThreadsViewState> build() async {
     final RequestCancellation cancellation = RequestCancellation();
     _cancellation = cancellation;
-    ref.onDispose(cancellation.cancel);
+    ref.onDispose(() {
+      cancellation.cancel();
+      unawaited(_realtimeSubscription?.cancel());
+    });
     _session = null;
     _repository = null;
     final AuthSession? session = ref.watch(_sessionProvider);
@@ -74,11 +82,70 @@ final class FollowedThreadsController
     final ThreadRepository repository = ref.watch(_repositoryProvider);
     _session = session;
     _repository = repository;
+    _startRealtime(session, repository);
     return _stateFromPage(
       await cancellation.run(
         () => repository.loadFollowed(session: session, teamId: teamId),
       ),
     );
+  }
+
+  void _startRealtime(AuthSession session, ThreadRepository repository) {
+    if (repository is! FollowedThreadsRealtimeRepository) return;
+    final FollowedThreadsRealtimeRepository realtimeRepository =
+        repository as FollowedThreadsRealtimeRepository;
+    _realtimeSubscription = realtimeRepository
+        .watchFollowedThreads(session: session, teamId: teamId)
+        .listen(
+          (_) => _requestRealtimeRefresh(),
+          onError: (_, _) => _requestRealtimeRefresh(),
+        );
+  }
+
+  void _requestRealtimeRefresh() {
+    _realtimeRefreshPending = true;
+    _drainRealtimeRefresh();
+  }
+
+  void _drainRealtimeRefresh() {
+    final FollowedThreadsViewState? current = state.value;
+    if (_realtimeRefreshRunning ||
+        current == null ||
+        current.refreshStatus is OperationInProgress ||
+        current.paginationStatus is OperationInProgress) {
+      return;
+    }
+    unawaited(_refreshFromRealtime());
+  }
+
+  Future<void> _refreshFromRealtime() async {
+    final AuthSession? session = _session;
+    final ThreadRepository? repository = _repository;
+    if (session == null || repository == null || _realtimeRefreshRunning) {
+      return;
+    }
+    _realtimeRefreshRunning = true;
+    try {
+      while (_realtimeRefreshPending && !_cancellation.isCancelled) {
+        _realtimeRefreshPending = false;
+        final FollowedThreadsViewState? current = state.value;
+        if (current == null) continue;
+        try {
+          state = AsyncData(
+            _stateFromPage(
+              await _cancellation.run(
+                () => repository.loadFollowed(session: session, teamId: teamId),
+              ),
+            ),
+          );
+        } on Object {
+          // Preserve useful data. A later socket event, reconnect, or manual
+          // refresh reconciles a transient failure.
+        }
+      }
+    } finally {
+      _realtimeRefreshRunning = false;
+    }
   }
 
   Future<void> refresh() async {
@@ -108,6 +175,8 @@ final class FollowedThreadsController
       state = AsyncData(
         current.copyWith(refreshStatus: OperationStatus.failed(error)),
       );
+    } finally {
+      _drainRealtimeRefresh();
     }
   }
 
@@ -156,6 +225,8 @@ final class FollowedThreadsController
       state = AsyncData(
         current.copyWith(paginationStatus: OperationStatus.failed(error)),
       );
+    } finally {
+      _drainRealtimeRefresh();
     }
   }
 

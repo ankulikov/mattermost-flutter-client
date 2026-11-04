@@ -473,7 +473,9 @@ void main() {
       );
       expect(
         tester.widget<Text>(find.text(ChannelSidebarStrings.threads)).style,
-        Theme.of(tester.element(threadsTile)).textTheme.bodyMedium,
+        Theme.of(
+          tester.element(threadsTile),
+        ).textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.w600),
       );
       expect(
         (tester.widget<Material>(threadsTile).shape! as RoundedRectangleBorder)
@@ -654,6 +656,18 @@ void main() {
       expect(find.text('Town Square'), findsNothing);
       expect(find.text('Direct messages'), findsOneWidget);
       expect(find.text('Ada Lovelace'), findsOneWidget);
+      final Finder publicChannelsHeader = find.ancestor(
+        of: find.text('Public channels'),
+        matching: find.byType(ListTile),
+      );
+      final Finder publicChannelsExpander = find.descendant(
+        of: publicChannelsHeader,
+        matching: find.byIcon(Icons.expand_more),
+      );
+      expect(
+        tester.getCenter(find.byTooltip(ChannelSidebarStrings.refresh)).dx,
+        closeTo(tester.getCenter(publicChannelsExpander).dx, 0.01),
+      );
       expect(
         find.byKey(const ValueKey<String>('threads-sidebar-tile')),
         findsOneWidget,
@@ -665,6 +679,10 @@ void main() {
 
       await tester.enterText(search, 'town');
       await tester.pump();
+      expect(
+        tester.getCenter(find.byTooltip(ChannelSidebarStrings.clearSearch)).dx,
+        closeTo(tester.getCenter(publicChannelsExpander).dx, 0.01),
+      );
       expect(find.text('Public channels'), findsOneWidget);
       expect(find.text('Town Square'), findsOneWidget);
       expect(find.text('Direct messages'), findsNothing);

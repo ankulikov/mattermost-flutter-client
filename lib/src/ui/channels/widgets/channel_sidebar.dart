@@ -10,6 +10,7 @@ import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart'
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_avatar.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
+import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class ChannelSidebar extends ConsumerWidget {
@@ -44,20 +45,32 @@ class ChannelSidebar extends ConsumerWidget {
         ),
         error: (Object error, StackTrace stackTrace) =>
             _InitialError(onRetry: () => unawaited(refreshChannelSidebar(ref))),
-        data: (ChannelSidebarViewState viewState) => _SidebarContent(
-          snapshot: viewState.snapshot,
-          refreshStatus: viewState.refreshStatus,
-          onRefresh: () => refreshChannelSidebar(ref),
-          onChannelSelected: onChannelSelected,
-          threadsSelected:
-              ref.watch(shellDestinationProvider) == ShellDestination.threads,
-          onThreadsSelected: () {
-            ref
-                .read(shellDestinationProvider.notifier)
-                .select(ShellDestination.threads);
-            onThreadsSelected?.call();
-          },
-        ),
+        data: (ChannelSidebarViewState viewState) {
+          final SidebarTeam? team = viewState.snapshot.team;
+          final bool threadsUnread =
+              team != null &&
+              ref.watch(
+                followedThreadsProvider(team.id).select(
+                  (AsyncValue<FollowedThreadsViewState> value) =>
+                      (value.asData?.value.totalUnreadThreads ?? 0) > 0,
+                ),
+              );
+          return _SidebarContent(
+            snapshot: viewState.snapshot,
+            refreshStatus: viewState.refreshStatus,
+            onRefresh: () => refreshChannelSidebar(ref),
+            onChannelSelected: onChannelSelected,
+            threadsSelected:
+                ref.watch(shellDestinationProvider) == ShellDestination.threads,
+            threadsUnread: threadsUnread,
+            onThreadsSelected: () {
+              ref
+                  .read(shellDestinationProvider.notifier)
+                  .select(ShellDestination.threads);
+              onThreadsSelected?.call();
+            },
+          );
+        },
       ),
     );
   }
@@ -97,6 +110,7 @@ class _SidebarContent extends StatefulWidget {
     required this.onRefresh,
     required this.onChannelSelected,
     required this.threadsSelected,
+    required this.threadsUnread,
     required this.onThreadsSelected,
   });
 
@@ -105,6 +119,7 @@ class _SidebarContent extends StatefulWidget {
   final RefreshCallback onRefresh;
   final VoidCallback? onChannelSelected;
   final bool threadsSelected;
+  final bool threadsUnread;
   final VoidCallback onThreadsSelected;
 
   @override
@@ -189,10 +204,13 @@ class _SidebarContentState extends State<_SidebarContent> {
                   AppLayout.sidebarSearchPrefixIconConstraints,
               prefix: const SizedBox(width: AppSpacing.md),
               suffixIcon: _hasSearchText
-                  ? IconButton(
-                      tooltip: ChannelSidebarStrings.clearSearch,
-                      onPressed: _clearSearch,
-                      icon: const Icon(Icons.close),
+                  ? Transform.translate(
+                      offset: const Offset(-AppSpacing.md, 0),
+                      child: IconButton(
+                        tooltip: ChannelSidebarStrings.clearSearch,
+                        onPressed: _clearSearch,
+                        icon: const Icon(Icons.close),
+                      ),
                     )
                   : null,
               // hack to fix text alignment, don't replace with `InputBorder.none`
@@ -212,6 +230,7 @@ class _SidebarContentState extends State<_SidebarContent> {
         if (!_hasSearchQuery)
           _ThreadsTile(
             selected: widget.threadsSelected,
+            unread: widget.threadsUnread,
             onTap: widget.onThreadsSelected,
           ),
         Expanded(
@@ -248,9 +267,14 @@ class _SidebarContentState extends State<_SidebarContent> {
 }
 
 class _ThreadsTile extends StatelessWidget {
-  const _ThreadsTile({required this.selected, required this.onTap});
+  const _ThreadsTile({
+    required this.selected,
+    required this.unread,
+    required this.onTap,
+  });
 
   final bool selected;
+  final bool unread;
   final VoidCallback onTap;
 
   @override
@@ -277,7 +301,14 @@ class _ThreadsTile extends StatelessWidget {
         ),
         title: Text(
           ChannelSidebarStrings.threads,
-          style: theme.textTheme.bodyMedium,
+          semanticsLabel: unread
+              ? ChannelSidebarStrings.unreadChannel(
+                  ChannelSidebarStrings.threads,
+                )
+              : ChannelSidebarStrings.threads,
+          style: theme.textTheme.bodyMedium!.copyWith(
+            fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+          ),
         ),
         onTap: onTap,
       ),
@@ -299,10 +330,13 @@ class _TeamHeader extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.titleMedium,
     ),
-    trailing: IconButton(
-      tooltip: ChannelSidebarStrings.refresh,
-      onPressed: () => unawaited(onRefresh()),
-      icon: const Icon(Icons.refresh),
+    trailing: Transform.translate(
+      offset: const Offset(AppSpacing.md, 0),
+      child: IconButton(
+        tooltip: ChannelSidebarStrings.refresh,
+        onPressed: () => unawaited(onRefresh()),
+        icon: const Icon(Icons.refresh),
+      ),
     ),
   );
 }

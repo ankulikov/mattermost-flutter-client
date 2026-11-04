@@ -423,6 +423,7 @@ String formatFollowedThreadLastReplyTime({
 }) {
   final Duration elapsed = now.toLocal().difference(lastReplyAt.toLocal());
   final int minutes = elapsed.isNegative ? 0 : elapsed.inMinutes;
+  if (minutes == 0) return FollowedThreadsStrings.now;
   if (minutes < 60) return FollowedThreadsStrings.minutesAgo(minutes);
 
   final int hours = elapsed.inHours;
