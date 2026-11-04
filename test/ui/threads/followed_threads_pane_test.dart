@@ -47,6 +47,124 @@ void main() {
     );
   });
 
+  for (final (double width, double scale) in <(double, double)>[
+    (360, 1),
+    (1000, 1.5),
+  ]) {
+    testWidgets(
+      'shows unread replies and mentions at width $width scale $scale',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final FollowedThread thread = FollowedThread(
+          root: ChannelPost(
+            id: 'thread-1',
+            channelId: 'channel-1',
+            author: PostAuthor(id: 'root-author', displayName: 'Root author'),
+            sentAt: DateTime(2026),
+            message: 'Root message',
+          ),
+          replyCount: 18,
+          lastReplyAt: DateTime(2026),
+          lastViewedAt: DateTime(2026),
+          unreadReplies: 2,
+          unreadMentions: 1,
+          participants: <PostAuthor>[
+            PostAuthor(id: 'participant-1', displayName: 'Participant one'),
+          ],
+        );
+        await _pumpThread(tester, thread: thread, scale: scale, width: width);
+        expect(find.text('Threads'), findsOneWidget);
+        expect(find.text('2 new replies'), findsOneWidget);
+        expect(find.text('18 replies'), findsNothing);
+        final Finder dot = find.byKey(
+          const ValueKey<String>('thread-unread-dot-thread-1'),
+        );
+        final Finder avatar = find.byKey(
+          const ValueKey<String>('user-avatar-fallback-participant-1'),
+        );
+        expect(dot, findsNothing);
+        final Finder badge = find.byKey(
+          const ValueKey<String>('thread-unread-count-thread-1'),
+        );
+        expect(
+          find.descendant(of: badge, matching: find.text('1')),
+          findsOneWidget,
+        );
+        final Finder rootAvatar = find.byKey(
+          const ValueKey<String>('user-avatar-fallback-root-author'),
+        );
+        expect(tester.getCenter(badge).dx, tester.getCenter(rootAvatar).dx);
+        expect(tester.getSize(badge).width, tester.getSize(badge).height);
+        expect(
+          tester.getTopLeft(badge).dx,
+          lessThan(tester.getTopLeft(avatar).dx),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('read thread shows total replies without unread indicators', (
+    WidgetTester tester,
+  ) async {
+    await _pumpThreads(tester, participantCount: 1);
+    expect(find.text('2 replies'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('thread-unread-dot-thread-1')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('thread-unread-count-thread-1')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('unread replies without mentions do not show a count badge', (
+    WidgetTester tester,
+  ) async {
+    final thread = FollowedThread(
+      root: ChannelPost(
+        id: 'thread-1',
+        channelId: 'channel-1',
+        author: PostAuthor(id: 'root-author', displayName: 'Root author'),
+        sentAt: DateTime(2026),
+        message: 'Root message',
+      ),
+      replyCount: 2,
+      lastReplyAt: DateTime(2026),
+      lastViewedAt: DateTime(2026),
+      unreadReplies: 1,
+      unreadMentions: 0,
+    );
+    await _pumpThread(tester, thread: thread);
+    expect(find.text('1 new reply'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('thread-unread-dot-thread-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('thread-unread-count-thread-1')),
+      findsNothing,
+    );
+    expect(
+      tester
+          .getCenter(
+            find.byKey(const ValueKey<String>('thread-unread-dot-thread-1')),
+          )
+          .dx,
+      tester
+          .getCenter(
+            find.byKey(
+              const ValueKey<String>('user-avatar-fallback-root-author'),
+            ),
+          )
+          .dx,
+    );
+  });
+
   testWidgets('formats latest-reply times across age ranges', (
     WidgetTester tester,
   ) async {
@@ -295,6 +413,8 @@ Future<void> _pumpThreads(
 Future<void> _pumpThread(
   WidgetTester tester, {
   required FollowedThread thread,
+  double scale = 1,
+  double width = 500,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -311,11 +431,17 @@ Future<void> _pumpThread(
           (Ref ref, UserAvatarRequest request) async => null,
         ),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: SizedBox(
-            width: 500,
-            child: FollowedThreadsPane(
+            width: width,
+            child: const FollowedThreadsPane(
               team: SidebarTeam(id: 'team-1', displayName: 'Team'),
               channelsById: <String, SidebarChannel>{},
             ),

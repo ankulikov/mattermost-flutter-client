@@ -379,7 +379,10 @@ class _ThreadCard extends StatelessWidget {
 
   String _semanticLabel() {
     if (thread.unreadMentions > 0) {
-      return FollowedThreadsStrings.mentions(thread.unreadMentions);
+      return thread.unreadReplies > 0
+          ? '${FollowedThreadsStrings.mentions(thread.unreadMentions)}, '
+                '${FollowedThreadsStrings.unreadReplies(thread.unreadReplies)}'
+          : FollowedThreadsStrings.mentions(thread.unreadMentions);
     }
     if (thread.unreadReplies > 0) {
       return FollowedThreadsStrings.unreadReplies(thread.unreadReplies);
@@ -463,12 +466,18 @@ class _ThreadSummary extends StatelessWidget {
     final List<PostAuthor> remainingParticipants = _remainingParticipants;
     return Padding(
       key: ValueKey<String>('thread-participant-summary-${thread.id}'),
-      // MessageAvatar reserves a 44 px accessible target, while the visible
-      // avatar is 24 px wide. Offset the summary so its visible avatars align
-      // with the root message body rather than the card edge.
-      padding: const EdgeInsetsDirectional.fromSTEB(62, 10, 16, 10),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 10),
       child: Row(
         children: <Widget>[
+          SizedBox(
+            width: 44,
+            child: Center(
+              child: thread.unreadReplies > 0 || thread.unreadMentions > 0
+                  ? _UnreadIndicator(thread: thread)
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 2),
           if (participants.isNotEmpty)
             SizedBox(
               width: _participantStripWidth,
@@ -500,13 +509,14 @@ class _ThreadSummary extends StatelessWidget {
           if (participants.isNotEmpty) const SizedBox(width: 8),
           Expanded(
             child: Text(
-              FollowedThreadsStrings.replies(thread.replyCount),
+              thread.unreadReplies > 0
+                  ? FollowedThreadsStrings.newReplies(thread.unreadReplies)
+                  : FollowedThreadsStrings.replies(thread.replyCount),
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.primary,
               ),
             ),
           ),
-          _UnreadIndicator(thread: thread),
         ],
       ),
     );
@@ -589,27 +599,38 @@ class _UnreadIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    if (thread.unreadReplies > 0) {
+    if (thread.unreadMentions > 0) {
       return Container(
         key: ValueKey<String>('thread-unread-count-${thread.id}'),
-        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        width: 24,
+        height: 24,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: colors.primary,
-          borderRadius: BorderRadius.circular(10),
+          shape: BoxShape.circle,
         ),
-        child: Text(
-          '${thread.unreadReplies}',
-          style: TextStyle(
-            color: colors.onPrimary,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '${thread.unreadMentions}',
+              style: TextStyle(
+                color: colors.onPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
       );
     }
-    return const SizedBox(width: 8, height: 8);
+    return Container(
+      key: ValueKey<String>('thread-unread-dot-${thread.id}'),
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(color: colors.primary, shape: BoxShape.circle),
+    );
   }
 }
 
