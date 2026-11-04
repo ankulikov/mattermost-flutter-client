@@ -1,15 +1,13 @@
 name: Release builds
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-main
   cancel-in-progress: false
 
 env:
@@ -17,8 +15,56 @@ env:
   PUB_CACHE: ${{ github.workspace }}/.pub-cache
 
 jobs:
+  prepare:
+    name: Calculate and commit release version
+    runs-on: ubuntu-24.04
+    outputs:
+      release_tag: ${{ steps.release.outputs.release_tag }}
+    steps:
+      - name: Check out main with release history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+          # Use a bot token when main is protected and GitHub Actions needs an
+          # exception to write the release commit. The built-in token is enough
+          # for repositories that permit workflow writes.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.10.0
+          cache: npm
+
+      - name: Install release tooling
+        run: npm ci --ignore-scripts
+
+      - name: Calculate version and create release commit and tag
+        run: npx --no-install semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+
+      - name: Read the prepared release identity
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          release_tag="$(git tag --points-at HEAD --list 'v*' | sort -V | tail -n 1)"
+          if [[ -z "$release_tag" ]]; then
+            echo 'Semantic Release found no releasable conventional commit.' >&2
+            exit 1
+          fi
+          if [[ ! "$release_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "Semantic Release produced an invalid tag: $release_tag" >&2
+            exit 1
+          fi
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
   verify:
     name: Verify and calculate version
+    needs: prepare
     runs-on: ubuntu-24.04
     outputs:
       build_name: ${{ steps.version.outputs.build_name }}
@@ -26,23 +72,25 @@ jobs:
     steps:
       - name: Check out sources
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
 
       - name: Set up Flutter and dependencies
         uses: ./.github/actions/setup-flutter
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
-      - name: Validate tag and calculate build version
+      - name: Read and validate prepared build version
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          if [[ "$tag" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(\+([0-9]+))?$ ]]; then
+          version="$(awk '/^version: / { print $2; exit }' pubspec.yaml)"
+          if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)\+([0-9]+)$ ]]; then
             build_name="${BASH_REMATCH[1]}"
-            build_number="${BASH_REMATCH[3]:-$GITHUB_RUN_NUMBER}"
+            build_number="${BASH_REMATCH[2]}"
           else
-            echo "Tag must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH+BUILD." >&2
+            echo "pubspec.yaml version must be MAJOR.MINOR.PATCH+BUILD." >&2
             exit 1
           fi
           IFS='.' read -r major minor patch <<< "$build_name"
@@ -71,11 +119,13 @@ jobs:
 
   android:
     name: Android APKs
-    needs: verify
+    needs: [prepare, verify]
     runs-on: ubuntu-24.04
     steps:
       - name: Check out sources
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
 
       - name: Set up Java
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -151,14 +201,14 @@ jobs:
               echo "Expected a signed APK: $source" >&2
               exit 1
             fi
-            cp "$source" "dist/android/mattermost-${GITHUB_REF_NAME}-${abi}.apk"
+            cp "$source" "dist/android/mattermost-${{ needs.prepare.outputs.release_tag }}-${abi}.apk"
           done
-          (cd dist/android && sha256sum ./*.apk > "mattermost-${GITHUB_REF_NAME}-android-SHA256SUMS.txt")
+          (cd dist/android && sha256sum ./*.apk > "mattermost-${{ needs.prepare.outputs.release_tag }}-android-SHA256SUMS.txt")
 
       - name: Upload Android APKs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: android-apks-${{ github.ref_name }}
+          name: android-apks-${{ needs.prepare.outputs.release_tag }}
           path: dist/android
           if-no-files-found: error
           compression-level: 0
@@ -167,7 +217,7 @@ jobs:
       - name: Upload Android symbols
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: android-symbols-${{ github.ref_name }}
+          name: android-symbols-${{ needs.prepare.outputs.release_tag }}
           path: build/symbols/android
           if-no-files-found: error
           compression-level: 9
@@ -175,13 +225,15 @@ jobs:
 
   windows:
     name: Windows x64
-    needs: verify
+    needs: [prepare, verify]
     # Temporarily disabled while Windows release distribution is on hold.
     if: ${{ false }}
     runs-on: windows-2025
     steps:
       - name: Check out sources
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
 
       - name: Set up Flutter and dependencies
         uses: ./.github/actions/setup-flutter
@@ -219,15 +271,15 @@ jobs:
             }
           }
 
-          $archive = Join-Path $PWD "dist/windows/mattermost-windows-x64-${env:GITHUB_REF_NAME}-unsigned.zip"
+          $archive = Join-Path $PWD "dist/windows/mattermost-windows-x64-${{ needs.prepare.outputs.release_tag }}-unsigned.zip"
           Compress-Archive -Path (Join-Path $stageDir '*') -DestinationPath $archive -CompressionLevel Optimal
           $hash = (Get-FileHash -Algorithm SHA256 -Path $archive).Hash.ToLowerInvariant()
-          "$hash  $([IO.Path]::GetFileName($archive))" | Set-Content -Encoding ascii "dist/windows/mattermost-windows-x64-${env:GITHUB_REF_NAME}-SHA256SUMS.txt"
+          "$hash  $([IO.Path]::GetFileName($archive))" | Set-Content -Encoding ascii "dist/windows/mattermost-windows-x64-${{ needs.prepare.outputs.release_tag }}-SHA256SUMS.txt"
 
       - name: Upload Windows bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: windows-x64-${{ github.ref_name }}
+          name: windows-x64-${{ needs.prepare.outputs.release_tag }}
           path: |
             dist/windows/*.zip
             dist/windows/*-SHA256SUMS.txt
@@ -238,7 +290,7 @@ jobs:
       - name: Upload Windows symbols
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: windows-symbols-${{ github.ref_name }}
+          name: windows-symbols-${{ needs.prepare.outputs.release_tag }}
           path: build/symbols/windows
           if-no-files-found: error
           compression-level: 9
@@ -246,13 +298,15 @@ jobs:
 
   apple:
     name: macOS ARM64 and iOS
-    needs: verify
+    needs: [prepare, verify]
     # connectivity_plus 7.3.1 uses NWPath.isUltraConstrained, introduced in the
     # macOS 26 SDK. macos-26 provides the required Xcode SDK and is ARM64.
     runs-on: macos-26
     steps:
       - name: Check out sources
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
 
       - name: Set up Flutter and dependencies
         uses: ./.github/actions/setup-flutter
@@ -331,8 +385,8 @@ jobs:
             -format UDZO \
             -imagekey zlib-level=9 \
             -ov \
-            "dist/macos/mattermost-macos-arm64-${GITHUB_REF_NAME}-unsigned.dmg"
-          (cd dist/macos && shasum -a 256 ./*.dmg > "mattermost-macos-arm64-${GITHUB_REF_NAME}-SHA256SUMS.txt")
+            "dist/macos/mattermost-macos-arm64-${{ needs.prepare.outputs.release_tag }}-unsigned.dmg"
+          (cd dist/macos && shasum -a 256 ./*.dmg > "mattermost-macos-arm64-${{ needs.prepare.outputs.release_tag }}-SHA256SUMS.txt")
 
       - name: Build compact unsigned iOS IPA
         shell: bash
@@ -356,13 +410,13 @@ jobs:
           ipa_stage="$(mktemp -d)"
           mkdir -p "$ipa_stage/Payload"
           ditto "$ios_app" "$ipa_stage/Payload/Runner.app"
-          (cd "$ipa_stage" && zip -qry -9 "$GITHUB_WORKSPACE/dist/ios/mattermost-ios-${GITHUB_REF_NAME}-unsigned.ipa" Payload)
-          (cd dist/ios && shasum -a 256 ./*.ipa > "mattermost-ios-${GITHUB_REF_NAME}-SHA256SUMS.txt")
+          (cd "$ipa_stage" && zip -qry -9 "$GITHUB_WORKSPACE/dist/ios/mattermost-ios-${{ needs.prepare.outputs.release_tag }}-unsigned.ipa" Payload)
+          (cd dist/ios && shasum -a 256 ./*.ipa > "mattermost-ios-${{ needs.prepare.outputs.release_tag }}-SHA256SUMS.txt")
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: macos-arm64-${{ github.ref_name }}
+          name: macos-arm64-${{ needs.prepare.outputs.release_tag }}
           path: dist/macos
           if-no-files-found: error
           compression-level: 0
@@ -371,7 +425,7 @@ jobs:
       - name: Upload iOS IPA
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: ios-${{ github.ref_name }}
+          name: ios-${{ needs.prepare.outputs.release_tag }}
           path: dist/ios
           if-no-files-found: error
           compression-level: 0
@@ -380,7 +434,7 @@ jobs:
       - name: Upload Apple symbols
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: apple-symbols-${{ github.ref_name }}
+          name: apple-symbols-${{ needs.prepare.outputs.release_tag }}
           path: |
             build/symbols/macos
             build/symbols/ios
@@ -392,7 +446,7 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    needs: [verify, android, apple]
+    needs: [prepare, verify, android, apple]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -400,24 +454,25 @@ jobs:
       - name: Download Android APKs
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: android-apks-${{ github.ref_name }}
+          name: android-apks-${{ needs.prepare.outputs.release_tag }}
           path: release-assets/android
 
       - name: Download macOS DMG
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: macos-arm64-${{ github.ref_name }}
+          name: macos-arm64-${{ needs.prepare.outputs.release_tag }}
           path: release-assets/macos
 
       - name: Download iOS IPA
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: ios-${{ github.ref_name }}
+          name: ios-${{ needs.prepare.outputs.release_tag }}
           path: release-assets/ios
 
       - name: Publish release and attach distributable files
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
           name: Mattermost ${{ needs.verify.outputs.build_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
