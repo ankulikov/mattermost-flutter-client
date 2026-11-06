@@ -72,18 +72,24 @@ omit usernames, and open the shared user profile card when selected.
 ## Adaptive shell
 
 Compact layouts show Channels and Inbox as separate destinations with bottom
-navigation. Medium and expanded layouts keep a navigation rail visible. The
-left pane shows either the channel list or the Inbox; an Inbox selection does
-not leave an unrelated channel list beside it. Expanded layouts can keep that
-left pane visible while a message or thread opens in the working area.
+navigation. Medium and expanded channel layouts align the sidebar, channel,
+and thread headers in one row. Icon-only Channels and Inbox controls precede
+the team name in the sidebar header, and the current-user profile sits at the
+far right of the channel or side pane header. Other destinations use a global
+header. Both icon controls have tooltips and semantic labels, and Inbox keeps
+its new-item indicator. The left pane shows
+either the channel list or the Inbox; an Inbox selection does not leave an
+unrelated channel list beside it. Expanded layouts can keep that left pane
+visible while a message or thread opens in the working area.
 
 The shell, sidebar, and panes choose their layout from constraints. No feature
 branches on mobile versus desktop to select a layout.
-On rail layouts, the divider between the channel list and working area can be
-dragged or adjusted with the left and right arrow keys. Its width stays within
-200–500 px and leaves at least 320 px for the working area. The chosen width
-remains in shell view state while destinations change and is clamped when the
-window narrows.
+
+On medium and expanded layouts, the divider between the channel list and working
+area can be dragged or adjusted with the left and right arrow keys. Its width
+stays within 200–500 px and leaves at least 320 px for the working area. The
+chosen width remains in shell view state while destinations change and is
+clamped when the window narrows.
 
 ## State rules
 

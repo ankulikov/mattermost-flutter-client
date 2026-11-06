@@ -40,6 +40,9 @@ values.
 Profile mutations preserve the current profile while they run and report a
 non-blocking error on failure. Current-user profile state is not stored in
 Drift, so each page entry or process restart begins with a new server snapshot.
+On medium and expanded layouts, the profile avatar and presence indicator are
+the rightmost control in the channel, thread, or global header. Compact layouts
+keep Profile in the bottom navigation.
 
 ## Relevant code
 

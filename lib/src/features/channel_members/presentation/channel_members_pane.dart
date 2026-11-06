@@ -18,11 +18,13 @@ class ChannelMembersPane extends ConsumerWidget {
   const ChannelMembersPane({
     required this.channel,
     required this.onClose,
+    this.headerTrailing,
     super.key,
   });
 
   final SidebarChannel channel;
   final VoidCallback onClose;
+  final Widget? headerTrailing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,7 +40,11 @@ class ChannelMembersPane extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _MembersHeader(channelName: channel.displayName, onClose: onClose),
+          _MembersHeader(
+            channelName: channel.displayName,
+            onClose: onClose,
+            headerTrailing: headerTrailing,
+          ),
           const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -77,10 +83,15 @@ class ChannelMembersPane extends ConsumerWidget {
 }
 
 class _MembersHeader extends StatelessWidget {
-  const _MembersHeader({required this.channelName, required this.onClose});
+  const _MembersHeader({
+    required this.channelName,
+    required this.onClose,
+    required this.headerTrailing,
+  });
 
   final String channelName;
   final VoidCallback onClose;
+  final Widget? headerTrailing;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -123,6 +134,7 @@ class _MembersHeader extends StatelessWidget {
           onPressed: onClose,
           icon: const Icon(Icons.close),
         ),
+        ?headerTrailing,
       ],
     ),
   );

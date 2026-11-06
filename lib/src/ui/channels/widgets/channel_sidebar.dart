@@ -17,11 +17,13 @@ class ChannelSidebar extends ConsumerWidget {
   const ChannelSidebar({
     this.onChannelSelected,
     this.onThreadsSelected,
+    this.showTeamHeader = true,
     super.key,
   });
 
   final VoidCallback? onChannelSelected;
   final VoidCallback? onThreadsSelected;
+  final bool showTeamHeader;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,6 +61,7 @@ class ChannelSidebar extends ConsumerWidget {
             snapshot: viewState.snapshot,
             refreshStatus: viewState.refreshStatus,
             onRefresh: () => refreshChannelSidebar(ref),
+            showTeamHeader: showTeamHeader,
             onChannelSelected: onChannelSelected,
             threadsSelected:
                 ref.watch(shellDestinationProvider) == ShellDestination.threads,
@@ -108,6 +111,7 @@ class _SidebarContent extends StatefulWidget {
     required this.snapshot,
     required this.refreshStatus,
     required this.onRefresh,
+    required this.showTeamHeader,
     required this.onChannelSelected,
     required this.threadsSelected,
     required this.threadsUnread,
@@ -117,6 +121,7 @@ class _SidebarContent extends StatefulWidget {
   final ChannelSidebarSnapshot snapshot;
   final OperationStatus refreshStatus;
   final RefreshCallback onRefresh;
+  final bool showTeamHeader;
   final VoidCallback? onChannelSelected;
   final bool threadsSelected;
   final bool threadsUnread;
@@ -174,7 +179,8 @@ class _SidebarContentState extends State<_SidebarContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        _TeamHeader(team: widget.snapshot.team, onRefresh: widget.onRefresh),
+        if (widget.showTeamHeader)
+          _TeamHeader(team: widget.snapshot.team, onRefresh: widget.onRefresh),
         if (widget.refreshStatus is OperationInProgress)
           const LinearProgressIndicator(minHeight: 2),
         if (widget.refreshStatus is OperationFailed)

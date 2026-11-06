@@ -17,6 +17,7 @@ import 'package:mattermost_flutter/src/features/search/presentation/message_sear
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
+import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
@@ -165,6 +166,12 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     required bool searchSelected,
     required bool expanded,
   }) {
+    final bool inlineChannelHeader =
+        selectedChannel != null &&
+        !followedThreadsSelected &&
+        !inboxSelected &&
+        !profileSelected &&
+        !searchSelected;
     final Widget mainContent = _MainContent(
       auth: auth,
       selectedChannel: selectedChannel,
@@ -173,109 +180,146 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       sidebar: sidebar,
       onSelectChannel: _selectChannelNamed,
       onSearchInChannel: _openSearchInChannel,
+      headerTrailing: inlineChannelHeader
+          ? _HeaderProfileButton(
+              profile: currentUserProfile,
+              selected: false,
+              onPressed: _showProfileDestination,
+            )
+          : null,
     );
     return Scaffold(
       body: SafeArea(
-        child: Row(
-          key: ValueKey<String>(expanded ? 'expanded-layout' : 'medium-layout'),
-          children: <Widget>[
-            _DestinationRail(
-              selectedIndex: profileSelected
-                  ? null
-                  : searchSelected
-                  ? 2
-                  : inboxSelected
-                  ? 1
-                  : 0,
-              inboxHasNewItems: inboxHasNewItems,
-              profile: currentUserProfile,
-              profileSelected: profileSelected,
-              onDestinationSelected: _selectDestination,
-              onProfileSelected: _showProfileDestination,
-            ),
-            const VerticalDivider(width: 1),
-            Expanded(
-              child: profileSelected
-                  ? ProfilePage(
-                      onLogout: () =>
-                          ref.read(authControllerProvider.notifier).signOut(),
-                    )
-                  : searchSelected
-                  ? MessageSearchPage(
-                      launchIntent:
-                          ref.watch(searchLaunchIntentProvider)
-                              as SearchLaunchIntent?,
-                    )
-                  : inboxSelected
-                  ? InboxThreadHost(
-                      inboxBuilder:
-                          (
-                            BuildContext context,
-                            ValueChanged<InboxItem> onOpenItem,
-                          ) => InboxPage(onOpenItem: onOpenItem),
-                      background: mainContent,
-                      showAdjacentWorkspace: true,
-                      onSelectChannel: _selectChannelNamed,
-                    )
-                  : LayoutBuilder(
-                      builder:
-                          (BuildContext context, BoxConstraints constraints) {
-                            final double maximumWidth =
-                                (constraints.maxWidth - 320).clamp(
-                                  AppLayout.sidebarMinWidth,
-                                  AppLayout.sidebarMaxWidth,
-                                );
-                            final double sidebarWidth = _sidebarWidth.clamp(
-                              AppLayout.sidebarMinWidth,
-                              maximumWidth,
-                            );
-                            return Stack(
-                              children: <Widget>[
-                                Positioned.fill(
-                                  child: Row(
-                                    children: <Widget>[
-                                      SizedBox(
-                                        key: const ValueKey<String>(
-                                          'channels-side-pane',
-                                        ),
-                                        width: sidebarWidth,
-                                        child: ChannelSidebar(
-                                          onChannelSelected:
-                                              _showSelectedChannel,
-                                          onThreadsSelected:
-                                              _showFollowedThreadsDestination,
-                                        ),
-                                      ),
-                                      Expanded(child: mainContent),
-                                    ],
-                                  ),
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final double maximumWidth = (constraints.maxWidth - 320).clamp(
+              AppLayout.sidebarMinWidth,
+              AppLayout.sidebarMaxWidth,
+            );
+            final double sidebarWidth = _sidebarWidth.clamp(
+              AppLayout.sidebarMinWidth,
+              maximumWidth,
+            );
+            final Widget channelWorkspace = Stack(
+              children: <Widget>[
+                Positioned.fill(
+                  child: Row(
+                    children: <Widget>[
+                      SizedBox(
+                        key: const ValueKey<String>('channels-side-pane'),
+                        width: sidebarWidth,
+                        child: Material(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerLow,
+                          child: Column(
+                            children: <Widget>[
+                              if (inlineChannelHeader) ...<Widget>[
+                                _DesktopSidebarHeader(
+                                  height: 72,
+                                  teamName: sidebar?.team?.displayName,
+                                  channelsSelected: true,
+                                  inboxSelected: false,
+                                  inboxHasNewItems: inboxHasNewItems,
+                                  onChannelsSelected: _showChannelsDestination,
+                                  onInboxSelected: _showInboxDestination,
+                                  onRefresh: () =>
+                                      unawaited(refreshChannelSidebar(ref)),
                                 ),
-                                Positioned(
-                                  left:
-                                      sidebarWidth -
-                                      ResizablePaneDivider.width / 2,
-                                  top: 0,
-                                  bottom: 0,
-                                  child: ResizablePaneDivider(
-                                    key: const ValueKey<String>(
-                                      'channels-pane-divider',
-                                    ),
-                                    label: ShellStrings.resizeChannelsPane,
-                                    onResize: (double delta) => setState(() {
-                                      _sidebarWidth = (sidebarWidth + delta)
-                                          .clamp(
-                                            AppLayout.sidebarMinWidth,
-                                            maximumWidth,
-                                          );
-                                    }),
-                                  ),
-                                ),
+                                const Divider(height: 1),
                               ],
-                            );
-                          },
+                              Expanded(
+                                child: ChannelSidebar(
+                                  showTeamHeader: false,
+                                  onChannelSelected: _showSelectedChannel,
+                                  onThreadsSelected:
+                                      _showFollowedThreadsDestination,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Expanded(child: mainContent),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: sidebarWidth - ResizablePaneDivider.width / 2,
+                  top: 0,
+                  bottom: 0,
+                  child: ResizablePaneDivider(
+                    key: const ValueKey<String>('channels-pane-divider'),
+                    label: ShellStrings.resizeChannelsPane,
+                    onResize: (double delta) => setState(() {
+                      _sidebarWidth = (sidebarWidth + delta).clamp(
+                        AppLayout.sidebarMinWidth,
+                        maximumWidth,
+                      );
+                    }),
+                  ),
+                ),
+              ],
+            );
+            return KeyedSubtree(
+              key: ValueKey<String>(
+                expanded ? 'expanded-layout' : 'medium-layout',
+              ),
+              child: inlineChannelHeader
+                  ? channelWorkspace
+                  : Column(
+                      children: <Widget>[
+                        _DesktopHeader(
+                          sidebarWidth: inboxSelected
+                              ? AppLayout.sidePaneWidth
+                              : sidebarWidth,
+                          teamName: sidebar?.team?.displayName,
+                          channelsSelected:
+                              !inboxSelected &&
+                              !searchSelected &&
+                              !profileSelected,
+                          inboxSelected: inboxSelected,
+                          inboxHasNewItems: inboxHasNewItems,
+                          profile: currentUserProfile,
+                          profileSelected: profileSelected,
+                          onChannelsSelected: _showChannelsDestination,
+                          onInboxSelected: _showInboxDestination,
+                          onSearchSelected: _showSearchDestination,
+                          onProfileSelected: _showProfileDestination,
+                          onRefresh: () =>
+                              unawaited(refreshChannelSidebar(ref)),
+                        ),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: profileSelected
+                              ? ProfilePage(
+                                  onLogout: () => ref
+                                      .read(authControllerProvider.notifier)
+                                      .signOut(),
+                                )
+                              : searchSelected
+                              ? MessageSearchPage(
+                                  launchIntent:
+                                      ref.watch(searchLaunchIntentProvider)
+                                          as SearchLaunchIntent?,
+                                )
+                              : inboxSelected
+                              ? InboxThreadHost(
+                                  inboxBuilder:
+                                      (
+                                        BuildContext context,
+                                        ValueChanged<InboxItem> onOpenItem,
+                                      ) => InboxPage(onOpenItem: onOpenItem),
+                                  background: mainContent,
+                                  showAdjacentWorkspace: true,
+                                  onSelectChannel: _selectChannelNamed,
+                                )
+                              : channelWorkspace,
+                        ),
+                      ],
                     ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -532,60 +576,200 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 }
 
-class _DestinationRail extends StatelessWidget {
-  const _DestinationRail({
-    required this.selectedIndex,
+class _DesktopHeader extends StatelessWidget {
+  const _DesktopHeader({
+    required this.sidebarWidth,
+    required this.teamName,
+    required this.channelsSelected,
+    required this.inboxSelected,
     required this.inboxHasNewItems,
     required this.profile,
     required this.profileSelected,
-    required this.onDestinationSelected,
+    required this.onChannelsSelected,
+    required this.onInboxSelected,
+    required this.onSearchSelected,
     required this.onProfileSelected,
+    required this.onRefresh,
   });
 
-  final int? selectedIndex;
+  final double sidebarWidth;
+  final String? teamName;
+  final bool channelsSelected;
+  final bool inboxSelected;
   final bool inboxHasNewItems;
   final CurrentUserProfile? profile;
   final bool profileSelected;
-  final ValueChanged<int> onDestinationSelected;
+  final VoidCallback onChannelsSelected;
+  final VoidCallback onInboxSelected;
+  final VoidCallback onSearchSelected;
   final VoidCallback onProfileSelected;
+  final VoidCallback onRefresh;
 
   @override
-  Widget build(BuildContext context) => NavigationRail(
-    key: const ValueKey<String>('shell-navigation-rail'),
-    selectedIndex: selectedIndex,
-    labelType: NavigationRailLabelType.all,
-    groupAlignment: -1,
-    minWidth: 82,
-    backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
-    onDestinationSelected: onDestinationSelected,
-    trailing: Expanded(
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: _RailProfileDestination(
-          profile: profile,
-          selected: profileSelected,
-          onPressed: onProfileSelected,
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainerLow,
+      child: SizedBox(
+        height: 56,
+        child: Row(
+          children: <Widget>[
+            SizedBox(
+              width: sidebarWidth,
+              child: _DesktopSidebarHeader(
+                height: 56,
+                teamName: teamName,
+                channelsSelected: channelsSelected,
+                inboxSelected: inboxSelected,
+                inboxHasNewItems: inboxHasNewItems,
+                onChannelsSelected: onChannelsSelected,
+                onInboxSelected: onInboxSelected,
+                onRefresh: onRefresh,
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: <Widget>[
+                  IconButton(
+                    key: const ValueKey<String>('shell-search-destination'),
+                    tooltip: ShellStrings.search,
+                    onPressed: onSearchSelected,
+                    icon: const Icon(Icons.search_outlined),
+                  ),
+                  _HeaderProfileButton(
+                    profile: profile,
+                    selected: profileSelected,
+                    onPressed: onProfileSelected,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _DesktopSidebarHeader extends StatelessWidget {
+  const _DesktopSidebarHeader({
+    required this.height,
+    required this.teamName,
+    required this.channelsSelected,
+    required this.inboxSelected,
+    required this.inboxHasNewItems,
+    required this.onChannelsSelected,
+    required this.onInboxSelected,
+    required this.onRefresh,
+  });
+
+  final double height;
+  final String? teamName;
+  final bool channelsSelected;
+  final bool inboxSelected;
+  final bool inboxHasNewItems;
+  final VoidCallback onChannelsSelected;
+  final VoidCallback onInboxSelected;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: height,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+      child: Row(
+        children: <Widget>[
+          _DestinationIcon(
+            key: const ValueKey<String>('shell-channels-destination'),
+            tooltip: ShellStrings.channels,
+            selected: channelsSelected,
+            onPressed: onChannelsSelected,
+            icon: const Icon(Icons.tag_outlined),
+          ),
+          _DestinationIcon(
+            key: const ValueKey<String>('shell-inbox-destination'),
+            tooltip: inboxHasNewItems
+                ? ShellStrings.inboxHasNewMessages
+                : ShellStrings.inbox,
+            selected: inboxSelected,
+            onPressed: onInboxSelected,
+            icon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              teamName ?? ShellStrings.channels,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          if (channelsSelected)
+            IconButton(
+              tooltip: ChannelSidebarStrings.refresh,
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh),
+            ),
+        ],
+      ),
     ),
-    destinations: <NavigationRailDestination>[
-      const NavigationRailDestination(
-        icon: Icon(Icons.home_outlined),
-        selectedIcon: Icon(Icons.home),
-        label: Text(ShellStrings.channels),
-      ),
-      NavigationRailDestination(
-        icon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
-        selectedIcon: _InboxNavigationIcon(hasNewItems: inboxHasNewItems),
-        label: const Text(ShellStrings.inbox),
-      ),
-      const NavigationRailDestination(
-        icon: Icon(Icons.search_outlined),
-        selectedIcon: Icon(Icons.search),
-        label: Text(ShellStrings.search),
-      ),
-    ],
   );
+}
+
+class _HeaderProfileButton extends StatelessWidget {
+  const _HeaderProfileButton({
+    required this.profile,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final CurrentUserProfile? profile;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    key: const ValueKey<String>('shell-profile-destination'),
+    tooltip: ShellStrings.profile,
+    isSelected: selected,
+    onPressed: onPressed,
+    icon: ProfileNavigationAvatar(profile: profile),
+  );
+}
+
+class _DestinationIcon extends StatelessWidget {
+  const _DestinationIcon({
+    required this.tooltip,
+    required this.selected,
+    required this.onPressed,
+    required this.icon,
+    super.key,
+  });
+
+  final String tooltip;
+  final bool selected;
+  final VoidCallback onPressed;
+  final Widget icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Semantics(
+      selected: selected,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        style: IconButton.styleFrom(
+          backgroundColor: selected ? colors.secondaryContainer : null,
+          foregroundColor: selected ? colors.onSecondaryContainer : null,
+        ),
+        icon: icon,
+      ),
+    );
+  }
 }
 
 class _BottomDestinations extends StatelessWidget {
@@ -631,57 +815,6 @@ class _BottomDestinations extends StatelessWidget {
   );
 }
 
-class _RailProfileDestination extends StatelessWidget {
-  const _RailProfileDestination({
-    required this.profile,
-    required this.selected,
-    required this.onPressed,
-  });
-
-  final CurrentUserProfile? profile;
-  final bool selected;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Tooltip(
-      message: ShellStrings.profile,
-      child: InkWell(
-        key: const ValueKey<String>('shell-profile-destination'),
-        borderRadius: BorderRadius.circular(28),
-        onTap: onPressed,
-        child: Semantics(
-          selected: selected,
-          button: true,
-          label: ShellStrings.profile,
-          child: Container(
-            width: 64,
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            decoration: BoxDecoration(
-              color: selected
-                  ? Theme.of(context).colorScheme.secondaryContainer
-                  : null,
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                ProfileNavigationAvatar(profile: profile),
-                const SizedBox(height: 3),
-                Text(
-                  ShellStrings.profile,
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
 class _InboxNavigationIcon extends StatelessWidget {
   const _InboxNavigationIcon({required this.hasNewItems});
 
@@ -693,7 +826,7 @@ class _InboxNavigationIcon extends StatelessWidget {
     child: Stack(
       clipBehavior: Clip.none,
       children: <Widget>[
-        const Icon(Icons.forum_outlined),
+        const Icon(Icons.inbox_outlined),
         if (hasNewItems)
           PositionedDirectional(
             top: -2,
@@ -723,6 +856,7 @@ class _MainContent extends StatelessWidget {
     required this.onSelectChannel,
     required this.onSearchInChannel,
     this.onBackToChannels,
+    this.headerTrailing,
   });
 
   final AuthState auth;
@@ -733,6 +867,7 @@ class _MainContent extends StatelessWidget {
   final ValueChanged<String> onSelectChannel;
   final ValueChanged<SidebarChannel> onSearchInChannel;
   final VoidCallback? onBackToChannels;
+  final Widget? headerTrailing;
 
   @override
   Widget build(BuildContext context) {
@@ -769,6 +904,7 @@ class _MainContent extends StatelessWidget {
           onSelectChannel: onSelectChannel,
           onBack: onBackToChannels,
           onSearchInChannel: onSearchInChannel,
+          headerTrailing: headerTrailing,
         );
       }
       return Center(
