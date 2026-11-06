@@ -15,6 +15,7 @@ import 'package:mattermost_flutter/src/data/repositories/mattermost_post_reposit
 import 'package:mattermost_flutter/src/data/repositories/mattermost_rich_attachment_option_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_thread_repository.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_user_repository.dart';
+import 'package:mattermost_flutter/src/data/repositories/shared_preferences_sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/attachment_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
@@ -24,6 +25,7 @@ import 'package:mattermost_flutter/src/domain/repositories/message_mapper.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_action_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/rich_attachment_option_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart';
 import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
@@ -133,6 +135,12 @@ currentUserProfileRepositoryProvider = Provider<CurrentUserProfileRepository>((
 final Provider<AppSettingsRepository> appSettingsRepositoryProvider =
     Provider<AppSettingsRepository>(
       (Ref ref) => SharedPreferencesAppPreferencesRepository(),
+    );
+
+final Provider<SidebarViewPreferencesRepository>
+sidebarViewPreferencesRepositoryProvider =
+    Provider<SidebarViewPreferencesRepository>(
+      (Ref ref) => SharedPreferencesSidebarViewPreferencesRepository(),
     );
 
 final Provider<AttachmentRepository> attachmentRepositoryProvider =

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/repositories/sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
@@ -32,7 +33,7 @@ class ChannelSidebar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AuthState auth = ref.watch(authControllerProvider);
-    if (auth.phase != AuthPhase.signedIn) {
+    if (auth.phase != AuthPhase.signedIn || auth.session == null) {
       return const SafeArea(
         child: Center(child: Text(ChannelSidebarStrings.title)),
       );
@@ -62,6 +63,11 @@ class ChannelSidebar extends ConsumerWidget {
                 ),
               );
           return _SidebarContent(
+            key: ValueKey<String>(auth.session!.durableDataScopeId),
+            accountScopeId: auth.session!.durableDataScopeId,
+            preferencesRepository: ref.read(
+              sidebarViewPreferencesRepositoryProvider,
+            ),
             snapshot: viewState.snapshot,
             refreshStatus: viewState.refreshStatus,
             onRefresh: () => refreshChannelSidebar(ref),
@@ -112,6 +118,8 @@ class _InitialError extends StatelessWidget {
 
 class _SidebarContent extends StatefulWidget {
   const _SidebarContent({
+    required this.accountScopeId,
+    required this.preferencesRepository,
     required this.snapshot,
     required this.refreshStatus,
     required this.onRefresh,
@@ -120,8 +128,11 @@ class _SidebarContent extends StatefulWidget {
     required this.threadsSelected,
     required this.threadsUnread,
     required this.onThreadsSelected,
+    super.key,
   });
 
+  final String accountScopeId;
+  final SidebarViewPreferencesRepository preferencesRepository;
   final ChannelSidebarSnapshot snapshot;
   final OperationStatus refreshStatus;
   final RefreshCallback onRefresh;
@@ -141,11 +152,70 @@ class _SidebarContentState extends State<_SidebarContent> {
   String _query = '';
   bool _hideReadChannels = false;
   bool _hideFolderHeadings = false;
+  bool _preferencesLoaded = false;
+  bool _savingPreferences = false;
 
   @override
   void initState() {
     super.initState();
     _searchFocusNode.addListener(_onSearchFocusChanged);
+    unawaited(_loadPreferences());
+  }
+
+  Future<void> _loadPreferences() async {
+    SidebarViewPreferences preferences;
+    try {
+      preferences = await widget.preferencesRepository.read(
+        widget.accountScopeId,
+      );
+    } on Object {
+      preferences = const SidebarViewPreferences();
+    }
+    if (!mounted) return;
+    setState(() {
+      _hideReadChannels = preferences.hideReadChannels;
+      _hideFolderHeadings = preferences.hideFolderHeadings;
+      _preferencesLoaded = true;
+    });
+  }
+
+  void _savePreferences({bool? hideReadChannels, bool? hideFolderHeadings}) {
+    if (_savingPreferences) return;
+    final SidebarViewPreferences previous = SidebarViewPreferences(
+      hideReadChannels: _hideReadChannels,
+      hideFolderHeadings: _hideFolderHeadings,
+    );
+    setState(() {
+      _hideReadChannels = hideReadChannels ?? _hideReadChannels;
+      _hideFolderHeadings = hideFolderHeadings ?? _hideFolderHeadings;
+      _savingPreferences = true;
+    });
+    unawaited(_writePreferences(previous));
+  }
+
+  Future<void> _writePreferences(SidebarViewPreferences previous) async {
+    try {
+      await widget.preferencesRepository.write(
+        widget.accountScopeId,
+        SidebarViewPreferences(
+          hideReadChannels: _hideReadChannels,
+          hideFolderHeadings: _hideFolderHeadings,
+        ),
+      );
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _hideReadChannels = previous.hideReadChannels;
+        _hideFolderHeadings = previous.hideFolderHeadings;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(ChannelSidebarStrings.preferencesSaveFailed),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingPreferences = false);
+    }
   }
 
   void _onSearchFocusChanged() => setState(() {});
@@ -200,6 +270,9 @@ class _SidebarContentState extends State<_SidebarContent> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_preferencesLoaded) {
+      return const SizedBox.expand();
+    }
     final List<SidebarSection> filteredSections = _filteredSections;
     final ColorScheme colors = Theme.of(context).colorScheme;
     return Column(
@@ -293,9 +366,11 @@ class _SidebarContentState extends State<_SidebarContent> {
                                 tooltip: _hideReadChannels
                                     ? ChannelSidebarStrings.showReadChannels
                                     : ChannelSidebarStrings.hideReadChannels,
-                                onPressed: () => setState(
-                                  () => _hideReadChannels = !_hideReadChannels,
-                                ),
+                                onPressed: _savingPreferences
+                                    ? null
+                                    : () => _savePreferences(
+                                        hideReadChannels: !_hideReadChannels,
+                                      ),
                                 icon: Icon(
                                   _hideReadChannels
                                       ? Icons.visibility_outlined
@@ -313,10 +388,11 @@ class _SidebarContentState extends State<_SidebarContent> {
                               tooltip: _hideFolderHeadings
                                   ? ChannelSidebarStrings.showFolderHeadings
                                   : ChannelSidebarStrings.hideFolderHeadings,
-                              onPressed: () => setState(
-                                () =>
-                                    _hideFolderHeadings = !_hideFolderHeadings,
-                              ),
+                              onPressed: _savingPreferences
+                                  ? null
+                                  : () => _savePreferences(
+                                      hideFolderHeadings: !_hideFolderHeadings,
+                                    ),
                               icon: Icon(
                                 _hideFolderHeadings
                                     ? Icons.folder_outlined
