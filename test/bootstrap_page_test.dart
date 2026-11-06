@@ -765,11 +765,7 @@ void main() {
         of: publicChannelsHeader,
         matching: find.byIcon(Icons.expand_more),
       );
-      expect(find.byTooltip(ChannelSidebarStrings.refresh), findsOneWidget);
-      expect(
-        tester.getCenter(find.byTooltip(ChannelSidebarStrings.refresh)).dy,
-        lessThan(tester.getCenter(publicChannelsExpander).dy),
-      );
+      expect(find.byTooltip('Refresh channels'), findsNothing);
       expect(
         find.byKey(const ValueKey<String>('threads-sidebar-tile')),
         findsOneWidget,
@@ -2483,6 +2479,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Favorites'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(find.byTooltip('Refresh channels'), findsNothing);
     final Finder channelTile = find.ancestor(
       of: find.text('Ada Lovelace'),
       matching: find.byType(ListTile),

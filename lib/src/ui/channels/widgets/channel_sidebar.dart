@@ -179,8 +179,7 @@ class _SidebarContentState extends State<_SidebarContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (widget.showTeamHeader)
-          _TeamHeader(team: widget.snapshot.team, onRefresh: widget.onRefresh),
+        if (widget.showTeamHeader) _TeamHeader(team: widget.snapshot.team),
         if (widget.refreshStatus is OperationInProgress)
           const LinearProgressIndicator(minHeight: 2),
         if (widget.refreshStatus is OperationFailed)
@@ -324,10 +323,9 @@ class _ThreadsTile extends StatelessWidget {
 }
 
 class _TeamHeader extends StatelessWidget {
-  const _TeamHeader({required this.team, required this.onRefresh});
+  const _TeamHeader({required this.team});
 
   final SidebarTeam? team;
-  final RefreshCallback onRefresh;
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -336,14 +334,6 @@ class _TeamHeader extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.titleMedium,
-    ),
-    trailing: Transform.translate(
-      offset: const Offset(AppSpacing.md, 0),
-      child: IconButton(
-        tooltip: ChannelSidebarStrings.refresh,
-        onPressed: () => unawaited(onRefresh()),
-        icon: const Icon(Icons.refresh),
-      ),
     ),
   );
 }

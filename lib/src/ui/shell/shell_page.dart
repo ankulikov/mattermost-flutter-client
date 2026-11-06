@@ -17,7 +17,6 @@ import 'package:mattermost_flutter/src/features/search/presentation/message_sear
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/auth/widgets/sso_login_dialog.dart';
-import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
@@ -223,8 +222,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                                   inboxHasNewItems: inboxHasNewItems,
                                   onChannelsSelected: _showChannelsDestination,
                                   onInboxSelected: _showInboxDestination,
-                                  onRefresh: () =>
-                                      unawaited(refreshChannelSidebar(ref)),
                                 ),
                                 const Divider(height: 1),
                               ],
@@ -286,8 +283,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                           onInboxSelected: _showInboxDestination,
                           onSearchSelected: _showSearchDestination,
                           onProfileSelected: _showProfileDestination,
-                          onRefresh: () =>
-                              unawaited(refreshChannelSidebar(ref)),
                         ),
                         const Divider(height: 1),
                         Expanded(
@@ -589,7 +584,6 @@ class _DesktopHeader extends StatelessWidget {
     required this.onInboxSelected,
     required this.onSearchSelected,
     required this.onProfileSelected,
-    required this.onRefresh,
   });
 
   final double sidebarWidth;
@@ -603,7 +597,6 @@ class _DesktopHeader extends StatelessWidget {
   final VoidCallback onInboxSelected;
   final VoidCallback onSearchSelected;
   final VoidCallback onProfileSelected;
-  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -624,7 +617,6 @@ class _DesktopHeader extends StatelessWidget {
                 inboxHasNewItems: inboxHasNewItems,
                 onChannelsSelected: onChannelsSelected,
                 onInboxSelected: onInboxSelected,
-                onRefresh: onRefresh,
               ),
             ),
             const VerticalDivider(width: 1),
@@ -663,7 +655,6 @@ class _DesktopSidebarHeader extends StatelessWidget {
     required this.inboxHasNewItems,
     required this.onChannelsSelected,
     required this.onInboxSelected,
-    required this.onRefresh,
   });
 
   final double height;
@@ -673,7 +664,6 @@ class _DesktopSidebarHeader extends StatelessWidget {
   final bool inboxHasNewItems;
   final VoidCallback onChannelsSelected;
   final VoidCallback onInboxSelected;
-  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -707,12 +697,6 @@ class _DesktopSidebarHeader extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
-          if (channelsSelected)
-            IconButton(
-              tooltip: ChannelSidebarStrings.refresh,
-              onPressed: onRefresh,
-              icon: const Icon(Icons.refresh),
-            ),
         ],
       ),
     ),
