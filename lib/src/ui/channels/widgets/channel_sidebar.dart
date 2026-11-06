@@ -197,6 +197,9 @@ class _SidebarContentState extends State<_SidebarContent> {
           padding: AppLayout.sidebarSearchPadding,
           child: TextField(
             key: const ValueKey<String>('channel-search-field'),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontSize: 13),
             controller: _searchController,
             focusNode: _searchFocusNode,
             autocorrect: false,
@@ -318,6 +321,7 @@ class _ThreadsTile extends StatelessWidget {
           shape: _sidebarTileShape,
           leading: Icon(
             Icons.forum_outlined,
+            size: 16,
             color: selected
                 ? colors.onSecondaryContainer
                 : colors.onSurfaceVariant,
@@ -330,6 +334,7 @@ class _ThreadsTile extends StatelessWidget {
                   )
                 : ChannelSidebarStrings.threads,
             style: theme.textTheme.bodyMedium!.copyWith(
+              fontSize: 13,
               fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
@@ -645,7 +650,8 @@ class _ChannelSectionHeader extends StatelessWidget {
               child: const Icon(Icons.expand_more, size: 14),
             ),
             title: Text(
-              section.displayName,
+              section.displayName.toUpperCase(),
+              semanticsLabel: section.displayName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -723,7 +729,10 @@ class _ChannelTile extends StatelessWidget {
                     ? colors.onSurface
                     : colors.onSurfaceVariant,
               ),
-              child: ChannelAvatar(channel: channel, size: 20),
+              child: ChannelAvatar(
+                channel: channel,
+                size: channel.kind == ChannelKind.directMessage ? 16 : 18,
+              ),
             ),
             title: Row(
               mainAxisSize: MainAxisSize.min,
@@ -739,6 +748,7 @@ class _ChannelTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium!.copyWith(
+                      fontSize: 13,
                       fontWeight: highlightUnread
                           ? FontWeight.w600
                           : FontWeight.w400,

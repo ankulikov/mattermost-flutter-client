@@ -43,8 +43,9 @@ Search uses an inset, rounded field with an outline. Channel and Threads
 selection and hover use the same horizontal inset and rounded surfaces while
 icons and text stay aligned with the sidebar grid.
 Category headers use that inset and rounded hover surface, with a small leading
-chevron and a compact label. Channel names sit close to their icons; unmuted
-unread channels show a small dot immediately after the name.
+chevron and an uppercase compact label. Search, Threads, and channel names use
+13 px text; direct-message avatars are smaller to leave space before names.
+Unmuted unread channels show a small dot immediately after the name.
 
 ## Direct-message avatars
 
