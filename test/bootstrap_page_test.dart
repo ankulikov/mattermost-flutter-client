@@ -563,16 +563,13 @@ void main() {
         tester.getSize(threadsTile).width,
         tester.getSize(channelSelectionSurface).width,
       );
-      expect(
-        tester.getSize(search).width,
-        tester.getSize(threadsTile).width + 2 * AppSpacing.sm,
-      );
+      expect(tester.getSize(search).width, tester.getSize(threadsTile).width);
       final double sidebarWidth = tester
           .getSize(find.byKey(const PageStorageKey<String>('channel-sidebar')))
           .width;
       expect(
         tester.getSize(channelSelectionSurface).width,
-        sidebarWidth - 2 * AppSpacing.sm,
+        sidebarWidth - 2 * AppLayout.sidebarItemInset,
       );
       expect(
         tester.widget<Text>(find.text(ChannelSidebarStrings.threads)).style,
@@ -632,6 +629,12 @@ void main() {
         tester.widget<Material>(threadsTile).color,
         Theme.of(tester.element(threadsTile)).colorScheme.secondaryContainer,
       );
+      final Rect threadsRect = tester.getRect(threadsTile);
+      final Rect sidebarRect = tester.getRect(
+        find.byKey(const ValueKey<String>('channels-side-pane')),
+      );
+      expect(threadsRect.left, sidebarRect.left + AppLayout.sidebarItemInset);
+      expect(threadsRect.right, sidebarRect.right - AppLayout.sidebarItemInset);
       expect(
         find.byKey(const ValueKey<String>('channels-side-pane')),
         findsOneWidget,
@@ -739,22 +742,33 @@ void main() {
         const ValueKey<String>('channel-search-field'),
       );
       expect(search, findsOneWidget);
-      expect(tester.getSize(search).height, 56);
+      expect(tester.getSize(search).height, 48);
       final TextField searchField = tester.widget<TextField>(search);
       final InputDecoration decoration = searchField.decoration!;
       expect(searchField.style, isNull);
       expect(searchField.textAlignVertical, isNull);
       expect(decoration.hintStyle, isNull);
-      expect(decoration.isDense, isNull);
+      expect(decoration.isDense, isTrue);
       expect(decoration.constraints, AppLayout.sidebarSearchConstraints);
-      expect(decoration.contentPadding, isNull);
-      expect(decoration.filled, isNull);
+      expect(
+        decoration.contentPadding,
+        const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      );
+      expect(decoration.filled, isTrue);
       expect(
         decoration.prefixIconConstraints,
         AppLayout.sidebarSearchPrefixIconConstraints,
       );
       expect(decoration.enabledBorder, isA<OutlineInputBorder>());
       expect(decoration.focusedBorder, isA<OutlineInputBorder>());
+      expect(
+        (decoration.enabledBorder! as OutlineInputBorder).borderRadius,
+        BorderRadius.circular(AppSpacing.sm),
+      );
+      expect(
+        (decoration.enabledBorder! as OutlineInputBorder).borderSide.style,
+        BorderStyle.solid,
+      );
       expect(find.text('Public channels'), findsOneWidget);
       expect(find.text('Town Square'), findsNothing);
       expect(find.text('Direct messages'), findsOneWidget);
@@ -779,9 +793,10 @@ void main() {
 
       await tester.enterText(search, 'town');
       await tester.pump();
+      expect(tester.getSize(search).height, 48);
       expect(
         tester.getCenter(find.byTooltip(ChannelSidebarStrings.clearSearch)).dx,
-        closeTo(tester.getCenter(publicChannelsExpander).dx, 0.01),
+        lessThan(tester.getCenter(publicChannelsExpander).dx),
       );
       expect(find.text('Public channels'), findsOneWidget);
       expect(find.text('Town Square'), findsOneWidget);
@@ -2193,8 +2208,8 @@ void main() {
     );
     final Rect selectionRect = tester.getRect(selectionSurface);
     final Rect listRect = tester.getRect(channelList);
-    expect(selectionRect.left, listRect.left + AppSpacing.sm);
-    expect(selectionRect.right, listRect.right - AppSpacing.sm);
+    expect(selectionRect.left, listRect.left + AppLayout.sidebarItemInset);
+    expect(selectionRect.right, listRect.right - AppLayout.sidebarItemInset);
     final ListTile selectedTile = tester.widget<ListTile>(
       find.descendant(of: selectionSurface, matching: find.byType(ListTile)),
     );

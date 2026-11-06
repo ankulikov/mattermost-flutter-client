@@ -39,8 +39,9 @@ query is active and returns when the query is cleared.
 
 Channel and category rows use a compact 40 px minimum interactive height to
 fit more entries on screen. Rows can grow when text scaling requires more room.
-Channel and Threads selection and hover use inset, rounded surfaces while icons
-and text stay aligned with the sidebar grid.
+Search uses an inset, rounded field with an outline. Channel and Threads
+selection and hover use the same horizontal inset and rounded surfaces while
+icons and text stay aligned with the sidebar grid.
 
 ## Direct-message avatars
 
