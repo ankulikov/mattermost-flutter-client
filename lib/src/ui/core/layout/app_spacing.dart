@@ -36,9 +36,6 @@ abstract final class AppLayout {
   static const EdgeInsets sidebarSearchIconPadding = EdgeInsets.only(
     left: sidebarLeadingIconInset,
   );
-  static const EdgeInsets sidebarRowContentPadding = EdgeInsets.symmetric(
-    horizontal: sidebarLeadingIconInset,
-  );
   static const BoxConstraints sidebarSearchPrefixIconConstraints =
       BoxConstraints(minWidth: sidebarSearchIconSlotWidth);
   static const BoxConstraints sidebarSearchConstraints = BoxConstraints(
