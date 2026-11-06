@@ -105,10 +105,6 @@ abstract final class MattermostTheme {
         indicatorColor: colors.secondaryContainer,
         surfaceTintColor: Colors.transparent,
       ),
-      navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: colors.surfaceContainerLow,
-        indicatorColor: colors.secondaryContainer,
-      ),
       dialogTheme: DialogThemeData(
         backgroundColor: colors.surfaceContainerHigh,
         surfaceTintColor: Colors.transparent,

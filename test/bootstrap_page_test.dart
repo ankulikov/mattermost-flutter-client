@@ -35,6 +35,7 @@ import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart'
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
@@ -43,15 +44,19 @@ import 'support/fake_user_repository.dart';
 
 void main() {
   Future<void> selectInbox(WidgetTester tester) async {
-    final Finder rail = find.byKey(
-      const ValueKey<String>('shell-navigation-rail'),
+    final Finder desktop = find.byKey(
+      const ValueKey<String>('shell-inbox-destination'),
     );
-    final Finder navigation = rail.evaluate().isNotEmpty
-        ? rail
-        : find.byKey(const ValueKey<String>('shell-bottom-navigation'));
-    await tester.tap(
-      find.descendant(of: navigation, matching: find.text('Inbox')),
-    );
+    if (desktop.evaluate().isNotEmpty) {
+      await tester.tap(desktop);
+    } else {
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+          matching: find.text('Inbox'),
+        ),
+      );
+    }
     await tester.pumpAndSettle();
   }
 
@@ -145,9 +150,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey<String>('medium-layout')), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('shell-navigation-rail')),
+      find.byKey(const ValueKey<String>('shell-inbox-destination')),
       findsOneWidget,
     );
+    expect(find.byType(NavigationRail), findsNothing);
     expect(
       find.byKey(const ValueKey<String>('shell-bottom-navigation')),
       findsNothing,
@@ -165,7 +171,99 @@ void main() {
     );
   });
 
-  testWidgets('opens Profile from the bottom of the rail and logs out', (
+  testWidgets('desktop uses the balanced header with icon destinations', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          currentUserProfileRepositoryProvider.overrideWithValue(
+            _CurrentProfileRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder channels = find.byKey(
+      const ValueKey<String>('shell-channels-destination'),
+    );
+    final Finder inbox = find.byKey(
+      const ValueKey<String>('shell-inbox-destination'),
+    );
+    final Finder profile = find.byKey(
+      const ValueKey<String>('shell-profile-destination'),
+    );
+    expect(find.byType(NavigationRail), findsNothing);
+    expect(channels, findsOneWidget);
+    expect(inbox, findsOneWidget);
+    expect(profile, findsOneWidget);
+    expect(tester.getCenter(channels).dx, lessThan(tester.getCenter(inbox).dx));
+    expect(
+      tester.getCenter(inbox).dx,
+      lessThan(tester.getCenter(find.text('Example team')).dx),
+    );
+    expect(tester.getCenter(profile).dx, greaterThan(1200));
+    expect(tester.getCenter(profile).dy, lessThan(60));
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('channels-side-pane')),
+        matching: find.text('Example team'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('shell-search-destination')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop header remains usable at large text scale', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+
+    for (final double width in <double>[700, 1119, 1120]) {
+      await tester.binding.setSurfaceSize(Size(width, 800));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('shell-channels-destination')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('shell-inbox-destination')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('shell-profile-destination')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('opens Profile from the desktop header and logs out', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -189,10 +287,8 @@ void main() {
       const ValueKey<String>('shell-profile-destination'),
     );
     expect(profileDestination, findsOneWidget);
-    expect(
-      tester.getCenter(profileDestination).dy,
-      greaterThan(tester.getCenter(find.text('Inbox')).dy),
-    );
+    expect(tester.getCenter(profileDestination).dx, greaterThan(900));
+    expect(tester.getCenter(profileDestination).dy, lessThan(60));
 
     await tester.tap(profileDestination);
     await tester.pumpAndSettle();
@@ -298,6 +394,10 @@ void main() {
     expect(
       find.byKey(const ValueKey<String>('channels-side-pane')),
       findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('shell-inbox-destination')),
+      findsOneWidget,
     );
     final Finder inboxPane = find.byKey(
       const ValueKey<String>('inbox-thread-list-pane'),
@@ -665,9 +765,10 @@ void main() {
         of: publicChannelsHeader,
         matching: find.byIcon(Icons.expand_more),
       );
+      expect(find.byTooltip(ChannelSidebarStrings.refresh), findsOneWidget);
       expect(
-        tester.getCenter(find.byTooltip(ChannelSidebarStrings.refresh)).dx,
-        closeTo(tester.getCenter(publicChannelsExpander).dx, 0.01),
+        tester.getCenter(find.byTooltip(ChannelSidebarStrings.refresh)).dy,
+        lessThan(tester.getCenter(publicChannelsExpander).dy),
       );
       expect(
         find.byKey(const ValueKey<String>('threads-sidebar-tile')),
@@ -841,11 +942,8 @@ void main() {
     expect(inbox.loadCalls, 1);
 
     await selectInbox(tester);
-    final Finder rail = find.byKey(
-      const ValueKey<String>('shell-navigation-rail'),
-    );
     await tester.tap(
-      find.descendant(of: rail, matching: find.text('Channels')),
+      find.byKey(const ValueKey<String>('shell-channels-destination')),
     );
     await tester.pumpAndSettle();
     await selectInbox(tester);
@@ -1087,6 +1185,52 @@ void main() {
     expect(find.byType(CircleAvatar), findsOneWidget);
   });
 
+  testWidgets('keeps channel message lines readable on a wide screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1920, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          postRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    final Rect channelHeader = tester.getRect(
+      find.byKey(const ValueKey<String>('channel-header')),
+    );
+    final double profileY = tester
+        .getCenter(
+          find.byKey(const ValueKey<String>('shell-profile-destination')),
+        )
+        .dy;
+    expect(channelHeader.top, 0);
+    expect(profileY, inInclusiveRange(channelHeader.top, channelHeader.bottom));
+
+    final Finder messageRow = find
+        .ancestor(
+          of: find.byType(MessageContent).first,
+          matching: find.byType(Row),
+        )
+        .first;
+    expect(
+      tester.getSize(messageRow).width,
+      lessThanOrEqualTo(AppLayout.readableContentWidth),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('opens channel members beside messages when width allows', (
     WidgetTester tester,
   ) async {
@@ -1123,6 +1267,15 @@ void main() {
     final Finder pane = find.byType(ChannelMembersPane);
     expect(pane, findsOneWidget);
     expect(tester.getSize(pane).width, 380);
+    expect(
+      find.descendant(
+        of: pane,
+        matching: find.byKey(
+          const ValueKey<String>('shell-profile-destination'),
+        ),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Message for town-square'), findsOneWidget);
     expect(
       find.descendant(of: pane, matching: find.text('Ada Lovelace')),
@@ -1647,6 +1800,24 @@ void main() {
     expect(find.text('This message was deleted'), findsOneWidget);
     expect(find.text('Deleted reply contents'), findsNothing);
     expect(find.text('Message for town-square'), findsNWidgets(2));
+    final Rect channelHeader = tester.getRect(
+      find.byKey(const ValueKey<String>('channel-header')),
+    );
+    final double profileY = tester
+        .getCenter(
+          find.byKey(const ValueKey<String>('shell-profile-destination')),
+        )
+        .dy;
+    expect(profileY, greaterThan(channelHeader.top));
+    expect(profileY, lessThan(channelHeader.bottom));
+    expect(
+      tester
+          .getCenter(
+            find.byKey(const ValueKey<String>('shell-profile-destination')),
+          )
+          .dx,
+      greaterThan(tester.getCenter(find.byType(ThreadPane)).dx),
+    );
     expect(
       tester
           .getTopLeft(

@@ -39,6 +39,7 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
     this.stateScopeId,
     this.onBack,
     this.onSearchInChannel,
+    this.headerTrailing,
     super.key,
   });
 
@@ -48,6 +49,7 @@ class ChannelPostsPane extends ConsumerStatefulWidget {
   final String? stateScopeId;
   final VoidCallback? onBack;
   final ValueChanged<SidebarChannel>? onSearchInChannel;
+  final Widget? headerTrailing;
 
   @override
   ConsumerState<ChannelPostsPane> createState() => _ChannelPostsPaneState();
@@ -128,6 +130,9 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
                   viewState?.focusStatus is OperationInProgress,
               onBack: widget.onBack,
               onSearchInChannel: widget.onSearchInChannel,
+              headerTrailing: _selectedRootPostId == null && !_showMembers
+                  ? widget.headerTrailing
+                  : null,
               onOpenMembers: () {
                 if (showSideThread) {
                   setState(() {
@@ -295,6 +300,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
           final Widget members = ChannelMembersPane(
             channel: channel,
             onClose: () => setState(() => _showMembers = false),
+            headerTrailing: widget.headerTrailing,
           );
           if (showSideThread) {
             return Row(
@@ -328,6 +334,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
           onPostDeleted: (ChannelPost post) =>
               ref.read(_postsProvider.notifier).removePostLocally(post),
           onClose: () => setState(() => _selectedRootPostId = null),
+          headerTrailing: widget.headerTrailing,
         );
         if (showSideThread) {
           final double maximumWidth = (constraints.maxWidth - 360).clamp(
@@ -481,6 +488,7 @@ class _ChannelHeader extends StatelessWidget {
     required this.onBack,
     required this.onSearchInChannel,
     required this.onOpenMembers,
+    required this.headerTrailing,
   });
 
   final SidebarChannel channel;
@@ -488,6 +496,7 @@ class _ChannelHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final ValueChanged<SidebarChannel>? onSearchInChannel;
   final VoidCallback onOpenMembers;
+  final Widget? headerTrailing;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -542,6 +551,7 @@ class _ChannelHeader extends StatelessWidget {
               ),
             ),
           ],
+          ?headerTrailing,
         ],
       ),
     ),
@@ -995,69 +1005,81 @@ class _PostRow extends StatelessWidget {
               top: continuesAuthor ? 2 : 8,
               bottom: continuesAuthor ? 2 : 4,
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                if (continuesAuthor)
-                  const SizedBox(width: 44)
-                else
-                  MessageAvatar(author: post.author),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      if (!continuesAuthor) ...<Widget>[
-                        MessageAuthorLine(
-                          author: post.author,
-                          sentAt: post.sentAt,
-                        ),
-                        const SizedBox(height: 5),
-                      ],
-                      MessageContent(
-                        post: post,
-                        serverUrl: serverUrl,
-                        onSelectChannel: onSelectChannel,
-                        onOpenPostLink: (String postId) =>
-                            unawaited(PostPermalinkRoute.push(context, postId)),
-                        onRichAttachmentAction: (_, _) {},
-                        actionScopeId: actionScopeId,
-                        onRichAttachmentPostUpdated:
-                            onRichAttachmentPostUpdated,
-                        onRichAttachmentGotoLocation:
-                            onRichAttachmentGotoLocation,
-                      ),
-                      if (post.reactions.isNotEmpty) ...<Widget>[
-                        const SizedBox(height: 8),
-                        MessageReactions(
-                          post: post,
-                          semanticsLabel: ChannelPostsStrings.reactions,
-                          onToggle: (PostReaction reaction) =>
-                              onToggleReaction(post, reaction.emojiName),
-                        ),
-                      ],
-                      if (post.replyCount > 0) ...<Widget>[
-                        const SizedBox(height: 6),
-                        Semantics(
-                          button: true,
-                          label: ThreadStrings.replyCount(post.replyCount),
-                          child: TextButton.icon(
-                            onPressed: () => onOpenThread(post),
-                            icon: const Icon(Icons.forum_outlined, size: 18),
-                            label: Text(_threadSummary(context, post)),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                              ),
-                              minimumSize: const Size(44, 44),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AppLayout.readableContentWidth,
                 ),
-              ],
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    if (continuesAuthor)
+                      const SizedBox(width: 44)
+                    else
+                      MessageAvatar(author: post.author),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          if (!continuesAuthor) ...<Widget>[
+                            MessageAuthorLine(
+                              author: post.author,
+                              sentAt: post.sentAt,
+                            ),
+                            const SizedBox(height: 5),
+                          ],
+                          MessageContent(
+                            post: post,
+                            serverUrl: serverUrl,
+                            onSelectChannel: onSelectChannel,
+                            onOpenPostLink: (String postId) => unawaited(
+                              PostPermalinkRoute.push(context, postId),
+                            ),
+                            onRichAttachmentAction: (_, _) {},
+                            actionScopeId: actionScopeId,
+                            onRichAttachmentPostUpdated:
+                                onRichAttachmentPostUpdated,
+                            onRichAttachmentGotoLocation:
+                                onRichAttachmentGotoLocation,
+                          ),
+                          if (post.reactions.isNotEmpty) ...<Widget>[
+                            const SizedBox(height: 8),
+                            MessageReactions(
+                              post: post,
+                              semanticsLabel: ChannelPostsStrings.reactions,
+                              onToggle: (PostReaction reaction) =>
+                                  onToggleReaction(post, reaction.emojiName),
+                            ),
+                          ],
+                          if (post.replyCount > 0) ...<Widget>[
+                            const SizedBox(height: 6),
+                            Semantics(
+                              button: true,
+                              label: ThreadStrings.replyCount(post.replyCount),
+                              child: TextButton.icon(
+                                onPressed: () => onOpenThread(post),
+                                icon: const Icon(
+                                  Icons.forum_outlined,
+                                  size: 18,
+                                ),
+                                label: Text(_threadSummary(context, post)),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                  minimumSize: const Size(44, 44),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

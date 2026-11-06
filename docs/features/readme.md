@@ -19,10 +19,12 @@ mutations preserve content already on screen and report failures without
 resetting the whole view.
 
 Layouts follow available width instead of operating-system checks. Widths below
-700 px use stacked content and bottom navigation. Widths from 700 px through
-1119 px use a navigation rail. At 1120 px and above, the shell can show the
-navigation rail, channel sidebar, and content together. A content pane needs at
-least 800 px before it adds a 380 px side thread.
+700 px use stacked content and bottom navigation. At 700 px and above, the
+channel list header holds icon-only Channels and Inbox destinations before the
+team name. The channel, thread, and sidebar headers share one row, with the
+current-user profile at the right edge. Other destinations keep a global header.
+At 1120 px and above the shell uses the expanded composition. A content pane
+needs at least 800 px before it adds a 380 px side thread.
 
 ## Architecture
 
