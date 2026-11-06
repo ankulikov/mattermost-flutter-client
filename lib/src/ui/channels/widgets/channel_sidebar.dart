@@ -375,9 +375,10 @@ class _SidebarContentState extends State<_SidebarContent> {
                                   _hideReadChannels
                                       ? Icons.visibility_outlined
                                       : Icons.visibility_off_outlined,
+                                  size: 20,
                                   color: _hideReadChannels
-                                      ? colors.primary
-                                      : null,
+                                      ? colors.primary.withValues(alpha: 0.7)
+                                      : colors.onSurfaceVariant,
                                 ),
                               ),
                             ),
@@ -397,9 +398,10 @@ class _SidebarContentState extends State<_SidebarContent> {
                                 _hideFolderHeadings
                                     ? Icons.folder_outlined
                                     : Icons.folder_off_outlined,
+                                size: 20,
                                 color: _hideFolderHeadings
-                                    ? colors.primary
-                                    : null,
+                                    ? colors.primary.withValues(alpha: 0.7)
+                                    : colors.onSurfaceVariant,
                               ),
                             ),
                           ],
