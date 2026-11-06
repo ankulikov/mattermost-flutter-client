@@ -13,6 +13,10 @@ import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
+const RoundedRectangleBorder _sidebarTileShape = RoundedRectangleBorder(
+  borderRadius: BorderRadius.all(Radius.circular(AppSpacing.sm)),
+);
+
 class ChannelSidebar extends ConsumerWidget {
   const ChannelSidebar({
     this.onChannelSelected,
@@ -287,36 +291,41 @@ class _ThreadsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
-    return Material(
-      key: const ValueKey<String>('threads-sidebar-tile'),
-      color: selected ? colors.secondaryContainer : Colors.transparent,
-      shape: const RoundedRectangleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        dense: true,
-        contentPadding: AppLayout.sidebarRowContentPadding,
-        minTileHeight: AppLayout.sidebarRowMinHeight,
-        minVerticalPadding: AppSpacing.xs,
-        selected: selected,
-        shape: const RoundedRectangleBorder(),
-        leading: Icon(
-          Icons.forum_outlined,
-          color: selected
-              ? colors.onSecondaryContainer
-              : colors.onSurfaceVariant,
-        ),
-        title: Text(
-          ChannelSidebarStrings.threads,
-          semanticsLabel: unread
-              ? ChannelSidebarStrings.unreadChannel(
-                  ChannelSidebarStrings.threads,
-                )
-              : ChannelSidebarStrings.threads,
-          style: theme.textTheme.bodyMedium!.copyWith(
-            fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+      child: Material(
+        key: const ValueKey<String>('threads-sidebar-tile'),
+        color: selected ? colors.secondaryContainer : Colors.transparent,
+        shape: _sidebarTileShape,
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppLayout.sidebarLeadingIconInset - AppSpacing.sm,
           ),
+          minTileHeight: AppLayout.sidebarRowMinHeight,
+          minVerticalPadding: AppSpacing.xs,
+          selected: selected,
+          shape: _sidebarTileShape,
+          leading: Icon(
+            Icons.forum_outlined,
+            color: selected
+                ? colors.onSecondaryContainer
+                : colors.onSurfaceVariant,
+          ),
+          title: Text(
+            ChannelSidebarStrings.threads,
+            semanticsLabel: unread
+                ? ChannelSidebarStrings.unreadChannel(
+                    ChannelSidebarStrings.threads,
+                  )
+                : ChannelSidebarStrings.threads,
+            style: theme.textTheme.bodyMedium!.copyWith(
+              fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+          onTap: onTap,
         ),
-        onTap: onTap,
       ),
     );
   }
@@ -650,40 +659,45 @@ class _ChannelTile extends StatelessWidget {
     final bool highlightUnread = channel.isUnread && !muted;
     return Opacity(
       opacity: muted ? 0.55 : 1,
-      child: Material(
-        key: ValueKey<String>('channel-selection-surface-${channel.id}'),
-        color: selected ? colors.secondaryContainer : Colors.transparent,
-        shape: const RoundedRectangleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: ListTile(
-          dense: true,
-          contentPadding: AppLayout.sidebarRowContentPadding,
-          minTileHeight: AppLayout.sidebarRowMinHeight,
-          minVerticalPadding: AppSpacing.xs,
-          selected: selected,
-          shape: const RoundedRectangleBorder(),
-          leading: IconTheme(
-            data: theme.iconTheme.copyWith(
-              color: selected
-                  ? colors.onSecondaryContainer
-                  : highlightUnread
-                  ? colors.onSurface
-                  : colors.onSurfaceVariant,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+        child: Material(
+          key: ValueKey<String>('channel-selection-surface-${channel.id}'),
+          color: selected ? colors.secondaryContainer : Colors.transparent,
+          shape: _sidebarTileShape,
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppLayout.sidebarLeadingIconInset - AppSpacing.sm,
             ),
-            child: ChannelAvatar(channel: channel),
-          ),
-          title: Text(
-            channel.displayName,
-            semanticsLabel: highlightUnread
-                ? ChannelSidebarStrings.unreadChannel(channel.displayName)
-                : channel.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyMedium!.copyWith(
-              fontWeight: highlightUnread ? FontWeight.w600 : FontWeight.w400,
+            minTileHeight: AppLayout.sidebarRowMinHeight,
+            minVerticalPadding: AppSpacing.xs,
+            selected: selected,
+            shape: _sidebarTileShape,
+            leading: IconTheme(
+              data: theme.iconTheme.copyWith(
+                color: selected
+                    ? colors.onSecondaryContainer
+                    : highlightUnread
+                    ? colors.onSurface
+                    : colors.onSurfaceVariant,
+              ),
+              child: ChannelAvatar(channel: channel),
             ),
+            title: Text(
+              channel.displayName,
+              semanticsLabel: highlightUnread
+                  ? ChannelSidebarStrings.unreadChannel(channel.displayName)
+                  : channel.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium!.copyWith(
+                fontWeight: highlightUnread ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+            onTap: onTap,
           ),
-          onTap: onTap,
         ),
       ),
     );

@@ -563,14 +563,16 @@ void main() {
         tester.getSize(threadsTile).width,
         tester.getSize(channelSelectionSurface).width,
       );
-      expect(tester.getSize(search).width, tester.getSize(threadsTile).width);
+      expect(
+        tester.getSize(search).width,
+        tester.getSize(threadsTile).width + 2 * AppSpacing.sm,
+      );
+      final double sidebarWidth = tester
+          .getSize(find.byKey(const PageStorageKey<String>('channel-sidebar')))
+          .width;
       expect(
         tester.getSize(channelSelectionSurface).width,
-        tester
-            .getSize(
-              find.byKey(const PageStorageKey<String>('channel-sidebar')),
-            )
-            .width,
+        sidebarWidth - 2 * AppSpacing.sm,
       );
       expect(
         tester.widget<Text>(find.text(ChannelSidebarStrings.threads)).style,
@@ -581,7 +583,7 @@ void main() {
       expect(
         (tester.widget<Material>(threadsTile).shape! as RoundedRectangleBorder)
             .borderRadius,
-        BorderRadius.zero,
+        BorderRadius.circular(AppSpacing.sm),
       );
       final Finder searchIcon = find.descendant(
         of: search,
@@ -2184,23 +2186,24 @@ void main() {
     expect(material.clipBehavior, Clip.antiAlias);
     expect(
       (material.shape! as RoundedRectangleBorder).borderRadius,
-      BorderRadius.zero,
+      BorderRadius.circular(AppSpacing.sm),
     );
-    expect(
-      tester
-          .widget<ListTile>(
-            find.descendant(
-              of: selectionSurface,
-              matching: find.byType(ListTile),
-            ),
-          )
-          .selectedTileColor,
-      isNull,
-    );
-
     final Finder channelList = find.byKey(
       const PageStorageKey<String>('channel-sidebar'),
     );
+    final Rect selectionRect = tester.getRect(selectionSurface);
+    final Rect listRect = tester.getRect(channelList);
+    expect(selectionRect.left, listRect.left + AppSpacing.sm);
+    expect(selectionRect.right, listRect.right - AppSpacing.sm);
+    final ListTile selectedTile = tester.widget<ListTile>(
+      find.descendant(of: selectionSurface, matching: find.byType(ListTile)),
+    );
+    expect(selectedTile.selectedTileColor, isNull);
+    expect(
+      (selectedTile.shape! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(AppSpacing.sm),
+    );
+
     final ScrollableState scrollable = tester.state<ScrollableState>(
       find.descendant(of: channelList, matching: find.byType(Scrollable)),
     );
@@ -2240,6 +2243,16 @@ void main() {
     );
     expect(tester.getSize(channelTile).height, 40);
     expect(tester.getSize(channelTile).width, greaterThanOrEqualTo(40));
+    final Finder channelSurface = find.byKey(
+      const ValueKey<String>('channel-selection-surface-town-square'),
+    );
+    final InkWell hoverTarget = tester.widget<InkWell>(
+      find.descendant(of: channelSurface, matching: find.byType(InkWell)).first,
+    );
+    expect(
+      (hoverTarget.customBorder! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(AppSpacing.sm),
+    );
   });
 
   testWidgets('highlights unread channels at compact and expanded widths', (
