@@ -17,6 +17,7 @@ import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/features/channel_members/domain/channel_member.dart';
 import 'package:mattermost_flutter/src/features/channel_members/domain/channel_members_repository.dart';
@@ -41,9 +42,16 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.da
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'support/fake_user_repository.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
+  });
+
   Future<void> selectInbox(WidgetTester tester) async {
     final Finder desktop = find.byKey(
       const ValueKey<String>('shell-inbox-destination'),
@@ -2514,6 +2522,72 @@ void main() {
     expect(find.text('EMPTY'), findsNothing);
   });
 
+  testWidgets('restores both sidebar toggles after reopening the app', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Widget app() => ProviderScope(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+        channelRepositoryProvider.overrideWithValue(
+          _ReadFilterSidebarRepository(),
+        ),
+      ],
+      child: const MaterialApp(home: BootstrapPage()),
+    );
+
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Hide folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Read channel'), findsNothing);
+    expect(find.text('MIXED'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Show read channels'), findsOneWidget);
+    expect(find.byTooltip('Show folder headings'), findsOneWidget);
+    expect(find.text('Read channel'), findsNothing);
+    expect(find.text('MIXED'), findsNothing);
+    expect(find.text('Unread channel'), findsOneWidget);
+  });
+
+  testWidgets('restores the previous filter when saving fails', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _ReadFilterSidebarRepository(),
+          ),
+          sidebarViewPreferencesRepositoryProvider.overrideWithValue(
+            _FailingSidebarPreferencesRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('Read channel'), findsOneWidget);
+    expect(find.byTooltip('Hide read channels'), findsOneWidget);
+    expect(
+      find.text(ChannelSidebarStrings.preferencesSaveFailed),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('read filter explains an empty unread list', (
     WidgetTester tester,
   ) async {
@@ -3315,6 +3389,19 @@ final class _SignedInRepository implements AuthRepository {
 
   @override
   Future<void> signOut() async {}
+}
+
+final class _FailingSidebarPreferencesRepository
+    implements SidebarViewPreferencesRepository {
+  @override
+  Future<SidebarViewPreferences> read(String accountScopeId) async =>
+      const SidebarViewPreferences();
+
+  @override
+  Future<void> write(
+    String accountScopeId,
+    SidebarViewPreferences preferences,
+  ) async => throw StateError('storage failed');
 }
 
 final class _CurrentProfileRepository implements CurrentUserProfileRepository {
