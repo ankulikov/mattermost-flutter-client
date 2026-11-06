@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2522,6 +2523,172 @@ void main() {
     expect(find.text('EMPTY'), findsNothing);
   });
 
+  testWidgets('favorites stay visible above read filtering and show a star', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(ChannelSidebarStrings.hideReadChannels));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Town Square'), findsOneWidget);
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-favorite-star-town-square')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip(ChannelSidebarStrings.hideFolderHeadings));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('channel-favorite-star-town-square')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('secondary click opens actions for a channel', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _ReadFilterSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.text('Unread channel')),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mark as unread'), findsOneWidget);
+    expect(find.text('Add to favorites'), findsOneWidget);
+    expect(find.text('Mute channel'), findsOneWidget);
+    expect(find.text('Move to…'), findsOneWidget);
+    expect(find.text('Close conversation'), findsNothing);
+  });
+
+  testWidgets('favorite dialog menu offers removal and close', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.text('Ada Lovelace')),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text(ChannelSidebarStrings.removeFavorite), findsOneWidget);
+    expect(find.text(ChannelSidebarStrings.closeConversation), findsOneWidget);
+  });
+
+  testWidgets('keyboard context shortcut opens channel actions', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _ReadFilterSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Focus.of(
+      tester.element(
+        find.byKey(const ValueKey<String>('channel-selection-surface-unread')),
+      ),
+    ).requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(find.text(ChannelSidebarStrings.markUnread), findsOneWidget);
+  });
+
+  testWidgets('channel menu runs actions and lists empty folders', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _ReadFilterSidebarRepository repository =
+        _ReadFilterSidebarRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> openMenu() async {
+      final TestGesture gesture = await tester.startGesture(
+        tester.getCenter(find.text('Unread channel')),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    await openMenu();
+    await tester.tap(find.text(ChannelSidebarStrings.markUnread));
+    await tester.pumpAndSettle();
+    expect(repository.lastAction, 'unread:unread');
+
+    await openMenu();
+    await tester.tap(find.text(ChannelSidebarStrings.moveTo));
+    await tester.pumpAndSettle();
+    expect(find.text('Empty folder'), findsOneWidget);
+    await tester.tap(find.text('Empty folder'));
+    await tester.pumpAndSettle();
+    expect(repository.lastAction, 'move:unread:empty');
+  });
+
   testWidgets('restores both sidebar toggles after reopening the app', (
     WidgetTester tester,
   ) async {
@@ -2899,6 +3066,13 @@ void main() {
     expect(find.text('FAVORITES'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(find.byTooltip('Hide read channels'), findsOneWidget);
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-favorite-star-town-square')),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Refresh channels'), findsNothing);
     expect(
       tester
@@ -3453,6 +3627,7 @@ final class _SidebarRepository implements ChannelRepository {
           SidebarSection(
             id: 'favorites',
             displayName: 'Favorites',
+            favorites: true,
             channels: <SidebarChannel>[
               SidebarChannel(
                 id: 'town-square',
@@ -3506,6 +3681,7 @@ final class _DirectMessageSidebarRepository implements ChannelRepository {
           SidebarSection(
             id: 'favorites',
             displayName: 'Favorites',
+            favorites: true,
             channels: <SidebarChannel>[_townSquare, _directGrace],
           ),
         ],
@@ -3798,7 +3974,62 @@ final class _CollapsedMutedSidebarRepository
       );
 }
 
-final class _ReadFilterSidebarRepository implements ChannelRepository {
+final class _ReadFilterSidebarRepository
+    implements ChannelRepository, ChannelSidebarActionsRepository {
+  String? lastAction;
+
+  @override
+  Future<List<SidebarSection>> getMovableCategories(
+    AuthSession session,
+    String teamId,
+  ) async => const <SidebarSection>[
+    SidebarSection(
+      id: 'empty',
+      displayName: 'Empty folder',
+      channels: <SidebarChannel>[],
+      serverCategory: true,
+    ),
+    SidebarSection(
+      id: 'mixed',
+      displayName: 'Mixed',
+      channels: <SidebarChannel>[],
+      serverCategory: true,
+    ),
+  ];
+
+  @override
+  Future<void> markChannelUnread(AuthSession session, String channelId) async =>
+      lastAction = 'unread:$channelId';
+
+  @override
+  Future<void> setChannelFavorite(
+    AuthSession session,
+    String teamId,
+    SidebarChannel channel,
+    bool favorite,
+  ) async => lastAction = 'favorite:${channel.id}:$favorite';
+
+  @override
+  Future<void> setChannelMuted(
+    AuthSession session,
+    String channelId,
+    bool muted,
+  ) async => lastAction = 'mute:$channelId:$muted';
+
+  @override
+  Future<void> moveChannelToCategory(
+    AuthSession session,
+    String teamId,
+    String channelId,
+    String categoryId,
+  ) async => lastAction = 'move:$channelId:$categoryId';
+
+  @override
+  Future<void> closeConversation(
+    AuthSession session,
+    SidebarChannel channel,
+  ) async => lastAction = 'close:${channel.id}';
+
   @override
   Future<SidebarChannel> openDirectMessage({
     required String currentUserId,
@@ -3809,6 +4040,7 @@ final class _ReadFilterSidebarRepository implements ChannelRepository {
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
       const ChannelSidebarSnapshot(
+        team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
         sections: <SidebarSection>[
           SidebarSection(
             id: 'empty',

@@ -50,9 +50,109 @@ void main() {
       expect(snapshot.sections.first.channels.first.muted, isFalse);
     },
   );
+
+  test(
+    'channel actions use posts, notifications, and server categories',
+    () async {
+      final _FakeMattermostApi api = _FakeMattermostApi();
+      final MattermostChannelRepository repository =
+          MattermostChannelRepository(api: api, users: FakeUserRepository());
+      final AuthSession session = AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      );
+      await repository.markChannelUnread(session, 'town-square');
+      expect(api.unreadPostId, 'post-1');
+
+      await repository.setChannelMuted(session, 'town-square', true);
+      expect(api.mutedChannelId, 'town-square');
+
+      await repository.setChannelFavorite(
+        session,
+        'team-1',
+        const SidebarChannel(
+          id: 'town-square',
+          teamId: 'team-1',
+          name: 'town-square',
+          displayName: 'Town Square',
+          kind: ChannelKind.publicChannel,
+        ),
+        true,
+      );
+      expect(api.movedCategoryId, 'favorites');
+    },
+  );
+
+  test(
+    'closing a direct conversation persists and hides it on reload',
+    () async {
+      final _FakeMattermostApi api = _FakeMattermostApi();
+      final MattermostChannelRepository repository =
+          MattermostChannelRepository(api: api, users: FakeUserRepository());
+      final AuthSession session = AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      );
+      final SidebarChannel direct = (await repository.load(
+        session,
+      )).sections.first.channels.first;
+      await repository.closeConversation(session, direct);
+      expect(api.savedPreferences.single.category, 'direct_channel_show');
+      expect(api.savedPreferences.single.value, 'false');
+      final ChannelSidebarSnapshot reloaded = await repository.load(session);
+      expect(
+        reloaded.sections
+            .expand((SidebarSection section) => section.channels)
+            .any((SidebarChannel channel) => channel.id == direct.id),
+        isFalse,
+      );
+    },
+  );
 }
 
 final class _FakeMattermostApi implements MattermostApi {
+  String? unreadPostId;
+  String? mutedChannelId;
+  String? movedCategoryId;
+  final List<MattermostPreferenceDto> savedPreferences =
+      <MattermostPreferenceDto>[];
+
+  @override
+  Future<void> markPostUnread({
+    required String userId,
+    required String postId,
+  }) async => unreadPostId = postId;
+
+  @override
+  Future<void> setChannelNotificationsMuted({
+    required String userId,
+    required String channelId,
+    required bool muted,
+  }) async => mutedChannelId = channelId;
+
+  @override
+  Future<void> moveChannelToSidebarCategory({
+    required String userId,
+    required String teamId,
+    required String channelId,
+    required String categoryId,
+  }) async => movedCategoryId = categoryId;
+
+  @override
+  Future<void> savePreferences({
+    required String userId,
+    required List<MattermostPreferenceDto> preferences,
+  }) async => savedPreferences.addAll(preferences);
+
+  @override
+  Future<List<MattermostPreferenceDto>> getPreferencesByCategory({
+    required String userId,
+    required String category,
+  }) async => savedPreferences
+      .where((MattermostPreferenceDto value) => value.category == category)
+      .toList(growable: false);
   @override
   Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames) =>
       throw UnimplementedError();
@@ -162,6 +262,16 @@ final class _FakeMattermostApi implements MattermostApi {
           channelIds: <String>['direct-1', 'town-square'],
           muted: false,
         ),
+        MattermostChannelCategoryDto(
+          id: 'favorites',
+          userId: 'me',
+          teamId: 'team-1',
+          type: 'favorites',
+          displayName: 'Favorites',
+          sorting: 'manual',
+          channelIds: <String>[],
+          muted: false,
+        ),
       ],
       order: <String>['category-1'],
     );
@@ -219,7 +329,13 @@ final class _FakeMattermostApi implements MattermostApi {
     int page = 0,
     int perPage = 60,
     String? etag,
-  }) => throw UnimplementedError();
+  }) async => const MattermostPostListDto(
+    order: <String>['post-1'],
+    posts: <String, MattermostPostDto>{},
+    nextPostId: '',
+    previousPostId: '',
+    hasNext: false,
+  );
 
   @override
   Future<MattermostPostListDto> getPostsBefore({

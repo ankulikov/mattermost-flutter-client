@@ -21,6 +21,37 @@ abstract interface class ChannelSidebarCategoryRepository {
   });
 }
 
+abstract interface class ChannelSidebarActionsRepository {
+  Future<List<SidebarSection>> getMovableCategories(
+    AuthSession session,
+    String teamId,
+  );
+
+  Future<void> markChannelUnread(AuthSession session, String channelId);
+
+  Future<void> setChannelFavorite(
+    AuthSession session,
+    String teamId,
+    SidebarChannel channel,
+    bool favorite,
+  );
+
+  Future<void> setChannelMuted(
+    AuthSession session,
+    String channelId,
+    bool muted,
+  );
+
+  Future<void> moveChannelToCategory(
+    AuthSession session,
+    String teamId,
+    String channelId,
+    String categoryId,
+  );
+
+  Future<void> closeConversation(AuthSession session, SidebarChannel channel);
+}
+
 /// Optional realtime capability for a channel sidebar repository.
 ///
 /// Keeping this separate from [ChannelRepository] leaves simple/offline
