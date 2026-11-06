@@ -2369,7 +2369,7 @@ void main() {
         find.text('Muted unread channel'),
       );
 
-      expect(unread.style?.fontWeight, FontWeight.w600);
+      expect(unread.style?.fontWeight, FontWeight.w400);
       expect(unread.semanticsLabel, 'Unread channel, unread');
       expect(read.style?.fontWeight, FontWeight.w400);
       expect(mutedUnread.style?.fontWeight, FontWeight.w400);

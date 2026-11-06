@@ -9,9 +9,9 @@ the authenticated shell is using it.
 The initial request loads the user's first team, its channels, channel
 memberships, and sidebar categories. Membership read counters are compared with
 the channel totals: ordinary channels use the CRT root counters, while direct
-and group conversations use the full-message counters. Unread channel names and
-icons use the emphasized sidebar treatment; muted channels retain the muted
-treatment.
+and group conversations use the full-message counters. Unmuted unread channels
+use a dot and an emphasized icon; their names keep the regular weight. Muted
+channels retain the muted treatment.
 
 Unread state is updated from `posted`, `channel_viewed`, and `post_unread`
 WebSocket events. A reconnect or sequence gap performs an authoritative REST

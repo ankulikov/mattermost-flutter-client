@@ -749,9 +749,7 @@ class _ChannelTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium!.copyWith(
                       fontSize: 13,
-                      fontWeight: highlightUnread
-                          ? FontWeight.w600
-                          : FontWeight.w400,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                 ),
