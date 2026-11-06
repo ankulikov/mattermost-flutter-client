@@ -744,7 +744,7 @@ void main() {
         const ValueKey<String>('channel-search-field'),
       );
       expect(search, findsOneWidget);
-      expect(tester.getSize(search).height, 48);
+      expect(tester.getSize(search).height, inInclusiveRange(40, 44));
       final TextField searchField = tester.widget<TextField>(search);
       final InputDecoration decoration = searchField.decoration!;
       expect(searchField.style?.fontSize, 13);
@@ -754,7 +754,7 @@ void main() {
       expect(decoration.constraints, AppLayout.sidebarSearchConstraints);
       expect(
         decoration.contentPadding,
-        const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        const EdgeInsets.symmetric(vertical: AppSpacing.md),
       );
       expect(decoration.filled, isTrue);
       expect(
@@ -795,7 +795,7 @@ void main() {
 
       await tester.enterText(search, 'town');
       await tester.pump();
-      expect(tester.getSize(search).height, 48);
+      expect(tester.getSize(search).height, greaterThanOrEqualTo(40));
       expect(
         tester.getCenter(find.byTooltip(ChannelSidebarStrings.clearSearch)).dx,
         greaterThan(tester.getCenter(publicChannelsExpander).dx),

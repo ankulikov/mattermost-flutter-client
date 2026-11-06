@@ -22,8 +22,7 @@ abstract final class AppLayout {
   static const double sidebarLeadingIconInset = AppSpacing.xxxl;
   static const double sidebarSearchIconSlotWidth =
       sidebarLeadingIconInset - sidebarItemInset + AppSpacing.xxl;
-  static const double sidebarSearchMinHeight =
-      sidebarRowMinHeight + AppSpacing.sm;
+  static const double sidebarSearchMinHeight = sidebarRowMinHeight;
 
   /// Shared horizontal grid for the search, Threads, and channel rows.
   static const EdgeInsets sidebarSearchPadding = EdgeInsets.fromLTRB(
