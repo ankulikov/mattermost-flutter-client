@@ -213,7 +213,7 @@ class _SidebarContentState extends State<_SidebarContent> {
               fillColor: colors.surface,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
-                vertical: AppSpacing.sm,
+                vertical: AppSpacing.md,
               ),
               constraints: AppLayout.sidebarSearchConstraints,
               prefixIcon: const Padding(
