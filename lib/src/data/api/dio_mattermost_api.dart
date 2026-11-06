@@ -173,6 +173,15 @@ final class DioMattermostApi
   );
 
   @override
+  Future<void> leaveChannel({
+    required String channelId,
+    required String userId,
+  }) => _delete(
+    '/channels/${Uri.encodeComponent(channelId)}'
+    '/members/${Uri.encodeComponent(userId)}',
+  );
+
+  @override
   Future<List<MattermostChannelMemberDto>> getChannelMembersForUser({
     required String userId,
     required String teamId,

@@ -151,6 +151,12 @@ final class MattermostChannelRepository
   }
 
   @override
+  Future<void> leaveChannel(AuthSession session, SidebarChannel channel) {
+    if (channel.isDialog) throw ArgumentError.value(channel.kind, 'kind');
+    return _api.leaveChannel(channelId: channel.id, userId: session.userId);
+  }
+
+  @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async {
     final List<MattermostTeamDto> teams = await _api.getTeamsForCurrentUser();
     if (teams.isEmpty) return const ChannelSidebarSnapshot();

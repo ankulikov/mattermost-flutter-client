@@ -67,6 +67,10 @@ conversations also offer Close conversation, which hides that conversation for
 the current user without deleting its messages. These actions persist through
 Mattermost API v4 and refresh the network-first sidebar after success; failures
 leave the current list usable and show an error.
+Public and private channels offer a final Leave channel action. It asks for
+confirmation, warns that private channels require a new invitation to rejoin,
+then removes the current user's channel membership. Town Square omits this
+action because Mattermost does not allow members to leave its default channel.
 
 ## Direct-message avatars
 

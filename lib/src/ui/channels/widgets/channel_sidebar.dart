@@ -19,7 +19,7 @@ const RoundedRectangleBorder _sidebarTileShape = RoundedRectangleBorder(
   borderRadius: BorderRadius.all(Radius.circular(AppSpacing.sm)),
 );
 
-enum _ChannelMenuAction { unread, favorite, mute, move, close }
+enum _ChannelMenuAction { unread, favorite, mute, move, close, leave }
 
 class ChannelSidebar extends ConsumerWidget {
   const ChannelSidebar({
@@ -708,14 +708,24 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
           ChannelSidebarStrings.moveTo,
           trailing: Icons.chevron_right,
         ),
-        if (channel.isDialog) ...<PopupMenuEntry<_ChannelMenuAction>>[
+        if (channel.isDialog ||
+            channel.name !=
+                'town-square') ...<PopupMenuEntry<_ChannelMenuAction>>[
           const PopupMenuDivider(),
-          _channelMenuItem(
-            _ChannelMenuAction.close,
-            Icons.logout,
-            ChannelSidebarStrings.closeConversation,
-            destructive: true,
-          ),
+          if (channel.isDialog)
+            _channelMenuItem(
+              _ChannelMenuAction.close,
+              Icons.logout,
+              ChannelSidebarStrings.closeConversation,
+              destructive: true,
+            )
+          else
+            _channelMenuItem(
+              _ChannelMenuAction.leave,
+              Icons.logout,
+              ChannelSidebarStrings.leaveChannel,
+              destructive: true,
+            ),
         ],
       ],
     );
@@ -761,6 +771,31 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
           }
         case _ChannelMenuAction.close:
           await controller.closeConversation(channel);
+        case _ChannelMenuAction.leave:
+          final bool? confirmed = await showDialog<bool>(
+            context: context,
+            builder: (BuildContext context) => AlertDialog(
+              title: const Text(ChannelSidebarStrings.leaveChannelTitle),
+              content: Text(
+                channel.kind == ChannelKind.privateChannel
+                    ? ChannelSidebarStrings.leavePrivateChannelDescription
+                    : ChannelSidebarStrings.leaveChannelDescription,
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text(ChannelSidebarStrings.cancel),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text(ChannelSidebarStrings.confirmLeaveChannel),
+                ),
+              ],
+            ),
+          );
+          if (confirmed == true && mounted) {
+            await controller.leaveChannel(channel);
+          }
       }
     } on Object {
       if (!mounted) return;
