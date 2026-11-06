@@ -180,6 +180,7 @@ class _SidebarContentState extends State<_SidebarContent> {
   @override
   Widget build(BuildContext context) {
     final List<SidebarSection> filteredSections = _filteredSections;
+    final ColorScheme colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -193,7 +194,7 @@ class _SidebarContentState extends State<_SidebarContent> {
             padding: AppLayout.sidebarBannerPadding,
           ),
         Padding(
-          padding: AppLayout.sidebarSearchVerticalPadding,
+          padding: AppLayout.sidebarSearchPadding,
           child: TextField(
             key: const ValueKey<String>('channel-search-field'),
             controller: _searchController,
@@ -205,6 +206,12 @@ class _SidebarContentState extends State<_SidebarContent> {
             onTapOutside: (_) => _searchFocusNode.unfocus(),
             decoration: InputDecoration(
               hintText: ChannelSidebarStrings.searchHint,
+              filled: true,
+              fillColor: colors.surface,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: AppSpacing.sm,
+              ),
               constraints: AppLayout.sidebarSearchConstraints,
               prefixIcon: const Padding(
                 padding: AppLayout.sidebarSearchIconPadding,
@@ -223,15 +230,14 @@ class _SidebarContentState extends State<_SidebarContent> {
                       ),
                     )
                   : null,
-              // hack to fix text alignment, don't replace with `InputBorder.none`
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(width: 0, style: BorderStyle.none),
-                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: colors.outlineVariant),
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
                 gapPadding: 0,
               ),
               focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(width: 0, style: BorderStyle.none),
-                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: colors.primary, width: 2),
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
                 gapPadding: 0,
               ),
             ),
@@ -292,7 +298,9 @@ class _ThreadsTile extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppLayout.sidebarItemInset,
+      ),
       child: Material(
         key: const ValueKey<String>('threads-sidebar-tile'),
         color: selected ? colors.secondaryContainer : Colors.transparent,
@@ -301,7 +309,8 @@ class _ThreadsTile extends StatelessWidget {
         child: ListTile(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: AppLayout.sidebarLeadingIconInset - AppSpacing.sm,
+            horizontal:
+                AppLayout.sidebarLeadingIconInset - AppLayout.sidebarItemInset,
           ),
           minTileHeight: AppLayout.sidebarRowMinHeight,
           minVerticalPadding: AppSpacing.xs,
@@ -660,7 +669,9 @@ class _ChannelTile extends StatelessWidget {
     return Opacity(
       opacity: muted ? 0.55 : 1,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppLayout.sidebarItemInset,
+        ),
         child: Material(
           key: ValueKey<String>('channel-selection-surface-${channel.id}'),
           color: selected ? colors.secondaryContainer : Colors.transparent,
@@ -669,7 +680,9 @@ class _ChannelTile extends StatelessWidget {
           child: ListTile(
             dense: true,
             contentPadding: const EdgeInsets.symmetric(
-              horizontal: AppLayout.sidebarLeadingIconInset - AppSpacing.sm,
+              horizontal:
+                  AppLayout.sidebarLeadingIconInset -
+                  AppLayout.sidebarItemInset,
             ),
             minTileHeight: AppLayout.sidebarRowMinHeight,
             minVerticalPadding: AppSpacing.xs,
