@@ -571,6 +571,13 @@ void main() {
                   find.byKey(const ValueKey<String>('read-channel-filter')),
                 )
                 .width +
+            tester
+                .getSize(
+                  find.byKey(
+                    const ValueKey<String>('folder-visibility-toggle'),
+                  ),
+                )
+                .width +
             AppSpacing.xs,
         tester.getSize(threadsTile).width,
       );
@@ -2435,19 +2442,25 @@ void main() {
       );
       final double threadsTop = tester.getRect(threads).top;
       final Finder hideRead = find.byTooltip('Hide read channels');
+      final Finder folderToggle = find.byKey(
+        const ValueKey<String>('folder-visibility-toggle'),
+      );
       expect(hideRead, findsOneWidget);
+      expect(folderToggle, findsOneWidget);
       expect(tester.getSize(hideRead).width, greaterThanOrEqualTo(40));
 
       await tester.tap(search);
       await tester.pumpAndSettle();
-      expect(tester.getSize(search).width, greaterThan(idleWidth + 40));
+      expect(tester.getSize(search).width, greaterThan(idleWidth + 80));
       expect(hideRead, findsNothing);
+      expect(folderToggle, findsNothing);
       expect(tester.getRect(threads).top, threadsTop);
 
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
       expect(tester.getSize(search).width, idleWidth);
       expect(hideRead, findsOneWidget);
+      expect(folderToggle, findsOneWidget);
     }
   });
 
@@ -2482,6 +2495,17 @@ void main() {
     expect(find.text('Read channel'), findsNothing);
     expect(find.text('Unread channel'), findsOneWidget);
     expect(find.byTooltip('Show read channels'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Hide folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('MIXED'), findsNothing);
+    expect(find.text('Unread channel'), findsOneWidget);
+    expect(find.text('Read channel'), findsNothing);
+
+    await tester.tap(find.byTooltip('Show folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('MIXED'), findsOneWidget);
+    expect(find.text('Read channel'), findsNothing);
 
     await tester.tap(find.byTooltip('Show read channels'));
     await tester.pumpAndSettle();
@@ -2519,6 +2543,90 @@ void main() {
     expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
     expect(find.text('DIRECT MESSAGES'), findsOneWidget);
   });
+
+  testWidgets('folder button shows a flat list and restores collapsed groups', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _SearchSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
+    expect(find.text('DIRECT MESSAGES'), findsOneWidget);
+    expect(find.text('Town Square'), findsNothing);
+
+    await tester.tap(find.byTooltip('Hide folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('PUBLIC CHANNELS'), findsNothing);
+    expect(find.text('DIRECT MESSAGES'), findsNothing);
+    expect(find.text('Town Square'), findsOneWidget);
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(find.text('Grace Hopper'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Show folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
+    expect(find.text('DIRECT MESSAGES'), findsOneWidget);
+    expect(find.text('Town Square'), findsNothing);
+  });
+
+  testWidgets(
+    'two sidebar buttons fit the narrowest pane at large text scale',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _UnreadSidebarRepository(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: BootstrapPage(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(
+        find.byKey(const ValueKey<String>('channels-pane-divider')),
+        const Offset(-120, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey<String>('channels-side-pane')))
+            .width,
+        200,
+      );
+      expect(find.byTooltip('Hide read channels'), findsOneWidget);
+      expect(find.byTooltip('Hide folder headings'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('channel-search-field')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Hide folder headings'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('applies collapsed and muted category presentation', (
     WidgetTester tester,
