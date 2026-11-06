@@ -519,7 +519,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Example team'), findsOneWidget);
-    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('FAVORITES'), findsOneWidget);
     expect(find.text('Town Square'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(
@@ -574,9 +574,10 @@ void main() {
       );
       expect(
         tester.widget<Text>(find.text(ChannelSidebarStrings.threads)).style,
-        Theme.of(
-          tester.element(threadsTile),
-        ).textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.w600),
+        Theme.of(tester.element(threadsTile)).textTheme.bodyMedium!.copyWith(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
       );
       expect(
         (tester.widget<Material>(threadsTile).shape! as RoundedRectangleBorder)
@@ -746,7 +747,7 @@ void main() {
       expect(tester.getSize(search).height, 48);
       final TextField searchField = tester.widget<TextField>(search);
       final InputDecoration decoration = searchField.decoration!;
-      expect(searchField.style, isNull);
+      expect(searchField.style?.fontSize, 13);
       expect(searchField.textAlignVertical, isNull);
       expect(decoration.hintStyle, isNull);
       expect(decoration.isDense, isTrue);
@@ -770,12 +771,12 @@ void main() {
         (decoration.enabledBorder! as OutlineInputBorder).borderSide.style,
         BorderStyle.solid,
       );
-      expect(find.text('Public channels'), findsOneWidget);
+      expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
       expect(find.text('Town Square'), findsNothing);
-      expect(find.text('Direct messages'), findsOneWidget);
+      expect(find.text('DIRECT MESSAGES'), findsOneWidget);
       expect(find.text('Ada Lovelace'), findsOneWidget);
       final Finder publicChannelsHeader = find.ancestor(
-        of: find.text('Public channels'),
+        of: find.text('PUBLIC CHANNELS'),
         matching: find.byType(ListTile),
       );
       final Finder publicChannelsExpander = find.descendant(
@@ -799,9 +800,9 @@ void main() {
         tester.getCenter(find.byTooltip(ChannelSidebarStrings.clearSearch)).dx,
         greaterThan(tester.getCenter(publicChannelsExpander).dx),
       );
-      expect(find.text('Public channels'), findsOneWidget);
+      expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
       expect(find.text('Town Square'), findsOneWidget);
-      expect(find.text('Direct messages'), findsNothing);
+      expect(find.text('DIRECT MESSAGES'), findsNothing);
       expect(find.text('Ada Lovelace'), findsNothing);
       expect(
         find.byKey(const ValueKey<String>('threads-sidebar-tile')),
@@ -815,9 +816,9 @@ void main() {
 
       await tester.tap(find.byTooltip(ChannelSidebarStrings.clearSearch));
       await tester.pump();
-      expect(find.text('Public channels'), findsOneWidget);
+      expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
       expect(find.text('Town Square'), findsNothing);
-      expect(find.text('Direct messages'), findsOneWidget);
+      expect(find.text('DIRECT MESSAGES'), findsOneWidget);
       expect(find.text('Ada Lovelace'), findsOneWidget);
       expect(find.byTooltip(ChannelSidebarStrings.clearSearch), findsNothing);
       expect(
@@ -827,8 +828,8 @@ void main() {
 
       await tester.enterText(search, 'ada');
       await tester.pump();
-      expect(find.text('Public channels'), findsNothing);
-      expect(find.text('Direct messages'), findsOneWidget);
+      expect(find.text('PUBLIC CHANNELS'), findsNothing);
+      expect(find.text('DIRECT MESSAGES'), findsOneWidget);
       expect(find.text('Ada Lovelace'), findsOneWidget);
       expect(find.text('Grace Hopper'), findsNothing);
 
@@ -2150,11 +2151,11 @@ void main() {
     expect(find.text('Channel 199'), findsNothing);
     expect(find.byType(ListTile).evaluate().length, lessThan(30));
 
-    await tester.tap(find.text('Large category'));
+    await tester.tap(find.text('LARGE CATEGORY'));
     await tester.pumpAndSettle();
     expect(find.text('Channel 0'), findsNothing);
 
-    await tester.tap(find.text('Large category'));
+    await tester.tap(find.text('LARGE CATEGORY'));
     await tester.pumpAndSettle();
     expect(find.text('Channel 0'), findsOneWidget);
     expect(find.byType(ListTile).evaluate().length, lessThan(30));
@@ -2262,6 +2263,7 @@ void main() {
     final ListTile channelRow = tester.widget<ListTile>(channelTile);
     expect(channelRow.horizontalTitleGap, AppSpacing.xs);
     expect(channelRow.minLeadingWidth, 20);
+    expect(tester.widget<Text>(find.text('Town Square')).style?.fontSize, 13);
     expect(
       tester
           .widget<ChannelAvatar>(
@@ -2271,7 +2273,21 @@ void main() {
             ),
           )
           .size,
-      20,
+      18,
+    );
+    final Finder directMessageTile = find.ancestor(
+      of: find.text('Ada Lovelace'),
+      matching: find.byType(ListTile),
+    );
+    final Finder directMessageAvatar = find.descendant(
+      of: directMessageTile,
+      matching: find.byType(ChannelAvatar),
+    );
+    expect(tester.widget<ChannelAvatar>(directMessageAvatar).size, 16);
+    expect(
+      tester.getRect(find.text('Ada Lovelace')).left -
+          tester.getRect(directMessageAvatar).right,
+      greaterThanOrEqualTo(6),
     );
     final Finder channelSurface = find.byKey(
       const ValueKey<String>('channel-selection-surface-town-square'),
@@ -2303,6 +2319,7 @@ void main() {
     expect(groupRow.leading, isNotNull);
     expect(groupRow.trailing, isNull);
     expect(groupRow.horizontalTitleGap, AppSpacing.xs);
+    expect(find.text('FAVORITES'), findsOneWidget);
     expect(tester.getSize(groupSurface).height, greaterThanOrEqualTo(40));
     expect(
       (tester.widget<Material>(groupSurface).shape! as RoundedRectangleBorder)
@@ -2395,14 +2412,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Muted category'), findsOneWidget);
+    expect(find.text('MUTED CATEGORY'), findsOneWidget);
     expect(find.text('Quiet channel'), findsNothing);
     expect(find.text('Unread in category'), findsNothing);
     expect(
       tester
           .widgetList<Opacity>(
             find.ancestor(
-              of: find.text('Muted category'),
+              of: find.text('MUTED CATEGORY'),
               matching: find.byType(Opacity),
             ),
           )
@@ -2410,7 +2427,7 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     expect(find.text('Quiet channel'), findsOneWidget);
     expect(
@@ -2444,12 +2461,12 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Muted unread channel'), findsOneWidget);
-    await tester.tap(find.text('Channels').last);
+    await tester.tap(find.text('CHANNELS'));
     await tester.pumpAndSettle();
     expect(find.text('Unread channel'), findsOneWidget);
     expect(find.text('Muted unread channel'), findsNothing);
     expect(find.text('Read channel'), findsNothing);
-    await tester.tap(find.text('Channels').last);
+    await tester.tap(find.text('CHANNELS'));
     await tester.pumpAndSettle();
     expect(find.text('Muted unread channel'), findsOneWidget);
   });
@@ -2471,11 +2488,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Unread in category'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     final ProviderContainer container = ProviderScope.containerOf(
       tester.element(find.byType(ChannelSidebar)),
@@ -2531,7 +2548,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     expect(repository.lastCollapsed, isFalse);
     expect(find.text('Quiet channel'), findsOneWidget);
@@ -2540,11 +2557,11 @@ void main() {
       find.text('Category changed locally; could not sync with server.'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     expect(repository.lastCollapsed, isTrue);
     expect(find.text('Quiet channel'), findsNothing);
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     expect(find.text('Quiet channel'), findsOneWidget);
   });
@@ -2570,7 +2587,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('FAVORITES'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(find.byTooltip('Refresh channels'), findsNothing);
     expect(
