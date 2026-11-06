@@ -171,12 +171,84 @@ final class ChannelSidebarController
             muted: section.muted,
             sorting: section.sorting,
             serverCategory: section.serverCategory,
+            favorites: section.favorites,
           );
         })
         .toList(growable: false);
     state = AsyncData(
       current.copyWith(snapshot: current.snapshot.copyWith(sections: sections)),
     );
+  }
+
+  Future<void> markChannelUnread(String channelId) => _runChannelAction(
+    (ChannelSidebarActionsRepository repository, AuthSession session) =>
+        repository.markChannelUnread(session, channelId),
+  );
+
+  Future<List<SidebarSection>> getMovableCategories() async {
+    final AuthSession? session = _session;
+    final ChannelRepository? repository = _repository;
+    final String? teamId = state.value?.snapshot.team?.id;
+    if (session == null ||
+        teamId == null ||
+        repository is! ChannelSidebarActionsRepository) {
+      throw StateError('Channel actions are unavailable');
+    }
+    return _cancellation.run(
+      () => (repository as ChannelSidebarActionsRepository)
+          .getMovableCategories(session, teamId),
+    );
+  }
+
+  Future<void> setChannelFavorite(SidebarChannel channel, bool favorite) {
+    final String teamId = state.value?.snapshot.team?.id ?? '';
+    return _runChannelAction(
+      (ChannelSidebarActionsRepository repository, AuthSession session) =>
+          repository.setChannelFavorite(session, teamId, channel, favorite),
+    );
+  }
+
+  Future<void> setChannelMuted(String channelId, bool muted) =>
+      _runChannelAction(
+        (ChannelSidebarActionsRepository repository, AuthSession session) =>
+            repository.setChannelMuted(session, channelId, muted),
+      );
+
+  Future<void> moveChannelToCategory(String channelId, String categoryId) {
+    final String teamId = state.value?.snapshot.team?.id ?? '';
+    return _runChannelAction(
+      (ChannelSidebarActionsRepository repository, AuthSession session) =>
+          repository.moveChannelToCategory(
+            session,
+            teamId,
+            channelId,
+            categoryId,
+          ),
+    );
+  }
+
+  Future<void> closeConversation(SidebarChannel channel) async {
+    await _runChannelAction(
+      (ChannelSidebarActionsRepository repository, AuthSession session) =>
+          repository.closeConversation(session, channel),
+    );
+    if (ref.read(selectedChannelProvider)?.id == channel.id) {
+      ref.read(selectedChannelProvider.notifier).clear();
+    }
+  }
+
+  Future<void> _runChannelAction(
+    Future<void> Function(ChannelSidebarActionsRepository, AuthSession) action,
+  ) async {
+    final AuthSession? session = _session;
+    final ChannelRepository? repository = _repository;
+    if (session == null || repository is! ChannelSidebarActionsRepository) {
+      throw StateError('Channel actions are unavailable');
+    }
+    await _cancellation.run(
+      () => action(repository as ChannelSidebarActionsRepository, session),
+    );
+    await refresh();
   }
 
   Future<void> openDirectMessage(UserProfile profile) async {
@@ -329,6 +401,7 @@ final class ChannelSidebarController
             channels: channels,
             collapsed: section.collapsed,
             serverCategory: section.serverCategory,
+            favorites: section.favorites,
             muted: section.muted,
             sorting: section.sorting,
           );

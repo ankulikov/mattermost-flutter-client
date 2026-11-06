@@ -82,7 +82,15 @@ List<SidebarSection> mapSections({
     if (orderedCategoryIds.add(category.id)) orderedCategories.add(category);
   }
 
-  for (final MattermostChannelCategoryDto category in orderedCategories) {
+  for (final MattermostChannelCategoryDto category
+      in <MattermostChannelCategoryDto>[
+        ...orderedCategories.where(
+          (MattermostChannelCategoryDto item) => item.type == 'favorites',
+        ),
+        ...orderedCategories.where(
+          (MattermostChannelCategoryDto item) => item.type != 'favorites',
+        ),
+      ]) {
     final ChannelSorting sorting = _channelSorting(category.sorting);
     final List<({int position, SidebarChannel channel})> placedChannels =
         <({int position, SidebarChannel channel})>[];
@@ -111,10 +119,11 @@ List<SidebarSection> mapSections({
     sections.add(
       SidebarSection(
         id: _required(category.id, 'category.id'),
-        displayName: _categoryDisplayName(category),
+        displayName: categoryDisplayName(category),
         channels: categoryChannels,
         collapsed: category.collapsed,
         serverCategory: true,
+        favorites: category.type == 'favorites',
         muted: category.muted,
         sorting: sorting,
       ),
@@ -159,7 +168,7 @@ String userDisplayName(MattermostUserDto user) => resolveUserDisplayName(
   lastName: user.lastName,
 );
 
-String _categoryDisplayName(MattermostChannelCategoryDto dto) {
+String categoryDisplayName(MattermostChannelCategoryDto dto) {
   if (dto.displayName.trim().isNotEmpty) {
     return dto.displayName.trim();
   }

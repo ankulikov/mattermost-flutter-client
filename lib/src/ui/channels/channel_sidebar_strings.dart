@@ -20,6 +20,15 @@ abstract final class ChannelSidebarStrings {
   static const String preferencesSaveFailed =
       'Could not save sidebar settings. Try again.';
   static const String noSearchResults = 'No matching channels or dialogs';
+  static const String markUnread = 'Mark as unread';
+  static const String addFavorite = 'Add to favorites';
+  static const String removeFavorite = 'Remove from favorites';
+  static const String muteChannel = 'Mute channel';
+  static const String unmuteChannel = 'Unmute channel';
+  static const String moveTo = 'Move to…';
+  static const String closeConversation = 'Close conversation';
+  static const String channelActionFailed =
+      'Could not update channel. Try again.';
 
   static String unreadChannel(String channelName) => '$channelName, unread';
 }

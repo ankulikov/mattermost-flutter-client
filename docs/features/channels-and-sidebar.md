@@ -56,6 +56,17 @@ Category headers use that inset and rounded hover surface, with a small leading
 chevron and an uppercase compact label. Search, Threads, and channel names use
 13 px text; direct-message avatars are smaller to leave space before names.
 Unmuted unread channels show a small dot immediately after the name.
+Favorites stay at the top of the sidebar regardless of the server's category
+order. A small star identifies each favorite even when folder headings are
+hidden. Favorites remain visible when the read-channel filter is active;
+typed search terms still narrow them by name.
+Right-clicking a channel row (or using a trackpad secondary click, long press,
+or the keyboard context-menu shortcut) opens its actions: mark unread, change
+favorites, mute or unmute, and move to a sidebar category. Direct and group
+conversations also offer Close conversation, which hides that conversation for
+the current user without deleting its messages. These actions persist through
+Mattermost API v4 and refresh the network-first sidebar after success; failures
+leave the current list usable and show an error.
 
 ## Direct-message avatars
 

@@ -104,6 +104,58 @@ void main() {
     ]);
   });
 
+  test(
+    'pins favorites above server order without reordering other folders',
+    () {
+      final List<SidebarSection> sections = mapSections(
+        channels: const <SidebarChannel>[
+          SidebarChannel(
+            id: 'regular',
+            teamId: 'team',
+            name: 'regular',
+            displayName: 'Regular',
+            kind: ChannelKind.publicChannel,
+          ),
+          SidebarChannel(
+            id: 'favorite',
+            teamId: 'team',
+            name: 'favorite',
+            displayName: 'Favorite',
+            kind: ChannelKind.publicChannel,
+          ),
+        ],
+        categories: const <MattermostChannelCategoryDto>[
+          MattermostChannelCategoryDto(
+            id: 'regular-category',
+            userId: 'me',
+            teamId: 'team',
+            type: 'channels',
+            displayName: 'Channels',
+            sorting: 'manual',
+            channelIds: <String>['regular'],
+            muted: false,
+          ),
+          MattermostChannelCategoryDto(
+            id: 'favorites',
+            userId: 'me',
+            teamId: 'team',
+            type: 'favorites',
+            displayName: 'Favorites',
+            sorting: 'manual',
+            channelIds: <String>['favorite'],
+            muted: false,
+          ),
+        ],
+        categoryOrder: const <String>['regular-category', 'favorites'],
+      );
+      expect(sections.map((SidebarSection section) => section.id), <String>[
+        'favorites',
+        'regular-category',
+      ]);
+      expect(sections.first.favorites, isTrue);
+    },
+  );
+
   test('maps category presentation properties and sorts recent channels', () {
     final List<SidebarSection> sections = mapSections(
       channels: const <SidebarChannel>[

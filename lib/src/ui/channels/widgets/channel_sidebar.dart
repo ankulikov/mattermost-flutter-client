@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
@@ -17,6 +18,8 @@ import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 const RoundedRectangleBorder _sidebarTileShape = RoundedRectangleBorder(
   borderRadius: BorderRadius.all(Radius.circular(AppSpacing.sm)),
 );
+
+enum _ChannelMenuAction { unread, favorite, mute, move, close }
 
 class ChannelSidebar extends ConsumerWidget {
   const ChannelSidebar({
@@ -246,7 +249,9 @@ class _SidebarContentState extends State<_SidebarContent> {
           final List<SidebarChannel> channels = section.channels
               .where(
                 (SidebarChannel channel) =>
-                    (!_hideReadChannels || channel.isUnread) &&
+                    (!_hideReadChannels ||
+                        channel.isUnread ||
+                        section.favorites) &&
                     channel.displayName.toLowerCase().contains(normalizedQuery),
               )
               .toList(growable: false);
@@ -256,6 +261,7 @@ class _SidebarContentState extends State<_SidebarContent> {
             channels: channels,
             collapsed: section.collapsed,
             serverCategory: section.serverCategory,
+            favorites: section.favorites,
             muted: section.muted,
             sorting: section.sorting,
           );
@@ -652,11 +658,155 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
         return _ChannelTile(
           key: ValueKey<String>('channel-${channel.id}'),
           channel: channel,
+          favorite: section.favorites,
           muted: section.muted || channel.muted,
           selected: selectedChannelId == channel.id,
           onTap: () => _selectChannel(channel),
+          onContextMenu: (Offset position) =>
+              unawaited(_showChannelMenu(channel, section, position)),
         );
       },
+    );
+  }
+
+  Future<void> _showChannelMenu(
+    SidebarChannel channel,
+    SidebarSection section,
+    Offset position,
+  ) async {
+    final bool muted = section.muted || channel.muted;
+    final _ChannelMenuAction? action = await showMenu<_ChannelMenuAction>(
+      context: context,
+      position: _menuPosition(position),
+      constraints: const BoxConstraints(minWidth: 235, maxWidth: 290),
+      items: <PopupMenuEntry<_ChannelMenuAction>>[
+        _channelMenuItem(
+          _ChannelMenuAction.unread,
+          Icons.mark_chat_unread_outlined,
+          ChannelSidebarStrings.markUnread,
+        ),
+        _channelMenuItem(
+          _ChannelMenuAction.favorite,
+          section.favorites ? Icons.star_outline : Icons.star_border,
+          section.favorites
+              ? ChannelSidebarStrings.removeFavorite
+              : ChannelSidebarStrings.addFavorite,
+        ),
+        _channelMenuItem(
+          _ChannelMenuAction.mute,
+          muted
+              ? Icons.notifications_active_outlined
+              : Icons.notifications_off_outlined,
+          muted
+              ? ChannelSidebarStrings.unmuteChannel
+              : ChannelSidebarStrings.muteChannel,
+        ),
+        const PopupMenuDivider(),
+        _channelMenuItem(
+          _ChannelMenuAction.move,
+          Icons.drive_file_move_outline,
+          ChannelSidebarStrings.moveTo,
+          trailing: Icons.chevron_right,
+        ),
+        if (channel.isDialog) ...<PopupMenuEntry<_ChannelMenuAction>>[
+          const PopupMenuDivider(),
+          _channelMenuItem(
+            _ChannelMenuAction.close,
+            Icons.logout,
+            ChannelSidebarStrings.closeConversation,
+            destructive: true,
+          ),
+        ],
+      ],
+    );
+    if (!mounted || action == null) return;
+    final ChannelSidebarController controller = ref.read(
+      channelSidebarProvider.notifier,
+    );
+    try {
+      switch (action) {
+        case _ChannelMenuAction.unread:
+          await controller.markChannelUnread(channel.id);
+        case _ChannelMenuAction.favorite:
+          await controller.setChannelFavorite(channel, !section.favorites);
+        case _ChannelMenuAction.mute:
+          await controller.setChannelMuted(channel.id, !muted);
+        case _ChannelMenuAction.move:
+          final List<SidebarSection> categories = await controller
+              .getMovableCategories();
+          if (!mounted) return;
+          final String? categoryId = await showMenu<String>(
+            context: context,
+            position: _menuPosition(position),
+            constraints: const BoxConstraints(minWidth: 210, maxWidth: 280),
+            items: <PopupMenuEntry<String>>[
+              for (final SidebarSection category in categories)
+                PopupMenuItem<String>(
+                  value: category.id,
+                  child: Row(
+                    children: <Widget>[
+                      if (category.id == section.id)
+                        const Icon(Icons.check, size: 18)
+                      else
+                        const SizedBox(width: 18),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(child: Text(category.displayName)),
+                    ],
+                  ),
+                ),
+            ],
+          );
+          if (categoryId != null && categoryId != section.id) {
+            await controller.moveChannelToCategory(channel.id, categoryId);
+          }
+        case _ChannelMenuAction.close:
+          await controller.closeConversation(channel);
+      }
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text(ChannelSidebarStrings.channelActionFailed),
+        ),
+      );
+    }
+  }
+
+  RelativeRect _menuPosition(Offset globalPosition) {
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final Offset position = overlay.globalToLocal(globalPosition);
+    return RelativeRect.fromRect(
+      Rect.fromLTWH(position.dx, position.dy, 1, 1),
+      Offset.zero & overlay.size,
+    );
+  }
+
+  PopupMenuItem<_ChannelMenuAction> _channelMenuItem(
+    _ChannelMenuAction action,
+    IconData icon,
+    String label, {
+    IconData? trailing,
+    bool destructive = false,
+  }) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final Color color = destructive ? colors.error : colors.onSurfaceVariant;
+    return PopupMenuItem<_ChannelMenuAction>(
+      value: action,
+      height: 44,
+      child: Row(
+        children: <Widget>[
+          Icon(icon, size: 19, color: color),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: destructive ? colors.error : null),
+            ),
+          ),
+          if (trailing != null) Icon(trailing, size: 18, color: color),
+        ],
+      ),
     );
   }
 
@@ -858,94 +1008,139 @@ class _ChannelTile extends StatelessWidget {
   const _ChannelTile({
     required super.key,
     required this.channel,
+    required this.favorite,
     required this.muted,
     required this.selected,
     required this.onTap,
+    required this.onContextMenu,
   });
 
   final SidebarChannel channel;
+  final bool favorite;
   final bool muted;
   final bool selected;
   final VoidCallback onTap;
+  final ValueChanged<Offset> onContextMenu;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
     final bool highlightUnread = channel.isUnread && !muted;
-    return Opacity(
-      opacity: muted ? 0.55 : 1,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppLayout.sidebarItemInset,
-        ),
-        child: Material(
-          key: ValueKey<String>('channel-selection-surface-${channel.id}'),
-          color: selected ? colors.secondaryContainer : Colors.transparent,
-          shape: _sidebarTileShape,
-          clipBehavior: Clip.antiAlias,
-          child: ListTile(
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal:
-                  AppLayout.sidebarLeadingIconInset -
-                  AppLayout.sidebarItemInset,
+    void showKeyboardMenu() {
+      final RenderBox? box = context.findRenderObject() as RenderBox?;
+      if (box == null) return;
+      onContextMenu(
+        box.localToGlobal(Offset(box.size.width / 2, box.size.height)),
+      );
+    }
+
+    return Focus(
+      skipTraversal: true,
+      onKeyEvent: (FocusNode node, KeyEvent event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.contextMenu ||
+                (event.logicalKey == LogicalKeyboardKey.f10 &&
+                    HardwareKeyboard.instance.isShiftPressed))) {
+          showKeyboardMenu();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onSecondaryTapDown: (TapDownDetails details) =>
+            onContextMenu(details.globalPosition),
+        onLongPressStart: (LongPressStartDetails details) =>
+            onContextMenu(details.globalPosition),
+        child: Opacity(
+          opacity: muted ? 0.55 : 1,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppLayout.sidebarItemInset,
             ),
-            minTileHeight: AppLayout.sidebarRowMinHeight,
-            minVerticalPadding: AppSpacing.xs,
-            horizontalTitleGap: AppSpacing.xs,
-            minLeadingWidth: 20,
-            selected: selected,
-            shape: _sidebarTileShape,
-            leading: IconTheme(
-              data: theme.iconTheme.copyWith(
-                color: selected
-                    ? colors.onSecondaryContainer
-                    : highlightUnread
-                    ? colors.onSurface
-                    : colors.onSurfaceVariant,
-              ),
-              child: ChannelAvatar(
-                channel: channel,
-                size: channel.kind == ChannelKind.directMessage ? 16 : 18,
-              ),
-            ),
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Flexible(
-                  child: Text(
-                    channel.displayName,
-                    semanticsLabel: highlightUnread
-                        ? ChannelSidebarStrings.unreadChannel(
-                            channel.displayName,
-                          )
-                        : channel.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium!.copyWith(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                    ),
+            child: Material(
+              key: ValueKey<String>('channel-selection-surface-${channel.id}'),
+              color: selected ? colors.secondaryContainer : Colors.transparent,
+              shape: _sidebarTileShape,
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                dense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal:
+                      AppLayout.sidebarLeadingIconInset -
+                      AppLayout.sidebarItemInset,
+                ),
+                minTileHeight: AppLayout.sidebarRowMinHeight,
+                minVerticalPadding: AppSpacing.xs,
+                horizontalTitleGap: AppSpacing.xs,
+                minLeadingWidth: 20,
+                selected: selected,
+                shape: _sidebarTileShape,
+                leading: IconTheme(
+                  data: theme.iconTheme.copyWith(
+                    color: selected
+                        ? colors.onSecondaryContainer
+                        : highlightUnread
+                        ? colors.onSurface
+                        : colors.onSurfaceVariant,
+                  ),
+                  child: ChannelAvatar(
+                    channel: channel,
+                    size: channel.kind == ChannelKind.directMessage ? 16 : 18,
                   ),
                 ),
-                if (highlightUnread) ...<Widget>[
-                  const SizedBox(width: AppSpacing.xs),
-                  Container(
-                    key: ValueKey<String>('channel-unread-dot-${channel.id}'),
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? colors.onSecondaryContainer
-                          : colors.primary,
-                      shape: BoxShape.circle,
+                title: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        channel.displayName,
+                        semanticsLabel: highlightUnread
+                            ? ChannelSidebarStrings.unreadChannel(
+                                channel.displayName,
+                              )
+                            : channel.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium!.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ],
+                    if (favorite) ...<Widget>[
+                      const SizedBox(width: AppSpacing.xs),
+                      Icon(
+                        Icons.star_rounded,
+                        key: ValueKey<String>(
+                          'channel-favorite-star-${channel.id}',
+                        ),
+                        size: 13,
+                        color: colors.primary.withValues(alpha: 0.75),
+                      ),
+                    ],
+                    if (highlightUnread) ...<Widget>[
+                      const SizedBox(width: AppSpacing.xs),
+                      Container(
+                        key: ValueKey<String>(
+                          'channel-unread-dot-${channel.id}',
+                        ),
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? colors.onSecondaryContainer
+                              : colors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                onTap: onTap,
+              ),
             ),
-            onTap: onTap,
           ),
         ),
       ),

@@ -35,6 +35,77 @@ void main() {
     });
   });
 
+  test('moves a channel while preserving both category objects', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"categories":['
+          '{"id":"old","channel_ids":["a","b"],"sorting":"recent"},'
+          '{"id":"new","channel_ids":["c"],"collapsed":true}]}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    await DioMattermostApi(dio: dio).moveChannelToSidebarCategory(
+      userId: 'user',
+      teamId: 'team',
+      channelId: 'b',
+      categoryId: 'new',
+    );
+
+    expect(adapter.request?.method, 'PUT');
+    expect(adapter.request?.path, '/users/user/teams/team/channels/categories');
+    expect(adapter.request?.data, <Map<String, Object?>>[
+      <String, Object?>{
+        'id': 'old',
+        'channel_ids': <Object?>['a'],
+        'sorting': 'recent',
+      },
+      <String, Object?>{
+        'id': 'new',
+        'channel_ids': <Object?>['c', 'b'],
+        'collapsed': true,
+      },
+    ]);
+  });
+
+  test('mutes channel notifications through member settings', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"status":"OK"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    await DioMattermostApi(dio: dio).setChannelNotificationsMuted(
+      userId: 'user',
+      channelId: 'channel',
+      muted: true,
+    );
+
+    expect(adapter.request?.method, 'PUT');
+    expect(
+      adapter.request?.path,
+      '/channels/channel/members/user/notify_props',
+    );
+    expect(adapter.request?.data, <String, String>{
+      'desktop': 'none',
+      'push': 'none',
+      'email': 'none',
+      'mark_unread': 'mention',
+    });
+  });
+
+  test('marks a post unread for the current user', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"status":"OK"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    await DioMattermostApi(
+      dio: dio,
+    ).markPostUnread(userId: 'user', postId: 'post');
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/users/user/posts/post/set_unread');
+  });
+
   test('loads channel statistics', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body: '{"channel_id":"channel-1","member_count":42}',
