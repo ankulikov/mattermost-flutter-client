@@ -27,6 +27,14 @@ abstract final class ChannelSidebarStrings {
   static const String unmuteChannel = 'Unmute channel';
   static const String moveTo = 'Move to…';
   static const String closeConversation = 'Close conversation';
+  static const String leaveChannel = 'Покинуть канал';
+  static const String leaveChannelTitle = 'Покинуть канал?';
+  static const String leaveChannelDescription =
+      'Вы перестанете получать сообщения из этого канала.';
+  static const String leavePrivateChannelDescription =
+      'Чтобы вернуться в приватный канал, потребуется приглашение.';
+  static const String cancel = 'Отмена';
+  static const String confirmLeaveChannel = 'Покинуть';
   static const String channelActionFailed =
       'Could not update channel. Try again.';
 

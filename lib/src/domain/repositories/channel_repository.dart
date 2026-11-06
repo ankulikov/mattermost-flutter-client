@@ -50,6 +50,8 @@ abstract interface class ChannelSidebarActionsRepository {
   );
 
   Future<void> closeConversation(AuthSession session, SidebarChannel channel);
+
+  Future<void> leaveChannel(AuthSession session, SidebarChannel channel);
 }
 
 /// Optional realtime capability for a channel sidebar repository.

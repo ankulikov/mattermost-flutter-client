@@ -106,6 +106,21 @@ void main() {
     expect(adapter.request?.path, '/users/user/posts/post/set_unread');
   });
 
+  test('leaves a channel by removing the current membership', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"status":"OK"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    await DioMattermostApi(
+      dio: dio,
+    ).leaveChannel(channelId: 'channel', userId: 'user');
+
+    expect(adapter.request?.method, 'DELETE');
+    expect(adapter.request?.path, '/channels/channel/members/user');
+  });
+
   test('loads channel statistics', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body: '{"channel_id":"channel-1","member_count":42}',

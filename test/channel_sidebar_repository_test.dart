@@ -110,12 +110,42 @@ void main() {
       );
     },
   );
+
+  test(
+    'leaving a channel removes its membership for the signed-in user',
+    () async {
+      final _FakeMattermostApi api = _FakeMattermostApi();
+      final MattermostChannelRepository repository =
+          MattermostChannelRepository(api: api, users: FakeUserRepository());
+      final AuthSession session = AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      );
+
+      await repository.leaveChannel(
+        session,
+        const SidebarChannel(
+          id: 'project',
+          teamId: 'team-1',
+          name: 'project',
+          displayName: 'Project',
+          kind: ChannelKind.publicChannel,
+        ),
+      );
+
+      expect(api.leftChannelId, 'project');
+      expect(api.leftUserId, 'me');
+    },
+  );
 }
 
 final class _FakeMattermostApi implements MattermostApi {
   String? unreadPostId;
   String? mutedChannelId;
   String? movedCategoryId;
+  String? leftChannelId;
+  String? leftUserId;
   final List<MattermostPreferenceDto> savedPreferences =
       <MattermostPreferenceDto>[];
 
@@ -139,6 +169,15 @@ final class _FakeMattermostApi implements MattermostApi {
     required String channelId,
     required String categoryId,
   }) async => movedCategoryId = categoryId;
+
+  @override
+  Future<void> leaveChannel({
+    required String channelId,
+    required String userId,
+  }) async {
+    leftChannelId = channelId;
+    leftUserId = userId;
+  }
 
   @override
   Future<void> savePreferences({

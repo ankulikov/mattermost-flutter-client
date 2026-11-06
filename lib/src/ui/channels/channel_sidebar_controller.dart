@@ -237,6 +237,16 @@ final class ChannelSidebarController
     }
   }
 
+  Future<void> leaveChannel(SidebarChannel channel) async {
+    await _runChannelAction(
+      (ChannelSidebarActionsRepository repository, AuthSession session) =>
+          repository.leaveChannel(session, channel),
+    );
+    if (ref.read(selectedChannelProvider)?.id == channel.id) {
+      ref.read(selectedChannelProvider.notifier).clear();
+    }
+  }
+
   Future<void> _runChannelAction(
     Future<void> Function(ChannelSidebarActionsRepository, AuthSession) action,
   ) async {

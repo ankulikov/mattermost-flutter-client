@@ -2616,6 +2616,57 @@ void main() {
     expect(find.text(ChannelSidebarStrings.closeConversation), findsOneWidget);
   });
 
+  testWidgets('channel menu confirms leaving before removing membership', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _ReadFilterSidebarRepository repository =
+        _ReadFilterSidebarRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> openMenu() async {
+      final TestGesture gesture = await tester.startGesture(
+        tester.getCenter(find.text('Unread channel')),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    await openMenu();
+    expect(find.text('Покинуть канал'), findsOneWidget);
+    await tester.tap(find.text('Покинуть канал'));
+    await tester.pumpAndSettle();
+    expect(find.text('Покинуть канал?'), findsOneWidget);
+    expect(repository.lastAction, isNull);
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(repository.lastAction, isNull);
+
+    await openMenu();
+    await tester.tap(find.text('Покинуть канал'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Покинуть'));
+    await tester.pumpAndSettle();
+    expect(repository.lastAction, 'leave:unread');
+  });
+
   testWidgets('keyboard context shortcut opens channel actions', (
     WidgetTester tester,
   ) async {
@@ -4029,6 +4080,12 @@ final class _ReadFilterSidebarRepository
     AuthSession session,
     SidebarChannel channel,
   ) async => lastAction = 'close:${channel.id}';
+
+  @override
+  Future<void> leaveChannel(
+    AuthSession session,
+    SidebarChannel channel,
+  ) async => lastAction = 'leave:${channel.id}';
 
   @override
   Future<SidebarChannel> openDirectMessage({

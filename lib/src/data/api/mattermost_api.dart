@@ -51,6 +51,11 @@ abstract interface class MattermostApi {
     required String postId,
   }) => throw UnimplementedError();
 
+  Future<void> leaveChannel({
+    required String channelId,
+    required String userId,
+  }) => throw UnimplementedError();
+
   /// Returns the current user's membership counters and notification settings
   /// for every channel in [teamId].
   Future<List<MattermostChannelMemberDto>> getChannelMembersForUser({
