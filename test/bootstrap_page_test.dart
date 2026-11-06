@@ -33,6 +33,7 @@ import 'package:mattermost_flutter/src/features/profile/domain/repositories/curr
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
+import 'package:mattermost_flutter/src/ui/channels/widgets/channel_avatar.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
@@ -796,7 +797,7 @@ void main() {
       expect(tester.getSize(search).height, 48);
       expect(
         tester.getCenter(find.byTooltip(ChannelSidebarStrings.clearSearch)).dx,
-        lessThan(tester.getCenter(publicChannelsExpander).dx),
+        greaterThan(tester.getCenter(publicChannelsExpander).dx),
       );
       expect(find.text('Public channels'), findsOneWidget);
       expect(find.text('Town Square'), findsOneWidget);
@@ -2258,6 +2259,20 @@ void main() {
     );
     expect(tester.getSize(channelTile).height, 40);
     expect(tester.getSize(channelTile).width, greaterThanOrEqualTo(40));
+    final ListTile channelRow = tester.widget<ListTile>(channelTile);
+    expect(channelRow.horizontalTitleGap, AppSpacing.xs);
+    expect(channelRow.minLeadingWidth, 20);
+    expect(
+      tester
+          .widget<ChannelAvatar>(
+            find.descendant(
+              of: channelTile,
+              matching: find.byType(ChannelAvatar),
+            ),
+          )
+          .size,
+      20,
+    );
     final Finder channelSurface = find.byKey(
       const ValueKey<String>('channel-selection-surface-town-square'),
     );
@@ -2266,6 +2281,39 @@ void main() {
     );
     expect(
       (hoverTarget.customBorder! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(AppSpacing.sm),
+    );
+    final Finder groupSurface = find.byKey(
+      const ValueKey<String>('channel-section-surface-favorites'),
+    );
+    final Finder sidebarList = find.byKey(
+      const PageStorageKey<String>('channel-sidebar'),
+    );
+    expect(
+      tester.getRect(groupSurface).left,
+      tester.getRect(sidebarList).left + AppLayout.sidebarItemInset,
+    );
+    expect(
+      tester.getRect(groupSurface).right,
+      tester.getRect(sidebarList).right - AppLayout.sidebarItemInset,
+    );
+    final ListTile groupRow = tester.widget<ListTile>(
+      find.descendant(of: groupSurface, matching: find.byType(ListTile)),
+    );
+    expect(groupRow.leading, isNotNull);
+    expect(groupRow.trailing, isNull);
+    expect(groupRow.horizontalTitleGap, AppSpacing.xs);
+    expect(tester.getSize(groupSurface).height, greaterThanOrEqualTo(40));
+    expect(
+      (tester.widget<Material>(groupSurface).shape! as RoundedRectangleBorder)
+          .borderRadius,
+      BorderRadius.circular(AppSpacing.sm),
+    );
+    final InkWell groupHoverTarget = tester.widget<InkWell>(
+      find.descendant(of: groupSurface, matching: find.byType(InkWell)).first,
+    );
+    expect(
+      (groupHoverTarget.customBorder! as RoundedRectangleBorder).borderRadius,
       BorderRadius.circular(AppSpacing.sm),
     );
   });
@@ -2308,6 +2356,23 @@ void main() {
       expect(unread.semanticsLabel, 'Unread channel, unread');
       expect(read.style?.fontWeight, FontWeight.w400);
       expect(mutedUnread.style?.fontWeight, FontWeight.w400);
+      final Finder dot = find.byKey(
+        const ValueKey<String>('channel-unread-dot-unread'),
+      );
+      expect(dot, findsOneWidget);
+      expect(
+        tester.getRect(dot).left -
+            tester.getRect(find.text('Unread channel')).right,
+        inInclusiveRange(0, AppSpacing.sm),
+      );
+      expect(
+        find.byKey(const ValueKey<String>('channel-unread-dot-read')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('channel-unread-dot-muted-unread')),
+        findsNothing,
+      );
     }
   });
 
@@ -2508,6 +2573,16 @@ void main() {
     expect(find.text('Favorites'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(find.byTooltip('Refresh channels'), findsNothing);
+    expect(
+      tester
+          .getSize(
+            find.byKey(
+              const ValueKey<String>('channel-section-surface-favorites'),
+            ),
+          )
+          .height,
+      greaterThanOrEqualTo(40),
+    );
     final Finder channelTile = find.ancestor(
       of: find.text('Ada Lovelace'),
       matching: find.byType(ListTile),

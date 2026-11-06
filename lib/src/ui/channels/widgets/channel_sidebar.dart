@@ -626,22 +626,47 @@ class _ChannelSectionHeader extends StatelessWidget {
     expanded: isExpanded,
     child: Opacity(
       opacity: section.muted ? 0.55 : 1,
-      child: ListTile(
-        title: Text(
-          section.displayName,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelLarge,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppLayout.sidebarItemInset,
+          AppSpacing.xs,
+          AppLayout.sidebarItemInset,
+          0,
         ),
-        trailing: AnimatedRotation(
-          turns: isExpanded ? 0.5 : 0,
-          duration: const Duration(milliseconds: 150),
-          child: const Icon(Icons.expand_more),
+        child: Material(
+          key: ValueKey<String>('channel-section-surface-${section.id}'),
+          color: Colors.transparent,
+          shape: _sidebarTileShape,
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            leading: AnimatedRotation(
+              turns: isExpanded ? 0 : -0.25,
+              duration: const Duration(milliseconds: 150),
+              child: const Icon(Icons.expand_more, size: 14),
+            ),
+            title: Text(
+              section.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.4,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            onTap: onTap,
+            hoverColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+            shape: _sidebarTileShape,
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+            ),
+            horizontalTitleGap: AppSpacing.xs,
+            minLeadingWidth: 14,
+            minTileHeight: AppLayout.sidebarRowMinHeight,
+            minVerticalPadding: AppSpacing.xs,
+          ),
         ),
-        onTap: onTap,
-        dense: true,
-        minTileHeight: AppLayout.sidebarRowMinHeight,
-        minVerticalPadding: AppSpacing.xs,
       ),
     ),
   );
@@ -686,6 +711,8 @@ class _ChannelTile extends StatelessWidget {
             ),
             minTileHeight: AppLayout.sidebarRowMinHeight,
             minVerticalPadding: AppSpacing.xs,
+            horizontalTitleGap: AppSpacing.xs,
+            minLeadingWidth: 20,
             selected: selected,
             shape: _sidebarTileShape,
             leading: IconTheme(
@@ -696,18 +723,43 @@ class _ChannelTile extends StatelessWidget {
                     ? colors.onSurface
                     : colors.onSurfaceVariant,
               ),
-              child: ChannelAvatar(channel: channel),
+              child: ChannelAvatar(channel: channel, size: 20),
             ),
-            title: Text(
-              channel.displayName,
-              semanticsLabel: highlightUnread
-                  ? ChannelSidebarStrings.unreadChannel(channel.displayName)
-                  : channel.displayName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium!.copyWith(
-                fontWeight: highlightUnread ? FontWeight.w600 : FontWeight.w400,
-              ),
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Flexible(
+                  child: Text(
+                    channel.displayName,
+                    semanticsLabel: highlightUnread
+                        ? ChannelSidebarStrings.unreadChannel(
+                            channel.displayName,
+                          )
+                        : channel.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium!.copyWith(
+                      fontWeight: highlightUnread
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                    ),
+                  ),
+                ),
+                if (highlightUnread) ...<Widget>[
+                  const SizedBox(width: AppSpacing.xs),
+                  Container(
+                    key: ValueKey<String>('channel-unread-dot-${channel.id}'),
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? colors.onSecondaryContainer
+                          : colors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
+              ],
             ),
             onTap: onTap,
           ),
