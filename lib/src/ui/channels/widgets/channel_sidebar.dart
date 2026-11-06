@@ -140,6 +140,7 @@ class _SidebarContentState extends State<_SidebarContent> {
   final FocusNode _searchFocusNode = FocusNode();
   String _query = '';
   bool _hideReadChannels = false;
+  bool _hideFolderHeadings = false;
 
   @override
   void initState() {
@@ -278,23 +279,54 @@ class _SidebarContentState extends State<_SidebarContent> {
                   alignment: Alignment.centerRight,
                   child: _searchFocusNode.hasFocus
                       ? const SizedBox.shrink()
-                      : Padding(
-                          padding: const EdgeInsets.only(left: AppSpacing.xs),
-                          child: IconButton(
-                            key: const ValueKey<String>('read-channel-filter'),
-                            tooltip: _hideReadChannels
-                                ? ChannelSidebarStrings.showReadChannels
-                                : ChannelSidebarStrings.hideReadChannels,
-                            onPressed: () => setState(
-                              () => _hideReadChannels = !_hideReadChannels,
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: AppSpacing.xs,
+                              ),
+                              child: IconButton(
+                                key: const ValueKey<String>(
+                                  'read-channel-filter',
+                                ),
+                                tooltip: _hideReadChannels
+                                    ? ChannelSidebarStrings.showReadChannels
+                                    : ChannelSidebarStrings.hideReadChannels,
+                                onPressed: () => setState(
+                                  () => _hideReadChannels = !_hideReadChannels,
+                                ),
+                                icon: Icon(
+                                  _hideReadChannels
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: _hideReadChannels
+                                      ? colors.primary
+                                      : null,
+                                ),
+                              ),
                             ),
-                            icon: Icon(
-                              _hideReadChannels
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              color: _hideReadChannels ? colors.primary : null,
+                            IconButton(
+                              key: const ValueKey<String>(
+                                'folder-visibility-toggle',
+                              ),
+                              tooltip: _hideFolderHeadings
+                                  ? ChannelSidebarStrings.showFolderHeadings
+                                  : ChannelSidebarStrings.hideFolderHeadings,
+                              onPressed: () => setState(
+                                () =>
+                                    _hideFolderHeadings = !_hideFolderHeadings,
+                              ),
+                              icon: Icon(
+                                _hideFolderHeadings
+                                    ? Icons.folder_outlined
+                                    : Icons.folder_off_outlined,
+                                color: _hideFolderHeadings
+                                    ? colors.primary
+                                    : null,
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                 ),
               ],
@@ -323,6 +355,7 @@ class _SidebarContentState extends State<_SidebarContent> {
                   child: _LazyChannelList(
                     sections: filteredSections,
                     expandSections: _hasSearchQuery,
+                    hideFolderHeadings: _hideFolderHeadings,
                     onChannelSelected: widget.onChannelSelected,
                   ),
                 ),
@@ -422,11 +455,13 @@ class _LazyChannelList extends ConsumerStatefulWidget {
   const _LazyChannelList({
     required this.sections,
     required this.expandSections,
+    required this.hideFolderHeadings,
     required this.onChannelSelected,
   });
 
   final List<SidebarSection> sections;
   final bool expandSections;
+  final bool hideFolderHeadings;
   final VoidCallback? onChannelSelected;
 
   @override
@@ -507,7 +542,8 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
 
   @override
   Widget build(BuildContext context) {
-    final Set<String> collapsedSectionIds = widget.expandSections
+    final Set<String> collapsedSectionIds =
+        widget.expandSections || widget.hideFolderHeadings
         ? const <String>{}
         : _collapsedSectionIds;
     final String? selectedChannelId = ref.watch(
@@ -517,6 +553,7 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
       selectedChannelId: selectedChannelId,
       sections: widget.sections,
       collapsedSectionIds: collapsedSectionIds,
+      hideFolderHeadings: widget.hideFolderHeadings,
     );
     return ListView.builder(
       key: const PageStorageKey<String>('channel-sidebar'),
@@ -619,11 +656,12 @@ final class _ChannelListIndex {
     required this.sections,
     required Set<String> collapsedSectionIds,
     required String? selectedChannelId,
+    required this.hideFolderHeadings,
   }) {
     var nextStart = 0;
     for (final SidebarSection section in sections) {
       _sectionStarts.add(nextStart);
-      nextStart += 1;
+      if (!hideFolderHeadings) nextStart += 1;
       final List<int> visible = <int>[
         for (final (int i, SidebarChannel channel) in section.channels.indexed)
           if (!collapsedSectionIds.contains(section.id) ||
@@ -638,6 +676,7 @@ final class _ChannelListIndex {
   }
 
   final List<SidebarSection> sections;
+  final bool hideFolderHeadings;
   final List<int> _sectionStarts = <int>[];
   final List<List<int>> _visibleChannelIndices = <List<int>>[];
   late final int rowCount;
@@ -656,7 +695,9 @@ final class _ChannelListIndex {
     final int offset = rowIndex - _sectionStarts[low];
     return _ChannelListRow(
       sectionIndex: low,
-      channelIndex: offset == 0
+      channelIndex: hideFolderHeadings
+          ? _visibleChannelIndices[low][offset]
+          : offset == 0
           ? null
           : _visibleChannelIndices[low][offset - 1],
     );

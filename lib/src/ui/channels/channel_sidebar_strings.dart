@@ -15,6 +15,8 @@ abstract final class ChannelSidebarStrings {
   static const String hideReadChannels = 'Hide read channels';
   static const String showReadChannels = 'Show read channels';
   static const String noUnreadChannels = 'No unread channels';
+  static const String hideFolderHeadings = 'Hide folder headings';
+  static const String showFolderHeadings = 'Show folder headings';
   static const String noSearchResults = 'No matching channels or dialogs';
 
   static String unreadChannel(String channelName) => '$channelName, unread';

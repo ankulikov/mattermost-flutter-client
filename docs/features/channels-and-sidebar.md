@@ -41,6 +41,9 @@ without moving the list vertically. The button locally hides read channels and
 dialogs; search respects the active filter. Categories with no visible channels,
 including categories that were empty before filtering, are hidden. The filter
 resets when the sidebar closes.
+A second local button hides folder headings and shows their channels as one
+ordered list, including channels in collapsed folders. Showing the headings
+again restores the previous collapse state without changing server categories.
 
 Channel and category rows use a compact 40 px minimum interactive height to
 fit more entries on screen. Rows can grow when text scaling requires more room.
