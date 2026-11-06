@@ -564,7 +564,16 @@ void main() {
         tester.getSize(threadsTile).width,
         tester.getSize(channelSelectionSurface).width,
       );
-      expect(tester.getSize(search).width, tester.getSize(threadsTile).width);
+      expect(
+        tester.getSize(search).width +
+            tester
+                .getSize(
+                  find.byKey(const ValueKey<String>('read-channel-filter')),
+                )
+                .width +
+            AppSpacing.xs,
+        tester.getSize(threadsTile).width,
+      );
       final double sidebarWidth = tester
           .getSize(find.byKey(const PageStorageKey<String>('channel-sidebar')))
           .width;
@@ -2393,6 +2402,124 @@ void main() {
     }
   });
 
+  testWidgets('search expands into the filter button space while focused', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1000, 800),
+      const Size(1280, 800),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _UnreadSidebarRepository(),
+            ),
+          ],
+          child: const MaterialApp(home: BootstrapPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder search = find.byKey(
+        const ValueKey<String>('channel-search-field'),
+      );
+      final double idleWidth = tester.getSize(search).width;
+      final Finder threads = find.byKey(
+        const ValueKey<String>('threads-sidebar-tile'),
+      );
+      final double threadsTop = tester.getRect(threads).top;
+      final Finder hideRead = find.byTooltip('Hide read channels');
+      expect(hideRead, findsOneWidget);
+      expect(tester.getSize(hideRead).width, greaterThanOrEqualTo(40));
+
+      await tester.tap(search);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(search).width, greaterThan(idleWidth + 40));
+      expect(hideRead, findsNothing);
+      expect(tester.getRect(threads).top, threadsTop);
+
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(search).width, idleWidth);
+      expect(hideRead, findsOneWidget);
+    }
+  });
+
+  testWidgets('read filter hides read channels and empty categories', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _ReadFilterSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('EMPTY'), findsNothing);
+    expect(find.text('MIXED'), findsOneWidget);
+    expect(find.text('READ ONLY'), findsOneWidget);
+    expect(find.text('Read channel'), findsOneWidget);
+    expect(find.text('Unread channel'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('MIXED'), findsOneWidget);
+    expect(find.text('READ ONLY'), findsNothing);
+    expect(find.text('Read channel'), findsNothing);
+    expect(find.text('Unread channel'), findsOneWidget);
+    expect(find.byTooltip('Show read channels'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Show read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('READ ONLY'), findsOneWidget);
+    expect(find.text('Read channel'), findsOneWidget);
+    expect(find.text('EMPTY'), findsNothing);
+  });
+
+  testWidgets('read filter explains an empty unread list', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _SearchSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('PUBLIC CHANNELS'), findsNothing);
+    expect(find.text('DIRECT MESSAGES'), findsNothing);
+    expect(find.text('No unread channels'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Show read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
+    expect(find.text('DIRECT MESSAGES'), findsOneWidget);
+  });
+
   testWidgets('applies collapsed and muted category presentation', (
     WidgetTester tester,
   ) async {
@@ -2589,6 +2716,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('FAVORITES'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(find.byTooltip('Hide read channels'), findsOneWidget);
     expect(find.byTooltip('Refresh channels'), findsNothing);
     expect(
       tester
@@ -3467,6 +3595,61 @@ final class _CollapsedMutedSidebarRepository
                 teamId: 'team-1',
                 name: 'quiet',
                 displayName: 'Quiet channel',
+                kind: ChannelKind.publicChannel,
+              ),
+            ],
+          ),
+        ],
+      );
+}
+
+final class _ReadFilterSidebarRepository implements ChannelRepository {
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      const ChannelSidebarSnapshot(
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'empty',
+            displayName: 'Empty',
+            channels: <SidebarChannel>[],
+          ),
+          SidebarSection(
+            id: 'mixed',
+            displayName: 'Mixed',
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'unread',
+                teamId: 'team-1',
+                name: 'unread',
+                displayName: 'Unread channel',
+                kind: ChannelKind.publicChannel,
+                isUnread: true,
+              ),
+              SidebarChannel(
+                id: 'read',
+                teamId: 'team-1',
+                name: 'read',
+                displayName: 'Read channel',
+                kind: ChannelKind.publicChannel,
+              ),
+            ],
+          ),
+          SidebarSection(
+            id: 'read-only',
+            displayName: 'Read only',
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'read-only-channel',
+                teamId: 'team-1',
+                name: 'read-only-channel',
+                displayName: 'Read only channel',
                 kind: ChannelKind.publicChannel,
               ),
             ],

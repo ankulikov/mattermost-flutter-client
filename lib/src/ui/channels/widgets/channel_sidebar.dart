@@ -139,23 +139,43 @@ class _SidebarContentState extends State<_SidebarContent> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _query = '';
+  bool _hideReadChannels = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFocusNode.addListener(_onSearchFocusChanged);
+  }
+
+  void _onSearchFocusChanged() => setState(() {});
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.removeListener(_onSearchFocusChanged);
     _searchFocusNode.dispose();
     super.dispose();
   }
 
   List<SidebarSection> get _filteredSections {
     final String normalizedQuery = _query.trim().toLowerCase();
-    if (normalizedQuery.isEmpty) return widget.snapshot.sections;
+    if (normalizedQuery.isEmpty && !_hideReadChannels) {
+      final List<SidebarSection> sections = widget.snapshot.sections;
+      return sections.every(
+            (SidebarSection section) => section.channels.isNotEmpty,
+          )
+          ? sections
+          : sections
+                .where((SidebarSection section) => section.channels.isNotEmpty)
+                .toList(growable: false);
+    }
 
     return widget.snapshot.sections
         .map((SidebarSection section) {
           final List<SidebarChannel> channels = section.channels
               .where(
                 (SidebarChannel channel) =>
+                    (!_hideReadChannels || channel.isUnread) &&
                     channel.displayName.toLowerCase().contains(normalizedQuery),
               )
               .toList(growable: false);
@@ -195,54 +215,89 @@ class _SidebarContentState extends State<_SidebarContent> {
           ),
         Padding(
           padding: AppLayout.sidebarSearchPadding,
-          child: TextField(
-            key: const ValueKey<String>('channel-search-field'),
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontSize: 13),
-            controller: _searchController,
-            focusNode: _searchFocusNode,
-            autocorrect: false,
-            textInputAction: TextInputAction.search,
-            onChanged: _updateQuery,
-            onSubmitted: (_) => _searchFocusNode.unfocus(),
-            onTapOutside: (_) => _searchFocusNode.unfocus(),
-            decoration: InputDecoration(
-              hintText: ChannelSidebarStrings.searchHint,
-              filled: true,
-              fillColor: colors.surface,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: AppSpacing.md,
-              ),
-              constraints: AppLayout.sidebarSearchConstraints,
-              prefixIcon: const Padding(
-                padding: AppLayout.sidebarSearchIconPadding,
-                child: Icon(Icons.search),
-              ),
-              prefixIconConstraints:
-                  AppLayout.sidebarSearchPrefixIconConstraints,
-              prefix: const SizedBox(width: AppSpacing.md),
-              suffixIcon: _hasSearchText
-                  ? Transform.translate(
-                      offset: const Offset(-AppSpacing.md, 0),
-                      child: IconButton(
-                        tooltip: ChannelSidebarStrings.clearSearch,
-                        onPressed: _clearSearch,
-                        icon: const Icon(Icons.close),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: AppLayout.sidebarRowMinHeight + AppSpacing.sm,
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: TextField(
+                    key: const ValueKey<String>('channel-search-field'),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(fontSize: 13),
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    autocorrect: false,
+                    textInputAction: TextInputAction.search,
+                    onChanged: _updateQuery,
+                    onSubmitted: (_) => _searchFocusNode.unfocus(),
+                    onTapOutside: (_) => _searchFocusNode.unfocus(),
+                    decoration: InputDecoration(
+                      hintText: ChannelSidebarStrings.searchHint,
+                      filled: true,
+                      fillColor: colors.surface,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.md,
                       ),
-                    )
-                  : null,
-              enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: colors.outlineVariant),
-                borderRadius: BorderRadius.circular(AppSpacing.sm),
-                gapPadding: 0,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: colors.primary, width: 2),
-                borderRadius: BorderRadius.circular(AppSpacing.sm),
-                gapPadding: 0,
-              ),
+                      constraints: AppLayout.sidebarSearchConstraints,
+                      prefixIcon: const Padding(
+                        padding: AppLayout.sidebarSearchIconPadding,
+                        child: Icon(Icons.search),
+                      ),
+                      prefixIconConstraints:
+                          AppLayout.sidebarSearchPrefixIconConstraints,
+                      prefix: const SizedBox(width: AppSpacing.md),
+                      suffixIcon: _hasSearchText
+                          ? Transform.translate(
+                              offset: const Offset(-AppSpacing.md, 0),
+                              child: IconButton(
+                                tooltip: ChannelSidebarStrings.clearSearch,
+                                onPressed: _clearSearch,
+                                icon: const Icon(Icons.close),
+                              ),
+                            )
+                          : null,
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: colors.outlineVariant),
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
+                        gapPadding: 0,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: colors.primary, width: 2),
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
+                        gapPadding: 0,
+                      ),
+                    ),
+                  ),
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 180),
+                  alignment: Alignment.centerRight,
+                  child: _searchFocusNode.hasFocus
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(left: AppSpacing.xs),
+                          child: IconButton(
+                            key: const ValueKey<String>('read-channel-filter'),
+                            tooltip: _hideReadChannels
+                                ? ChannelSidebarStrings.showReadChannels
+                                : ChannelSidebarStrings.hideReadChannels,
+                            onPressed: () => setState(
+                              () => _hideReadChannels = !_hideReadChannels,
+                            ),
+                            icon: Icon(
+                              _hideReadChannels
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              color: _hideReadChannels ? colors.primary : null,
+                            ),
+                          ),
+                        ),
+                ),
+              ],
             ),
           ),
         ),
@@ -258,6 +313,8 @@ class _SidebarContentState extends State<_SidebarContent> {
                   child: Text(
                     _hasSearchQuery
                         ? ChannelSidebarStrings.noSearchResults
+                        : _hideReadChannels
+                        ? ChannelSidebarStrings.noUnreadChannels
                         : ChannelSidebarStrings.empty,
                   ),
                 )

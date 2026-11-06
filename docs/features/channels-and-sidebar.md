@@ -36,6 +36,11 @@ conversation name. Matches remain in their original categories. Search expands
 matching categories temporarily and restores their previous expansion state
 when the query is cleared. Threads is hidden while a non-blank channel search
 query is active and returns when the query is cleared.
+The search field expands into the adjacent filter button's space while focused,
+without moving the list vertically. The button locally hides read channels and
+dialogs; search respects the active filter. Categories with no visible channels,
+including categories that were empty before filtering, are hidden. The filter
+resets when the sidebar closes.
 
 Channel and category rows use a compact 40 px minimum interactive height to
 fit more entries on screen. Rows can grow when text scaling requires more room.
