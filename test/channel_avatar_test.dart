@@ -58,6 +58,51 @@ void main() {
     }
   });
 
+  testWidgets('does not show presence or unavailable status for bots', (
+    WidgetTester tester,
+  ) async {
+    for (final UserPresence? presence in <UserPresence?>[
+      UserPresence.online,
+      null,
+    ]) {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            userAvatarProvider.overrideWith(
+              (Ref ref, UserAvatarRequest request) async => null,
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ChannelAvatar(
+                channel: SidebarChannel(
+                  id: 'bot-dm',
+                  teamId: '',
+                  name: 'me__bot',
+                  displayName: 'Bot',
+                  kind: ChannelKind.directMessage,
+                  profileImage: const SidebarProfileImage(
+                    userId: 'bot',
+                    updatedAt: 0,
+                  ),
+                  isBot: true,
+                  presence: presence,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey<String>('channel-presence-bot-dm')),
+        findsNothing,
+      );
+      expect(find.byTooltip('Online'), findsNothing);
+      expect(find.byTooltip('Status unavailable'), findsNothing);
+    }
+  });
+
   testWidgets(
     'labels an unavailable direct-user status without claiming offline',
     (WidgetTester tester) async {

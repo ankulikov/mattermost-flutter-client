@@ -23,8 +23,9 @@ The UI draws colored initials immediately. After bytes arrive, Flutter decodes
 them to the control's target size off the build path. A load or decode failure
 keeps the initials.
 
-Direct-message rows show a presence dot for online, away, Do Not Disturb, and
-offline. The sidebar fetches statuses in batches of at most 100 and applies
+Human direct-message rows show a presence dot for online, away, Do Not Disturb,
+and offline; bot rows and bot profile cards show no presence indicator. The
+sidebar fetches statuses in batches of at most 100 and applies
 status-change events while open; unknown or failed status reads show an
 unavailable label.
 
