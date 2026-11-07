@@ -81,7 +81,8 @@ One client for every screen, built for busy Mattermost workdays.
 - 🔖 Saved messages ("bookmarks")
 - 🤔 Message drafts (started, but not sent yet)
 - 🔔 Push notifications
-- 🏢 Multiple teams per account
+- 🏢 Multiple teams per account: move the team name farther right in the
+  sidebar header and make it a clickable team switcher, as in Mattermost.
 - 🧩 Full cover of interactive messages and dialogs
 
 ## 🚧 Out of scope

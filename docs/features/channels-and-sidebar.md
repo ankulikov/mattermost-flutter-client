@@ -62,7 +62,8 @@ while icons and text stay aligned with the sidebar grid.
 Category headers use that inset and rounded hover surface, with a small leading
 chevron and an uppercase compact label. Search, Threads, and channel names use
 13 px text; direct-message avatars are smaller to leave space before names.
-Unmuted unread channels show a small dot immediately after the name.
+Channels with visible unread activity show a small dot at the right edge of the
+row.
 Favorites stay at the top of the sidebar regardless of the server's category
 order. A small star identifies each favorite even when folder headings are
 hidden. Favorites remain visible when the read-channel filter is active;
