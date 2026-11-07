@@ -1,5 +1,6 @@
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 
 /// Owns channel navigation and direct-message channel operations.
 abstract interface class ChannelRepository {
@@ -97,6 +98,16 @@ final class ChannelSidebarUnreadChanged extends ChannelSidebarRealtimeEvent {
 
   final String channelId;
   final bool isUnread;
+}
+
+final class ChannelSidebarPresenceChanged extends ChannelSidebarRealtimeEvent {
+  const ChannelSidebarPresenceChanged({
+    required this.userId,
+    required this.presence,
+  });
+
+  final String userId;
+  final UserPresence presence;
 }
 
 /// The volatile sidebar snapshot must be reconciled from REST.

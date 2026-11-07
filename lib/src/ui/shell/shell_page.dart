@@ -179,13 +179,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       sidebar: sidebar,
       onSelectChannel: _selectChannelNamed,
       onSearchInChannel: _openSearchInChannel,
-      headerTrailing: inlineChannelHeader
-          ? _HeaderProfileButton(
-              profile: currentUserProfile,
-              selected: false,
-              onPressed: _showProfileDestination,
-            )
-          : null,
     );
     return Scaffold(
       body: SafeArea(
@@ -231,6 +224,26 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                                   onChannelSelected: _showSelectedChannel,
                                   onThreadsSelected:
                                       _showFollowedThreadsDestination,
+                                ),
+                              ),
+                              const Divider(height: 1),
+                              SizedBox(
+                                key: const ValueKey<String>(
+                                  'sidebar-profile-footer',
+                                ),
+                                height: 56,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: AppSpacing.sm,
+                                    ),
+                                    child: _HeaderProfileButton(
+                                      profile: currentUserProfile,
+                                      selected: false,
+                                      onPressed: _showProfileDestination,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -630,11 +643,12 @@ class _DesktopHeader extends StatelessWidget {
                     onPressed: onSearchSelected,
                     icon: const Icon(Icons.search_outlined),
                   ),
-                  _HeaderProfileButton(
-                    profile: profile,
-                    selected: profileSelected,
-                    onPressed: onProfileSelected,
-                  ),
+                  if (!channelsSelected)
+                    _HeaderProfileButton(
+                      profile: profile,
+                      selected: profileSelected,
+                      onPressed: onProfileSelected,
+                    ),
                   const SizedBox(width: AppSpacing.sm),
                 ],
               ),
@@ -840,7 +854,6 @@ class _MainContent extends StatelessWidget {
     required this.onSelectChannel,
     required this.onSearchInChannel,
     this.onBackToChannels,
-    this.headerTrailing,
   });
 
   final AuthState auth;
@@ -851,7 +864,6 @@ class _MainContent extends StatelessWidget {
   final ValueChanged<String> onSelectChannel;
   final ValueChanged<SidebarChannel> onSearchInChannel;
   final VoidCallback? onBackToChannels;
-  final Widget? headerTrailing;
 
   @override
   Widget build(BuildContext context) {
@@ -888,7 +900,6 @@ class _MainContent extends StatelessWidget {
           onSelectChannel: onSelectChannel,
           onBack: onBackToChannels,
           onSearchInChannel: onSearchInChannel,
-          headerTrailing: headerTrailing,
         );
       }
       return Center(

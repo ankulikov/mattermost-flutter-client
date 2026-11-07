@@ -20,6 +20,7 @@ abstract final class ChannelSidebarStrings {
   static const String preferencesSaveFailed =
       'Could not save sidebar settings. Try again.';
   static const String noSearchResults = 'No matching channels or dialogs';
+  static const String statusUnavailable = 'Status unavailable';
   static const String markUnread = 'Mark as unread';
   static const String addFavorite = 'Add to favorites';
   static const String removeFavorite = 'Remove from favorites';

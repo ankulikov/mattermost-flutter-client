@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
@@ -111,6 +112,34 @@ void main() {
     expect(repository.loadCalls, 2);
     expect(_currentChannel(container, 'channel-1').isUnread, isTrue);
   });
+
+  test('updates only the matching direct user on a presence event', () async {
+    final _RealtimeChannelRepository repository = _RealtimeChannelRepository(
+      initialLoad: Future<ChannelSidebarSnapshot>.value(
+        _snapshot(withDirect: true),
+      ),
+    );
+    final ProviderContainer container = _container(session, repository);
+    addTearDown(() async {
+      container.dispose();
+      await repository.dispose();
+    });
+
+    await container.read(channelSidebarProvider.future);
+    repository.add(
+      const ChannelSidebarPresenceChanged(
+        userId: 'ada',
+        presence: UserPresence.doNotDisturb,
+      ),
+    );
+    await _flush();
+
+    expect(
+      _currentChannel(container, 'direct-ada').presence,
+      UserPresence.doNotDisturb,
+    );
+    expect(_currentChannel(container, 'channel-1').presence, isNull);
+  });
 }
 
 ProviderContainer _container(
@@ -139,27 +168,39 @@ SidebarChannel _channel(ChannelSidebarSnapshot snapshot, String channelId) =>
         .expand((SidebarSection section) => section.channels)
         .singleWhere((SidebarChannel channel) => channel.id == channelId);
 
-ChannelSidebarSnapshot _snapshot({bool isUnread = false, bool muted = false}) =>
-    ChannelSidebarSnapshot(
-      team: const SidebarTeam(id: 'team-1', displayName: 'Team'),
-      sections: <SidebarSection>[
-        SidebarSection(
-          id: 'channels',
-          displayName: 'Channels',
-          channels: <SidebarChannel>[
-            SidebarChannel(
-              id: 'channel-1',
-              teamId: 'team-1',
-              name: 'channel-1',
-              displayName: 'Channel one',
-              kind: ChannelKind.publicChannel,
-              isUnread: isUnread,
-              muted: muted,
-            ),
-          ],
+ChannelSidebarSnapshot _snapshot({
+  bool isUnread = false,
+  bool muted = false,
+  bool withDirect = false,
+}) => ChannelSidebarSnapshot(
+  team: const SidebarTeam(id: 'team-1', displayName: 'Team'),
+  sections: <SidebarSection>[
+    SidebarSection(
+      id: 'channels',
+      displayName: 'Channels',
+      channels: <SidebarChannel>[
+        SidebarChannel(
+          id: 'channel-1',
+          teamId: 'team-1',
+          name: 'channel-1',
+          displayName: 'Channel one',
+          kind: ChannelKind.publicChannel,
+          isUnread: isUnread,
+          muted: muted,
         ),
+        if (withDirect)
+          const SidebarChannel(
+            id: 'direct-ada',
+            teamId: '',
+            name: 'me__ada',
+            displayName: 'Ada',
+            kind: ChannelKind.directMessage,
+            profileImage: SidebarProfileImage(userId: 'ada', updatedAt: 0),
+          ),
       ],
-    );
+    ),
+  ],
+);
 
 final class _RealtimeChannelRepository
     implements ChannelRepository, ChannelSidebarRealtimeRepository {

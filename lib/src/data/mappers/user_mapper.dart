@@ -13,6 +13,7 @@ UserSummary mapUserSummary(MattermostUserDto user) => UserSummary(
   position: user.position,
   email: user.email,
   profileImageUpdatedAt: user.profileImageUpdatedAt,
+  isBot: user.isBot,
 );
 
 UserSummary mapCachedUserSummary(CachedUserProfile profile) => UserSummary(
@@ -37,14 +38,18 @@ UserProfile mapUserProfile({
   nickname: user.nickname,
   position: user.position,
   email: user.email,
-  presence: switch (status.status) {
-    'online' => UserPresence.online,
-    'away' => UserPresence.away,
-    'dnd' => UserPresence.doNotDisturb,
-    _ => UserPresence.offline,
-  },
+  presence: mapUserPresence(status.status) ?? UserPresence.offline,
   profileImageUpdatedAt: user.profileImageUpdatedAt,
+  isBot: user.isBot,
 );
+
+UserPresence? mapUserPresence(String status) => switch (status) {
+  'online' => UserPresence.online,
+  'away' => UserPresence.away,
+  'dnd' => UserPresence.doNotDisturb,
+  'offline' => UserPresence.offline,
+  _ => null,
+};
 
 CachedUserProfile cacheUserSummary(UserSummary user, DateTime expiresAt) =>
     CachedUserProfile(

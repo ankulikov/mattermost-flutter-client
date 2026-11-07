@@ -68,6 +68,7 @@ List<SidebarSection> mapSections({
   };
   final Set<String> assigned = <String>{};
   final List<SidebarSection> sections = <SidebarSection>[];
+  final List<SidebarChannel> botDialogs = <SidebarChannel>[];
   final Map<String, MattermostChannelCategoryDto> categoriesById =
       <String, MattermostChannelCategoryDto>{
         for (final MattermostChannelCategoryDto category in categories)
@@ -117,13 +118,24 @@ List<SidebarSection> mapSections({
     final List<SidebarChannel> categoryChannels = placedChannels
         .map((entry) => entry.channel)
         .toList(growable: false);
-    if (categoryChannels.isEmpty) continue;
     assigned.addAll(categoryChannels.map((SidebarChannel item) => item.id));
+    if (category.type == 'direct_messages') {
+      botDialogs.addAll(
+        categoryChannels.where((SidebarChannel item) => item.isBot),
+      );
+    }
+    final List<SidebarChannel> visibleChannels =
+        category.type == 'direct_messages'
+        ? categoryChannels
+              .where((SidebarChannel item) => !item.isBot)
+              .toList(growable: false)
+        : categoryChannels;
+    if (visibleChannels.isEmpty) continue;
     sections.add(
       SidebarSection(
         id: _required(category.id, 'category.id'),
         displayName: categoryDisplayName(category),
-        channels: categoryChannels,
+        channels: visibleChannels,
         collapsed: category.collapsed,
         serverCategory: true,
         favorites: category.type == 'favorites',
@@ -140,8 +152,14 @@ List<SidebarSection> mapSections({
       .where((SidebarChannel channel) => !channel.isDialog)
       .toList(growable: false);
   final List<SidebarChannel> dialogs = remaining
-      .where((SidebarChannel channel) => channel.isDialog)
+      .where((SidebarChannel channel) => channel.isDialog && !channel.isBot)
       .toList(growable: false);
+  botDialogs.addAll(
+    remaining.where(
+      (SidebarChannel channel) =>
+          channel.kind == ChannelKind.directMessage && channel.isBot,
+    ),
+  );
   if (regular.isNotEmpty) {
     sections.add(
       SidebarSection(
@@ -157,6 +175,15 @@ List<SidebarSection> mapSections({
         id: 'uncategorized-dialogs',
         displayName: 'Direct messages',
         channels: dialogs,
+      ),
+    );
+  }
+  if (botDialogs.isNotEmpty) {
+    sections.add(
+      SidebarSection(
+        id: 'virtual-bots',
+        displayName: 'Боты',
+        channels: botDialogs,
       ),
     );
   }

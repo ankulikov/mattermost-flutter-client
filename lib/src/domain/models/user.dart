@@ -12,6 +12,7 @@ class UserSummary {
     required this.position,
     required this.email,
     this.profileImageUpdatedAt = 0,
+    this.isBot,
   });
 
   final String id;
@@ -22,6 +23,7 @@ class UserSummary {
   final String position;
   final String email;
   final int profileImageUpdatedAt;
+  final bool? isBot;
 
   String get fullName {
     final String value = <String>[
@@ -53,6 +55,7 @@ final class UserProfile extends UserSummary {
     required super.email,
     required this.presence,
     super.profileImageUpdatedAt = 0,
+    super.isBot,
   });
 
   final UserPresence presence;

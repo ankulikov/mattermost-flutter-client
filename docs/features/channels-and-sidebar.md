@@ -23,6 +23,10 @@ local highlight after the server accepts the new read boundary.
 Direct and group-message names are resolved through the users API. An initial
 failure shows a retry state. Manual refresh keeps the existing snapshot visible
 until the replacement succeeds and reports a non-blocking failure otherwise.
+Direct-user identity is fetched fresh with the sidebar so the server's `is_bot`
+flag can move bot DMs out of Direct messages into the local Боты section.
+Favorites and custom server categories keep their channels. The virtual section
+can collapse locally and never writes a Mattermost category.
 
 Collapsing a server category updates its collapse state through the v4
 single-category endpoint. If an update fails, the local choice remains usable
@@ -86,6 +90,13 @@ Mattermost does not expose a separate avatar thumbnail endpoint. The UI limits
 decode size for the rendered control. A failed image request leaves the initials
 in place and does not block navigation.
 
+Direct-message avatars show the participant's availability from a batched
+`POST /users/status/ids` request. `status_change` WebSocket events update the
+open sidebar; reconnect or a sequence gap reloads the server state. A failed
+status request leaves conversations usable and labels presence as unavailable,
+rather than claiming the user is offline. Status labels are exposed to assistive
+technology and in a tooltip.
+
 ## Channel members
 
 The channel header loads its member count from
@@ -109,10 +120,10 @@ omit usernames, and open the shared user profile card when selected.
 Compact layouts show Channels and Inbox as separate destinations with bottom
 navigation. Medium and expanded channel layouts align the sidebar, channel,
 and thread headers in one row. Icon-only Channels and Inbox controls precede
-the team name in the sidebar header, and the current-user profile sits at the
-far right of the channel or side pane header. Other destinations use a global
-header. Both icon controls have tooltips and semantic labels, and Inbox keeps
-its new-item indicator. The left pane shows
+the team name in the sidebar header. A divider separates the scrollable channel
+list from the current-user avatar button pinned to the bottom of the left pane.
+Other destinations use a global header. Both icon controls have tooltips and
+semantic labels, and Inbox keeps its new-item indicator. The left pane shows
 either the channel list or the Inbox; an Inbox selection does not leave an
 unrelated channel list beside it. Expanded layouts can keep that left pane
 visible while a message or thread opens in the working area.
