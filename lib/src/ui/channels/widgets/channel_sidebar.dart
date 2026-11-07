@@ -1129,7 +1129,9 @@ class _ChannelTile extends StatelessWidget {
                 minTileHeight: AppLayout.sidebarRowMinHeight,
                 minVerticalPadding: AppSpacing.xs,
                 horizontalTitleGap: AppSpacing.xs,
-                minLeadingWidth: 20,
+                minLeadingWidth: channel.kind == ChannelKind.directMessage
+                    ? 18
+                    : 20,
                 selected: selected,
                 shape: _sidebarTileShape,
                 leading: IconTheme(
