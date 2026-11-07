@@ -86,15 +86,7 @@ List<SidebarSection> mapSections({
     if (orderedCategoryIds.add(category.id)) orderedCategories.add(category);
   }
 
-  for (final MattermostChannelCategoryDto category
-      in <MattermostChannelCategoryDto>[
-        ...orderedCategories.where(
-          (MattermostChannelCategoryDto item) => item.type == 'favorites',
-        ),
-        ...orderedCategories.where(
-          (MattermostChannelCategoryDto item) => item.type != 'favorites',
-        ),
-      ]) {
+  for (final MattermostChannelCategoryDto category in orderedCategories) {
     final ChannelSorting sorting = _channelSorting(category.sorting);
     final List<({int position, SidebarChannel channel})> placedChannels =
         <({int position, SidebarChannel channel})>[];
@@ -139,6 +131,9 @@ List<SidebarSection> mapSections({
         collapsed: category.collapsed,
         serverCategory: true,
         favorites: category.type == 'favorites',
+        role: category.type == 'direct_messages'
+            ? SidebarSectionRole.directMessages
+            : SidebarSectionRole.other,
         muted: category.muted,
         sorting: sorting,
       ),
@@ -175,6 +170,7 @@ List<SidebarSection> mapSections({
         id: 'uncategorized-dialogs',
         displayName: 'Direct messages',
         channels: dialogs,
+        role: SidebarSectionRole.directMessages,
       ),
     );
   }
@@ -182,12 +178,28 @@ List<SidebarSection> mapSections({
     sections.add(
       SidebarSection(
         id: 'virtual-bots',
-        displayName: 'Боты',
+        displayName: 'Bots',
         channels: botDialogs,
+        role: SidebarSectionRole.bots,
       ),
     );
   }
-  return List<SidebarSection>.unmodifiable(sections);
+  return List<SidebarSection>.unmodifiable(<SidebarSection>[
+    ...sections.where((SidebarSection section) => section.favorites),
+    ...sections.where(
+      (SidebarSection section) =>
+          !section.favorites &&
+          section.role == SidebarSectionRole.directMessages,
+    ),
+    ...sections.where(
+      (SidebarSection section) =>
+          !section.favorites && section.role == SidebarSectionRole.bots,
+    ),
+    ...sections.where(
+      (SidebarSection section) =>
+          !section.favorites && section.role == SidebarSectionRole.other,
+    ),
+  ]);
 }
 
 String userDisplayName(MattermostUserDto user) => resolveUserDisplayName(

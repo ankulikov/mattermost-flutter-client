@@ -4,7 +4,7 @@ import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart'
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 
 void main() {
-  test('moves bot direct messages into a virtual Боты section', () {
+  test('moves bot direct messages into a virtual Bots section', () {
     final List<SidebarSection> sections = mapSections(
       channels: const <SidebarChannel>[
         SidebarChannel(
@@ -30,8 +30,25 @@ void main() {
           displayName: 'Person',
           kind: ChannelKind.directMessage,
         ),
+        SidebarChannel(
+          id: 'regular',
+          teamId: 'team',
+          name: 'regular',
+          displayName: 'Regular',
+          kind: ChannelKind.publicChannel,
+        ),
       ],
       categories: const <MattermostChannelCategoryDto>[
+        MattermostChannelCategoryDto(
+          id: 'regular-category',
+          userId: 'me',
+          teamId: 'team',
+          type: 'custom',
+          displayName: 'Regular category',
+          sorting: 'manual',
+          channelIds: <String>['regular'],
+          muted: false,
+        ),
         MattermostChannelCategoryDto(
           id: 'favorites',
           userId: 'me',
@@ -53,18 +70,20 @@ void main() {
           muted: false,
         ),
       ],
-      categoryOrder: const <String>['directs', 'favorites'],
+      categoryOrder: const <String>['regular-category', 'directs', 'favorites'],
     );
 
     expect(
       sections.map((SidebarSection section) => section.displayName),
-      <String>['Favorites', 'Direct messages', 'Боты'],
+      <String>['Favorites', 'Direct messages', 'Bots', 'Regular category'],
     );
     expect(
       sections.map((SidebarSection section) => section.channels.single.id),
-      <String>['favorite-bot', 'person', 'bot'],
+      <String>['favorite-bot', 'person', 'bot', 'regular'],
     );
-    expect(sections.last.serverCategory, isFalse);
+    expect(sections[1].role, SidebarSectionRole.directMessages);
+    expect(sections[2].role, SidebarSectionRole.bots);
+    expect(sections[2].serverCategory, isFalse);
   });
 
   test('groups unassigned bot DMs without moving group conversations', () {
@@ -92,7 +111,7 @@ void main() {
 
     expect(sections.map((section) => section.displayName), <String>[
       'Direct messages',
-      'Боты',
+      'Bots',
     ]);
     expect(sections.first.channels.single.id, 'group');
     expect(sections.last.channels.single.id, 'bot');
@@ -140,13 +159,13 @@ void main() {
 
     expect(
       sections.map((SidebarSection section) => section.displayName),
-      <String>['Product', 'Direct messages'],
+      <String>['Direct messages', 'Product'],
     );
     expect(
-      sections.first.channels.map((SidebarChannel channel) => channel.id),
+      sections.last.channels.map((SidebarChannel channel) => channel.id),
       <String>['channel-2', 'channel-1'],
     );
-    expect(sections.last.channels.single.id, 'direct-1');
+    expect(sections.first.channels.single.id, 'direct-1');
   });
 
   test('uses the category order returned separately by the API', () {

@@ -4,6 +4,8 @@ enum ChannelKind { publicChannel, privateChannel, directMessage, groupMessage }
 
 enum ChannelSorting { manual, recent }
 
+enum SidebarSectionRole { other, directMessages, bots }
+
 final class SidebarTeam {
   const SidebarTeam({
     required this.id,
@@ -138,6 +140,7 @@ final class SidebarSection {
     this.sorting = ChannelSorting.manual,
     this.serverCategory = false,
     this.favorites = false,
+    this.role = SidebarSectionRole.other,
   });
 
   final String id;
@@ -148,6 +151,7 @@ final class SidebarSection {
   final ChannelSorting sorting;
   final bool serverCategory;
   final bool favorites;
+  final SidebarSectionRole role;
 }
 
 final class ChannelSidebarSnapshot {
