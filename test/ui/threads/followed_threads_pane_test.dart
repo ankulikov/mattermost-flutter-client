@@ -4,13 +4,128 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
-import 'package:mattermost_flutter/src/domain/models/post.dart';
+import 'package:mattermost_flutter/src/domain/models/message_thread.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
+import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/followed_threads_pane.dart';
+import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
+  testWidgets('wide empty and failed lists do not open a thread', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpThreads(tester, participantCount: 0, width: 1000, empty: true);
+    expect(find.text('No followed threads yet'), findsOneWidget);
+    expect(find.byType(ThreadPane), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpThreads(tester, participantCount: 0, width: 1000, fail: true);
+    expect(find.text('Could not load threads'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.byType(ThreadPane), findsNothing);
+  });
+
+  testWidgets('clamps the right thread to 40–60% and stacks below 800 px', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final FollowedThread thread = FollowedThread(
+      root: ChannelPost(
+        id: 'thread-1',
+        channelId: 'channel-1',
+        author: const PostAuthor(id: 'root-author', displayName: 'Root author'),
+        sentAt: DateTime(2026),
+        message: 'Root message',
+      ),
+      replyCount: 0,
+      lastReplyAt: DateTime(2026),
+      lastViewedAt: DateTime(2026),
+      unreadReplies: 0,
+      unreadMentions: 0,
+    );
+    await _pumpThread(tester, thread: thread, width: double.infinity, scale: 2);
+    expect(tester.getSize(find.byType(ThreadPane)).width, 600);
+    await tester.drag(
+      find.byKey(const ValueKey<String>('followed-thread-pane-divider')),
+      const Offset(-100, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(ThreadPane)).width, 600);
+
+    tester.view.physicalSize = const Size(800, 900);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(ThreadPane)).width, 480);
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey<String>('followed-threads-list-pane')),
+          )
+          .width,
+      320,
+    );
+    await tester.drag(
+      find.byKey(const ValueKey<String>('followed-thread-pane-divider')),
+      const Offset(500, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(ThreadPane)).width, 320);
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey<String>('followed-threads-list-pane')),
+          )
+          .width,
+      480,
+    );
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(1000, 900);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(ThreadPane)).width, 400);
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey<String>('followed-threads-list-pane')),
+          )
+          .width,
+      600,
+    );
+    tester.view.physicalSize = const Size(2000, 900);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(ThreadPane)).width, 800);
+    await tester.drag(
+      find.byKey(const ValueKey<String>('followed-thread-pane-divider')),
+      const Offset(-1000, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(ThreadPane)).width, 1200);
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey<String>('followed-threads-list-pane')),
+          )
+          .width,
+      800,
+    );
+    tester.view.physicalSize = const Size(799, 900);
+    await tester.pumpAndSettle();
+    expect(find.byType(ThreadPane), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('followed-threads-list-pane')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('shows the latest reply time in the card header', (
     WidgetTester tester,
   ) async {
@@ -93,8 +208,11 @@ void main() {
           find.descendant(of: badge, matching: find.text('1')),
           findsOneWidget,
         );
-        final Finder rootAvatar = find.byKey(
-          const ValueKey<String>('user-avatar-fallback-root-author'),
+        final Finder rootAvatar = find.descendant(
+          of: find.byKey(const ValueKey<String>('followed-threads-list-pane')),
+          matching: find.byKey(
+            const ValueKey<String>('user-avatar-fallback-root-author'),
+          ),
         );
         expect(tester.getCenter(badge).dx, tester.getCenter(rootAvatar).dx);
         expect(tester.getSize(badge).width, tester.getSize(badge).height);
@@ -356,6 +474,9 @@ void main() {
 Future<void> _pumpThreads(
   WidgetTester tester, {
   required int participantCount,
+  double width = 500,
+  bool empty = false,
+  bool fail = false,
 }) async {
   final List<PostAuthor> participants = List<PostAuthor>.generate(
     participantCount,
@@ -389,16 +510,19 @@ Future<void> _pumpThreads(
             username: 'ada',
           ),
         ),
-        threadRepositoryProvider.overrideWithValue(_ThreadRepository(thread)),
+        threadRepositoryProvider.overrideWithValue(
+          _ThreadRepository(thread, empty: empty, fail: fail),
+        ),
+        postRepositoryProvider.overrideWithValue(const _NoopPostRepository()),
         userAvatarProvider.overrideWith(
           (Ref ref, UserAvatarRequest request) async => null,
         ),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
         home: Scaffold(
           body: SizedBox(
-            width: 500,
-            child: FollowedThreadsPane(
+            width: width,
+            child: const FollowedThreadsPane(
               team: SidebarTeam(id: 'team-1', displayName: 'Team'),
               channelsById: <String, SidebarChannel>{},
             ),
@@ -427,6 +551,7 @@ Future<void> _pumpThread(
           ),
         ),
         threadRepositoryProvider.overrideWithValue(_ThreadRepository(thread)),
+        postRepositoryProvider.overrideWithValue(const _NoopPostRepository()),
         userAvatarProvider.overrideWith(
           (Ref ref, UserAvatarRequest request) async => null,
         ),
@@ -457,20 +582,62 @@ String _numberName(int number) =>
     <String>['one', 'two', 'three', 'four', 'five'][number - 1];
 
 final class _ThreadRepository extends ThreadRepository {
-  const _ThreadRepository(this.thread);
+  const _ThreadRepository(this.thread, {this.empty = false, this.fail = false});
 
   final FollowedThread thread;
+  final bool empty;
+  final bool fail;
+
+  @override
+  Future<MessageThread> load({
+    required AuthSession session,
+    required String rootPostId,
+  }) async => MessageThread(
+    rootPostId: rootPostId,
+    root: thread.root,
+    isComplete: true,
+    loadedAt: DateTime(2026),
+  );
 
   @override
   Future<FollowedThreadsPage> loadFollowed({
     required AuthSession session,
     required String teamId,
     String? before,
-  }) async => FollowedThreadsPage(
-    items: <FollowedThread>[thread],
-    total: 1,
-    totalUnreadThreads: 0,
-    totalUnreadMentions: 0,
-    hasMore: false,
-  );
+  }) async {
+    if (fail) throw StateError('unavailable');
+    if (empty) {
+      return const FollowedThreadsPage(
+        items: <FollowedThread>[],
+        total: 0,
+        totalUnreadThreads: 0,
+        totalUnreadMentions: 0,
+        hasMore: false,
+      );
+    }
+    return FollowedThreadsPage(
+      items: <FollowedThread>[thread],
+      total: 1,
+      totalUnreadThreads: 0,
+      totalUnreadMentions: 0,
+      hasMore: false,
+    );
+  }
+}
+
+final class _NoopPostRepository extends PostRepository {
+  const _NoopPostRepository();
+
+  @override
+  Future<ChannelPostPage> loadLatest({
+    required AuthSession session,
+    required String channelId,
+  }) async => const ChannelPostPage();
+
+  @override
+  Future<ChannelPostPage> loadOlder({
+    required AuthSession session,
+    required String channelId,
+    required String beforePostId,
+  }) async => const ChannelPostPage();
 }

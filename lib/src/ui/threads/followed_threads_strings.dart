@@ -10,6 +10,7 @@ abstract final class FollowedThreadsStrings {
   static const String retry = 'Retry';
   static const String loadMore = 'Load more threads';
   static const String loadingMore = 'Loading more threads';
+  static const String resizeThreadPane = 'Resize thread pane';
   static const String now = 'now';
 
   static String replies(int count) => count == 1 ? '1 reply' : '$count replies';

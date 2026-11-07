@@ -73,19 +73,18 @@ class MessageAuthorLine extends StatelessWidget {
       sentAt: sentAt,
       locale: Localizations.localeOf(context).toLanguageTag(),
     );
-    return Row(
+    return Wrap(
+      spacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
-        Flexible(
-          child: Text(
-            author.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+        Text(
+          author.displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(width: 8),
         Text(
           timestamp,
           style: theme.textTheme.labelMedium?.copyWith(
