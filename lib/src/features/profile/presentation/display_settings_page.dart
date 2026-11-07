@@ -3,19 +3,35 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
+import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/repositories/sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/features/preferences/domain/models/theme_preference.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/profile_strings.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 /// Lets the signed-in user choose the application color scheme.
-class DisplaySettingsPage extends ConsumerWidget {
+class DisplaySettingsPage extends ConsumerStatefulWidget {
   const DisplaySettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DisplaySettingsPage> createState() =>
+      _DisplaySettingsPageState();
+}
+
+class _DisplaySettingsPageState extends ConsumerState<DisplaySettingsPage> {
+  bool _savingSidebarSetting = false;
+
+  @override
+  Widget build(BuildContext context) {
     final AppThemeState themeState = ref.watch(appThemeProvider);
     final bool busy = themeState.isLoading || themeState.isSaving;
+    final AuthSession? session = ref.watch(authSessionProvider);
+    final AsyncValue<SidebarViewPreferences>? sidebarPreferences =
+        session == null
+        ? null
+        : ref.watch(sidebarViewPreferencesProvider(session.durableDataScopeId));
 
     return Scaffold(
       key: const ValueKey<String>('display-settings-page'),
@@ -117,6 +133,41 @@ class DisplaySettingsPage extends ConsumerWidget {
                                 ),
                         ),
                       ),
+                      if (sidebarPreferences?.value
+                          case final SidebarViewPreferences
+                              preferences) ...<Widget>[
+                        const SizedBox(height: 32),
+                        Text(
+                          ProfileStrings.channelList,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 20),
+                        Card.outlined(
+                          margin: EdgeInsets.zero,
+                          child: SwitchListTile(
+                            key: const ValueKey<String>(
+                              'show-unread-in-collapsed-folders',
+                            ),
+                            title: const Text(
+                              ProfileStrings.showUnreadInCollapsedFolders,
+                            ),
+                            subtitle: const Text(
+                              ProfileStrings
+                                  .showUnreadInCollapsedFoldersDescription,
+                            ),
+                            value: preferences.showUnreadInCollapsedFolders,
+                            onChanged: _savingSidebarSetting
+                                ? null
+                                : (bool value) => unawaited(
+                                    _updateSidebarSetting(
+                                      session!.durableDataScopeId,
+                                      value,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -152,6 +203,43 @@ class DisplaySettingsPage extends ConsumerWidget {
         ..showSnackBar(
           const SnackBar(content: Text(ProfileStrings.themeUpdateFailed)),
         );
+    }
+  }
+
+  Future<void> _updateSidebarSetting(
+    String accountScopeId,
+    bool showUnread,
+  ) async {
+    setState(() => _savingSidebarSetting = true);
+    try {
+      final SidebarViewPreferencesRepository repository = ref.read(
+        sidebarViewPreferencesRepositoryProvider,
+      );
+      final SidebarViewPreferences current = await repository.read(
+        accountScopeId,
+      );
+      await repository.write(
+        accountScopeId,
+        SidebarViewPreferences(
+          hideReadChannels: current.hideReadChannels,
+          hideFolderHeadings: current.hideFolderHeadings,
+          showUnreadInCollapsedFolders: showUnread,
+        ),
+      );
+      if (mounted) {
+        ref.invalidate(sidebarViewPreferencesProvider(accountScopeId));
+      }
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(ProfileStrings.sidebarSettingUpdateFailed),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _savingSidebarSetting = false);
     }
   }
 }

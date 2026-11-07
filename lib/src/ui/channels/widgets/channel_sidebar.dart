@@ -42,6 +42,13 @@ class ChannelSidebar extends ConsumerWidget {
       );
     }
 
+    final AsyncValue<SidebarViewPreferences> viewPreferences = ref.watch(
+      sidebarViewPreferencesProvider(auth.session!.durableDataScopeId),
+    );
+    if (viewPreferences.isLoading && !viewPreferences.hasValue) {
+      return const SizedBox.expand();
+    }
+
     final AsyncValue<ChannelSidebarViewState> sidebar = ref.watch(
       channelSidebarProvider,
     );
@@ -71,6 +78,8 @@ class ChannelSidebar extends ConsumerWidget {
             preferencesRepository: ref.read(
               sidebarViewPreferencesRepositoryProvider,
             ),
+            showUnreadInCollapsedFolders:
+                viewPreferences.value?.showUnreadInCollapsedFolders ?? true,
             snapshot: viewState.snapshot,
             refreshStatus: viewState.refreshStatus,
             onRefresh: () => refreshChannelSidebar(ref),
@@ -123,6 +132,7 @@ class _SidebarContent extends StatefulWidget {
   const _SidebarContent({
     required this.accountScopeId,
     required this.preferencesRepository,
+    required this.showUnreadInCollapsedFolders,
     required this.snapshot,
     required this.refreshStatus,
     required this.onRefresh,
@@ -136,6 +146,7 @@ class _SidebarContent extends StatefulWidget {
 
   final String accountScopeId;
   final SidebarViewPreferencesRepository preferencesRepository;
+  final bool showUnreadInCollapsedFolders;
   final ChannelSidebarSnapshot snapshot;
   final OperationStatus refreshStatus;
   final RefreshCallback onRefresh;
@@ -187,6 +198,7 @@ class _SidebarContentState extends State<_SidebarContent> {
     final SidebarViewPreferences previous = SidebarViewPreferences(
       hideReadChannels: _hideReadChannels,
       hideFolderHeadings: _hideFolderHeadings,
+      showUnreadInCollapsedFolders: widget.showUnreadInCollapsedFolders,
     );
     setState(() {
       _hideReadChannels = hideReadChannels ?? _hideReadChannels;
@@ -203,6 +215,7 @@ class _SidebarContentState extends State<_SidebarContent> {
         SidebarViewPreferences(
           hideReadChannels: _hideReadChannels,
           hideFolderHeadings: _hideFolderHeadings,
+          showUnreadInCollapsedFolders: widget.showUnreadInCollapsedFolders,
         ),
       );
     } on Object {
@@ -444,6 +457,8 @@ class _SidebarContentState extends State<_SidebarContent> {
                     sections: filteredSections,
                     expandSections: _hasSearchQuery,
                     hideFolderHeadings: _hideFolderHeadings,
+                    showUnreadInCollapsedFolders:
+                        widget.showUnreadInCollapsedFolders,
                     onChannelSelected: widget.onChannelSelected,
                   ),
                 ),
@@ -544,12 +559,14 @@ class _LazyChannelList extends ConsumerStatefulWidget {
     required this.sections,
     required this.expandSections,
     required this.hideFolderHeadings,
+    required this.showUnreadInCollapsedFolders,
     required this.onChannelSelected,
   });
 
   final List<SidebarSection> sections;
   final bool expandSections;
   final bool hideFolderHeadings;
+  final bool showUnreadInCollapsedFolders;
   final VoidCallback? onChannelSelected;
 
   @override
@@ -641,6 +658,7 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
       sections: widget.sections,
       collapsedSectionIds: collapsedSectionIds,
       hideFolderHeadings: widget.hideFolderHeadings,
+      showUnreadInCollapsedFolders: widget.showUnreadInCollapsedFolders,
     );
     return ListView.builder(
       key: const PageStorageKey<String>('channel-sidebar'),
@@ -922,13 +940,24 @@ final class _ChannelListIndex {
     required this.sections,
     required Set<String> collapsedSectionIds,
     required this.hideFolderHeadings,
+    required this.showUnreadInCollapsedFolders,
   }) {
     var nextStart = 0;
     for (final SidebarSection section in sections) {
       _sectionStarts.add(nextStart);
       if (!hideFolderHeadings) nextStart += 1;
       final List<int> visible = collapsedSectionIds.contains(section.id)
-          ? const <int>[]
+          ? showUnreadInCollapsedFolders
+                ? <int>[
+                    for (final (int i, SidebarChannel channel)
+                        in section.channels.indexed)
+                      if (channel.hasUnreadMention ||
+                          (channel.isUnread &&
+                              !channel.muted &&
+                              !section.muted))
+                        i,
+                  ]
+                : const <int>[]
           : List<int>.generate(section.channels.length, (int i) => i);
       _visibleChannelIndices.add(visible);
       nextStart += visible.length;
@@ -938,6 +967,7 @@ final class _ChannelListIndex {
 
   final List<SidebarSection> sections;
   final bool hideFolderHeadings;
+  final bool showUnreadInCollapsedFolders;
   final List<int> _sectionStarts = <int>[];
   final List<List<int>> _visibleChannelIndices = <List<int>>[];
   late final int rowCount;
