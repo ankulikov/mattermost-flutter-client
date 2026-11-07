@@ -1177,9 +1177,10 @@ class _ChannelTile extends StatelessWidget {
                         color: colors.primary.withValues(alpha: 0.75),
                       ),
                     ],
-                    if (highlightUnread) ...<Widget>[
-                      const SizedBox(width: AppSpacing.xs),
-                      Container(
+                  ],
+                ),
+                trailing: highlightUnread
+                    ? Container(
                         key: ValueKey<String>(
                           'channel-unread-dot-${channel.id}',
                         ),
@@ -1191,10 +1192,8 @@ class _ChannelTile extends StatelessWidget {
                               : colors.primary,
                           shape: BoxShape.circle,
                         ),
-                      ),
-                    ],
-                  ],
-                ),
+                      )
+                    : null,
                 onTap: onTap,
               ),
             ),

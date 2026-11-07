@@ -2454,10 +2454,17 @@ void main() {
         const ValueKey<String>('channel-unread-dot-unread'),
       );
       expect(dot, findsOneWidget);
+      final Finder surface = find.byKey(
+        const ValueKey<String>('channel-selection-surface-unread'),
+      );
       expect(
         tester.getRect(dot).left -
             tester.getRect(find.text('Unread channel')).right,
-        inInclusiveRange(0, AppSpacing.sm),
+        greaterThan(AppSpacing.xxl),
+      );
+      expect(
+        tester.getRect(surface).right - tester.getRect(dot).right,
+        lessThanOrEqualTo(AppSpacing.xxl),
       );
       expect(
         find.byKey(const ValueKey<String>('channel-unread-dot-read')),
