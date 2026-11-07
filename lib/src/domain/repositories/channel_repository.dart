@@ -80,10 +80,12 @@ final class ChannelSidebarMessagePosted extends ChannelSidebarRealtimeEvent {
   const ChannelSidebarMessagePosted({
     required this.channelId,
     required this.isThreadReply,
+    this.mentionsCurrentUser = false,
   });
 
   final String channelId;
   final bool isThreadReply;
+  final bool mentionsCurrentUser;
 }
 
 /// An authoritative read/unread transition broadcast by Mattermost.

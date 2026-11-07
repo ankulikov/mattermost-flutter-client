@@ -356,6 +356,7 @@ final class ChannelSidebarController
         case ChannelSidebarMessagePosted(
           :final channelId,
           :final isThreadReply,
+          :final mentionsCurrentUser,
         ):
           final SidebarChannel? channel = _findChannel(snapshot, channelId);
           if (channel == null) {
@@ -366,7 +367,12 @@ final class ChannelSidebarController
           if (selectedId == channelId) {
             unawaited(_markChannelViewed(channelId));
           } else if (!isThreadReply || channel.isDialog) {
-            snapshot = _withUnread(snapshot, channelId, true);
+            snapshot = _withUnread(
+              snapshot,
+              channelId,
+              true,
+              hasUnreadMention: mentionsCurrentUser ? true : null,
+            );
           }
       }
     }
@@ -388,20 +394,29 @@ final class ChannelSidebarController
   ChannelSidebarSnapshot _withUnread(
     ChannelSidebarSnapshot snapshot,
     String channelId,
-    bool isUnread,
-  ) {
+    bool isUnread, {
+    bool? hasUnreadMention,
+  }) {
     var changed = false;
     final List<SidebarSection> sections = snapshot.sections
         .map((section) {
           var sectionChanged = false;
           final List<SidebarChannel> channels = section.channels
               .map((channel) {
-                if (channel.id != channelId || channel.isUnread == isUnread) {
+                final bool mention = isUnread
+                    ? hasUnreadMention ?? channel.hasUnreadMention
+                    : false;
+                if (channel.id != channelId ||
+                    (channel.isUnread == isUnread &&
+                        channel.hasUnreadMention == mention)) {
                   return channel;
                 }
                 changed = true;
                 sectionChanged = true;
-                return channel.copyWith(isUnread: isUnread);
+                return channel.copyWith(
+                  isUnread: isUnread,
+                  hasUnreadMention: mention,
+                );
               })
               .toList(growable: false);
           if (!sectionChanged) return section;

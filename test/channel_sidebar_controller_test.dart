@@ -68,6 +68,33 @@ void main() {
     expect(_currentChannel(container, 'channel-1').isUnread, isFalse);
   });
 
+  test('keeps a muted mention visible until its channel is viewed', () async {
+    final _RealtimeChannelRepository repository = _RealtimeChannelRepository()
+      ..mutedOnLoad = true;
+    final ProviderContainer container = _container(session, repository);
+    addTearDown(() async {
+      container.dispose();
+      await repository.dispose();
+    });
+
+    await container.read(channelSidebarProvider.future);
+    repository.add(
+      const ChannelSidebarMessagePosted(
+        channelId: 'channel-1',
+        isThreadReply: false,
+        mentionsCurrentUser: true,
+      ),
+    );
+    await _flush();
+    expect(_currentChannel(container, 'channel-1').hasUnreadMention, isTrue);
+
+    container
+        .read(selectedChannelProvider.notifier)
+        .select(_currentChannel(container, 'channel-1'));
+    await _flush();
+    expect(_currentChannel(container, 'channel-1').hasUnreadMention, isFalse);
+  });
+
   test('reloads authoritatively after realtime recovery', () async {
     final _RealtimeChannelRepository repository = _RealtimeChannelRepository();
     final ProviderContainer container = _container(session, repository);
@@ -112,7 +139,7 @@ SidebarChannel _channel(ChannelSidebarSnapshot snapshot, String channelId) =>
         .expand((SidebarSection section) => section.channels)
         .singleWhere((SidebarChannel channel) => channel.id == channelId);
 
-ChannelSidebarSnapshot _snapshot({bool isUnread = false}) =>
+ChannelSidebarSnapshot _snapshot({bool isUnread = false, bool muted = false}) =>
     ChannelSidebarSnapshot(
       team: const SidebarTeam(id: 'team-1', displayName: 'Team'),
       sections: <SidebarSection>[
@@ -127,6 +154,7 @@ ChannelSidebarSnapshot _snapshot({bool isUnread = false}) =>
               displayName: 'Channel one',
               kind: ChannelKind.publicChannel,
               isUnread: isUnread,
+              muted: muted,
             ),
           ],
         ),
@@ -144,12 +172,13 @@ final class _RealtimeChannelRepository
   var loadCalls = 0;
   var watchCalls = 0;
   var unreadOnLoad = false;
+  var mutedOnLoad = false;
 
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async {
     loadCalls += 1;
     if (loadCalls == 1 && initialLoad != null) return initialLoad!;
-    return _snapshot(isUnread: unreadOnLoad);
+    return _snapshot(isUnread: unreadOnLoad, muted: mutedOnLoad);
   }
 
   @override

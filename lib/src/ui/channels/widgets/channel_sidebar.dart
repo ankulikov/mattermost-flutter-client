@@ -250,8 +250,11 @@ class _SidebarContentState extends State<_SidebarContent> {
               .where(
                 (SidebarChannel channel) =>
                     (!_hideReadChannels ||
-                        channel.isUnread ||
-                        section.favorites) &&
+                        section.favorites ||
+                        channel.hasUnreadMention ||
+                        (channel.isUnread &&
+                            !channel.muted &&
+                            !section.muted)) &&
                     channel.displayName.toLowerCase().contains(normalizedQuery),
               )
               .toList(growable: false);
@@ -928,6 +931,7 @@ final class _ChannelListIndex {
       final List<int> visible = <int>[
         for (final (int i, SidebarChannel channel) in section.channels.indexed)
           if (!collapsedSectionIds.contains(section.id) ||
+              channel.hasUnreadMention ||
               (channel.isUnread && !channel.muted && !section.muted) ||
               channel.id == selectedChannelId)
             i,
@@ -1061,7 +1065,8 @@ class _ChannelTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
-    final bool highlightUnread = channel.isUnread && !muted;
+    final bool highlightUnread =
+        channel.hasUnreadMention || (channel.isUnread && !muted);
     void showKeyboardMenu() {
       final RenderBox? box = context.findRenderObject() as RenderBox?;
       if (box == null) return;

@@ -27,6 +27,7 @@ final class SidebarChannel {
     this.lastActivityAt = 0,
     this.profileImage,
     this.isUnread = false,
+    this.hasUnreadMention = false,
     this.muted = false,
   });
 
@@ -41,6 +42,7 @@ final class SidebarChannel {
   final int lastActivityAt;
   final SidebarProfileImage? profileImage;
   final bool isUnread;
+  final bool hasUnreadMention;
   final bool muted;
 
   bool get isDialog =>
@@ -56,6 +58,7 @@ final class SidebarChannel {
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
     isUnread: isUnread,
+    hasUnreadMention: hasUnreadMention,
     muted: muted,
   );
 
@@ -76,10 +79,15 @@ final class SidebarChannel {
       updatedAt: profileImageUpdatedAt,
     ),
     isUnread: isUnread,
+    hasUnreadMention: hasUnreadMention,
     muted: muted,
   );
 
-  SidebarChannel copyWith({bool? isUnread, bool? muted}) => SidebarChannel(
+  SidebarChannel copyWith({
+    bool? isUnread,
+    bool? hasUnreadMention,
+    bool? muted,
+  }) => SidebarChannel(
     id: id,
     teamId: teamId,
     name: name,
@@ -89,6 +97,7 @@ final class SidebarChannel {
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
     isUnread: isUnread ?? this.isUnread,
+    hasUnreadMention: hasUnreadMention ?? this.hasUnreadMention,
     muted: muted ?? this.muted,
   );
 }
