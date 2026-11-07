@@ -25,7 +25,7 @@ team name. The channel, thread, and sidebar headers share one row. The
 current-user profile stays at the bottom of the channel sidebar. Other
 destinations keep a global header.
 At 1120 px and above the shell uses the expanded composition. A content pane
-needs at least 800 px before it adds a 380 px side thread.
+needs at least 800 px before it adds a side thread.
 
 ## Architecture
 

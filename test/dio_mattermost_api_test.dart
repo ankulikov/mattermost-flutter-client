@@ -539,6 +539,26 @@ void main() {
     expect(status.dndEndTime, 1789057800);
   });
 
+  test('sends and reads a manually selected offline status', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"user_id":"ada","status":"offline","manual":true}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final MattermostUserStatusDto status = await DioMattermostApi(
+      dio: dio,
+    ).updateUserStatus(userId: 'ada', status: 'offline', dndEndTime: 0);
+
+    expect(adapter.request?.data, <String, Object?>{
+      'user_id': 'ada',
+      'status': 'offline',
+      'dnd_end_time': 0,
+    });
+    expect(status.status, 'offline');
+    expect(status.manual, isTrue);
+  });
+
   test('sets and clears a custom user status', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(body: '{}');
     final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))

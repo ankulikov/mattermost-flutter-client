@@ -297,7 +297,7 @@ void main() {
     }
   });
 
-  testWidgets('opens Profile from the desktop sidebar and logs out', (
+  testWidgets('opens avatar menu from the desktop sidebar and logs out', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -336,26 +336,48 @@ void main() {
 
     await tester.tap(profileDestination);
     await tester.pumpAndSettle();
-    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('profile-avatar-menu')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('profile-avatar-menu')),
+        matching: find.text('Ada Lovelace'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('@ada'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('profile-menu-away')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('profile-menu-custom-status')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('profile-menu-profile')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-profile')),
+    );
+    await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey<String>('profile-logout')),
       findsOneWidget,
     );
 
-    final Finder logout = find.byKey(const ValueKey<String>('profile-logout'));
-    final Finder profileScrollable = find.descendant(
-      of: find.byKey(const ValueKey<String>('profile-scroll-view')),
-      matching: find.byType(Scrollable),
-    );
-    await tester.drag(profileScrollable, const Offset(0, -200));
+    await tester.tap(profileDestination);
     await tester.pumpAndSettle();
-    await tester.tap(logout);
+    await tester.tap(find.byKey(const ValueKey<String>('profile-menu-logout')));
     await tester.pumpAndSettle();
     expect(find.text(AuthStrings.title), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('opens Profile from the rightmost compact destination', (
+  testWidgets('opens avatar menu from the rightmost compact destination', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -392,6 +414,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const ValueKey<String>('profile-avatar-menu')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-profile')),
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-logout')),
@@ -399,6 +429,152 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('changes availability and custom status from the avatar menu', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _CurrentProfileRepository profileRepository =
+        _CurrentProfileRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          currentUserProfileRepositoryProvider.overrideWithValue(
+            profileRepository,
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder avatar = find.byKey(
+      const ValueKey<String>('shell-profile-destination'),
+    );
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-doNotDisturb')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('availability-expiry-thirtyMinutes')),
+    );
+    await tester.pumpAndSettle();
+    expect(profileRepository.lastPresence, UserPresence.doNotDisturb);
+    expect(profileRepository.lastAvailabilityExpiry, isNotNull);
+
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-custom-status')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey<String>('custom-status-save')),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('custom-status-text')),
+      'Planning',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey<String>('custom-status-save')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('custom-status-save')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(profileRepository.lastCustomStatusText, 'Planning');
+
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-offline')),
+    );
+    await tester.pumpAndSettle();
+    expect(profileRepository.lastPresence, UserPresence.offline);
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('profile-menu-offline')),
+        matching: find.byIcon(Icons.check),
+      ),
+      findsOneWidget,
+    );
+    await tester.tapAt(const Offset(600, 500));
+    await tester.pumpAndSettle();
+
+    profileRepository.failAvailability = true;
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('profile-menu-away')));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not update your status.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'keeps the avatar menu usable with large text on compact layout',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+            currentUserProfileRepositoryProvider.overrideWithValue(
+              _CurrentProfileRepository(),
+            ),
+          ],
+          child: MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: const BootstrapPage(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+          matching: find.text('Profile'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('profile-avatar-menu')),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey<String>('profile-menu-profile')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('profile-menu-profile')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('profile-scroll-view')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('replaces the channel pane with Inbox on a wide screen', (
     WidgetTester tester,
@@ -3879,6 +4055,11 @@ final class _FailingSidebarPreferencesRepository
 }
 
 final class _CurrentProfileRepository implements CurrentUserProfileRepository {
+  UserPresence? lastPresence;
+  DateTime? lastAvailabilityExpiry;
+  String? lastCustomStatusText;
+  bool failAvailability = false;
+
   @override
   Future<CurrentUserProfile> load() async => const CurrentUserProfile(
     user: UserSummary(
@@ -3897,7 +4078,12 @@ final class _CurrentProfileRepository implements CurrentUserProfileRepository {
   Future<Availability> setAvailability({
     required UserPresence presence,
     required DateTime? expiresAt,
-  }) async => Availability(presence: presence, expiresAt: expiresAt);
+  }) async {
+    if (failAvailability) throw StateError('status unavailable');
+    lastPresence = presence;
+    lastAvailabilityExpiry = expiresAt;
+    return Availability(presence: presence, expiresAt: expiresAt);
+  }
 
   @override
   Future<void> setCustomStatus({
@@ -3905,7 +4091,9 @@ final class _CurrentProfileRepository implements CurrentUserProfileRepository {
     required String text,
     required CustomStatusDuration duration,
     required DateTime expiresAt,
-  }) async {}
+  }) async {
+    lastCustomStatusText = text;
+  }
 
   @override
   Future<void> clearCustomStatus() async {}
