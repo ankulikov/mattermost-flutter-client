@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/app/app.dart';
 import 'package:mattermost_flutter/src/app/router.dart';
+import 'package:mattermost_flutter/src/data/repositories/shared_preferences_sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
@@ -3027,7 +3028,7 @@ void main() {
 
     expect(find.text('MUTED CATEGORY'), findsOneWidget);
     expect(find.text('Unread in category'), findsNothing);
-    expect(find.text('Mention in category'), findsNothing);
+    expect(find.text('Mention in category'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('channel-section-unread-dot-muted')),
       findsOneWidget,
@@ -3224,6 +3225,11 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    const String accountScopeId = 'https://chat.example.com|user:me';
+    await SharedPreferencesSidebarViewPreferencesRepository().write(
+      accountScopeId,
+      const SidebarViewPreferences(showUnreadInCollapsedFolders: false),
+    );
 
     Widget app() => ProviderScope(
       overrides: [
@@ -3243,6 +3249,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Read channel'), findsNothing);
     expect(find.text('MIXED'), findsNothing);
+    expect(
+      (await SharedPreferencesSidebarViewPreferencesRepository().read(
+        accountScopeId,
+      )).showUnreadInCollapsedFolders,
+      isFalse,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(app());
@@ -3453,7 +3465,7 @@ void main() {
     );
   });
 
-  testWidgets('collapsed folders hide channels and mark unread activity', (
+  testWidgets('collapsed folders keep unread channels visible by default', (
     WidgetTester tester,
   ) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -3482,9 +3494,9 @@ void main() {
       expect(find.text('Muted unread channel'), findsOneWidget);
       await tester.tap(find.text('CHANNELS'));
       await tester.pumpAndSettle();
-      expect(find.text('Unread channel'), findsNothing);
+      expect(find.text('Unread channel'), findsOneWidget);
       expect(find.text('Muted unread channel'), findsNothing);
-      expect(find.text('Muted mentioned channel'), findsNothing);
+      expect(find.text('Muted mentioned channel'), findsOneWidget);
       expect(find.text('Read channel'), findsNothing);
       final Finder dot = find.byKey(
         const ValueKey<String>('channel-section-unread-dot-channels'),
@@ -3502,6 +3514,35 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Muted unread channel'), findsOneWidget);
     }
+  });
+
+  testWidgets('saved setting hides unread channels in collapsed folders', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await SharedPreferencesSidebarViewPreferencesRepository().write(
+      'https://chat.example.com|user:me',
+      const SidebarViewPreferences(showUnreadInCollapsedFolders: false),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _UnreadSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('CHANNELS'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unread channel'), findsNothing);
+    expect(find.text('Muted mentioned channel'), findsNothing);
+    expect(find.text('Read channel'), findsNothing);
   });
 
   testWidgets('hides the selected channel in a collapsed category', (

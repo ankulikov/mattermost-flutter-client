@@ -10,7 +10,7 @@ void main() {
         InMemorySharedPreferencesAsync.empty();
   });
 
-  test('restores both sidebar choices and isolates accounts', () async {
+  test('restores sidebar choices and isolates accounts', () async {
     final SidebarViewPreferencesRepository repository =
         SharedPreferencesSidebarViewPreferencesRepository();
     const String firstAccount = 'https://chat.example.com|user:first';
@@ -19,12 +19,14 @@ void main() {
     final SidebarViewPreferences initial = await repository.read(firstAccount);
     expect(initial.hideReadChannels, isFalse);
     expect(initial.hideFolderHeadings, isFalse);
+    expect(initial.showUnreadInCollapsedFolders, isTrue);
 
     await repository.write(
       firstAccount,
       const SidebarViewPreferences(
         hideReadChannels: true,
         hideFolderHeadings: true,
+        showUnreadInCollapsedFolders: false,
       ),
     );
 
@@ -34,9 +36,11 @@ void main() {
         );
     expect(restored.hideReadChannels, isTrue);
     expect(restored.hideFolderHeadings, isTrue);
+    expect(restored.showUnreadInCollapsedFolders, isFalse);
 
     final SidebarViewPreferences other = await repository.read(secondAccount);
     expect(other.hideReadChannels, isFalse);
     expect(other.hideFolderHeadings, isFalse);
+    expect(other.showUnreadInCollapsedFolders, isTrue);
   });
 }

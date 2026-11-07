@@ -31,6 +31,13 @@ abstract final class ProfileStrings {
   static const String darkTheme = 'Dark';
   static const String updatingTheme = 'Updating theme';
   static const String themeUpdateFailed = 'Could not save your theme.';
+  static const String channelList = 'Channel list';
+  static const String showUnreadInCollapsedFolders =
+      'Show unread channels in collapsed folders';
+  static const String showUnreadInCollapsedFoldersDescription =
+      'Keep unread channels visible when their folder is collapsed.';
+  static const String sidebarSettingUpdateFailed =
+      'Could not save the channel list setting.';
   static const String logout = 'Log out';
   static const String doNotDisturbShort = 'DnD';
   static const String inAMeeting = 'In a meeting';

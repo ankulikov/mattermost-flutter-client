@@ -33,10 +33,11 @@ symbols. Other categories keep their server order.
 
 Collapsing a server category updates its collapse state through the v4
 single-category endpoint. If an update fails, the local choice remains usable
-and the sidebar reports that it could not be synchronized. Collapsed categories
-hide every channel, including unread and selected channels. A dot on the category
-header indicates unread activity by the same rules as channel dots: ordinary
-activity in muted channels stays quiet, while unread mentions remain marked.
+and the sidebar reports that it could not be synchronized. By default,
+collapsed categories still show unread channels and unread mentions; read
+channels and ordinary unread activity in muted channels stay hidden. The
+Display setting can hide all channels in collapsed categories. A dot on the
+category header indicates unread activity by the same rules as channel dots.
 Synthetic uncategorized sections keep their expansion state locally.
 
 Sidebar search filters the loaded snapshot locally by the displayed channel or
@@ -56,6 +57,8 @@ ordered list, including channels in collapsed folders. Showing the headings
 again restores the previous collapse state without changing server categories.
 This choice is also saved per account. Both choices use local
 `SharedPreferencesAsync`; sidebar snapshots and unread counters remain volatile.
+The collapsed-folder unread choice is saved alongside these per-account
+preferences and updates the open sidebar when changed in Display settings.
 
 Channel and category rows use a compact 40 px minimum interactive height to
 fit more entries on screen. Rows can grow when text scaling requires more room.
