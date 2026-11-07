@@ -172,6 +172,7 @@ final class ChannelSidebarController
             sorting: section.sorting,
             serverCategory: section.serverCategory,
             favorites: section.favorites,
+            role: section.role,
           );
         })
         .toList(growable: false);
@@ -429,6 +430,7 @@ final class ChannelSidebarController
             collapsed: section.collapsed,
             serverCategory: section.serverCategory,
             favorites: section.favorites,
+            role: section.role,
             muted: section.muted,
             sorting: section.sorting,
           );
@@ -468,6 +470,7 @@ final class ChannelSidebarController
             sorting: section.sorting,
             serverCategory: section.serverCategory,
             favorites: section.favorites,
+            role: section.role,
           );
         })
         .toList(growable: false);

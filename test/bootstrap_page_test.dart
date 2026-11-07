@@ -562,6 +562,10 @@ void main() {
 
     expect(find.text('Example team'), findsOneWidget);
     expect(find.text('FAVORITES'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-section-marker-favorites')),
+      findsOneWidget,
+    );
     expect(find.text('Town Square'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(
@@ -2981,6 +2985,10 @@ void main() {
 
     expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
     expect(find.text('DIRECT MESSAGES'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-section-marker-direct')),
+      findsOneWidget,
+    );
     expect(find.text('Town Square'), findsNothing);
 
     await tester.tap(find.byTooltip('Hide folder headings'));
@@ -3920,6 +3928,7 @@ final class _SearchSidebarRepository implements ChannelRepository {
           SidebarSection(
             id: 'direct',
             displayName: 'Direct messages',
+            role: SidebarSectionRole.directMessages,
             channels: <SidebarChannel>[
               SidebarChannel(
                 id: 'direct-ada',
