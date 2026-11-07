@@ -80,11 +80,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   Future<void> _selectAvailability(UserPresence presence) async {
     AvailabilityExpiry? expiry;
     if (presence == UserPresence.doNotDisturb) {
-      expiry = await showModalBottomSheet<AvailabilityExpiry>(
-        context: context,
-        showDragHandle: true,
-        builder: (BuildContext context) => const _AvailabilityExpirySheet(),
-      );
+      expiry = await showAvailabilityExpirySheet(context);
       if (expiry == null || !mounted) return;
     }
     await ref
@@ -624,6 +620,13 @@ class _AvailabilityButton extends StatelessWidget {
     );
   }
 }
+
+Future<AvailabilityExpiry?> showAvailabilityExpirySheet(BuildContext context) =>
+    showModalBottomSheet<AvailabilityExpiry>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext context) => const _AvailabilityExpirySheet(),
+    );
 
 class _AvailabilityExpirySheet extends StatelessWidget {
   const _AvailabilityExpirySheet();

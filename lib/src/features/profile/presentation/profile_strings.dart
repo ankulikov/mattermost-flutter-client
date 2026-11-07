@@ -9,6 +9,10 @@ abstract final class ProfileStrings {
   static const String retry = 'Retry';
   static const String availability = 'Availability';
   static const String customStatus = 'Custom status';
+  static const String setCustomStatus = 'Set a custom status';
+  static const String statusText = 'Status text';
+  static const String cancel = 'Cancel';
+  static const String save = 'Save';
   static const String clearCustomStatus = 'Clear custom status';
   static const String clearAfter = 'Clear after';
   static const String thirtyMinutes = '30 minutes';
