@@ -2485,6 +2485,55 @@ void main() {
     }
   });
 
+  testWidgets('shows a direct participant custom status beside the name', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1000, 800),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _CustomStatusSidebarRepository(),
+            ),
+          ],
+          child: MaterialApp(
+            home: const BootstrapPage(),
+            builder: (BuildContext context, Widget? child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(1.6)),
+              child: child!,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder direct = find.byKey(
+        const ValueKey<String>('channel-selection-surface-direct-ada'),
+      );
+      expect(
+        find.descendant(of: direct, matching: find.text('📆')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: direct, matching: find.byTooltip('In a meeting')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('channel-custom-status-bot')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('search expands into the filter button space while focused', (
     WidgetTester tester,
   ) async {
@@ -3852,6 +3901,53 @@ final class _SidebarRepository implements ChannelRepository {
                 name: 'me__ada',
                 displayName: 'Ada Lovelace',
                 kind: ChannelKind.directMessage,
+              ),
+            ],
+          ),
+        ],
+      );
+}
+
+final class _CustomStatusSidebarRepository implements ChannelRepository {
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      const ChannelSidebarSnapshot(
+        team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'direct',
+            displayName: 'Direct Messages',
+            role: SidebarSectionRole.directMessages,
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'direct-ada',
+                teamId: '',
+                name: 'me__ada',
+                displayName: 'Ada Lovelace',
+                kind: ChannelKind.directMessage,
+                customStatus: UserCustomStatus(
+                  emoji: 'calendar',
+                  text: 'In a meeting',
+                ),
+              ),
+              SidebarChannel(
+                id: 'bot',
+                teamId: '',
+                name: 'me__bot',
+                displayName: 'Helper bot',
+                kind: ChannelKind.directMessage,
+                isBot: true,
+                customStatus: UserCustomStatus(
+                  emoji: 'calendar',
+                  text: 'Should stay hidden',
+                ),
               ),
             ],
           ),

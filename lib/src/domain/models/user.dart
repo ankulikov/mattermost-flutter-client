@@ -1,5 +1,17 @@
 enum UserPresence { online, away, doNotDisturb, offline }
 
+final class UserCustomStatus {
+  const UserCustomStatus({
+    required this.emoji,
+    required this.text,
+    this.expiresAt,
+  });
+
+  final String emoji;
+  final String text;
+  final DateTime? expiresAt;
+}
+
 /// A user projection suitable for author, participant, mention, and dialog
 /// enrichment. It deliberately has no transport or cache representation.
 class UserSummary {
@@ -13,6 +25,7 @@ class UserSummary {
     required this.email,
     this.profileImageUpdatedAt = 0,
     this.isBot,
+    this.customStatus,
   });
 
   final String id;
@@ -24,6 +37,7 @@ class UserSummary {
   final String email;
   final int profileImageUpdatedAt;
   final bool? isBot;
+  final UserCustomStatus? customStatus;
 
   String get fullName {
     final String value = <String>[

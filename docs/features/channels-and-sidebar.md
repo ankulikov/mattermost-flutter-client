@@ -102,6 +102,13 @@ rather than claiming the user is offline. Status labels are exposed to assistive
 technology and in a tooltip. Bot dialogs show their avatar without an
 availability dot or status label.
 
+Human direct-message rows also show the participant's active custom-status
+emoji beside the name; hovering or long-pressing it reveals the status text,
+which is also exposed to assistive technology. The status comes from fresh user
+props, is not stored in the profile cache, and is reloaded when Mattermost
+broadcasts `user_updated`. Expired and malformed statuses are ignored. Bot rows
+do not show custom statuses.
+
 ## Channel members
 
 The channel header loads its member count from

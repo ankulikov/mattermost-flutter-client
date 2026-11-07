@@ -28,6 +28,9 @@ List<SidebarChannel> resolveDialogDisplayNames({
                 profileImageUpdatedAt: participant.profileImageUpdatedAt,
                 isBot: participant.isBot == true,
                 presence: directPresenceById[participant.id],
+                customStatus: participant.isBot == true
+                    ? null
+                    : participant.customStatus,
               );
       }
       if (channel.kind == ChannelKind.groupMessage) {
