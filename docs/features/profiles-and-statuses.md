@@ -49,7 +49,10 @@ Drift, so each page entry or process restart begins with a new server snapshot.
 On medium and expanded channel layouts, the profile avatar and presence
 indicator stay at the bottom of the left pane beneath a divider. Other desktop
 destinations show the profile control in the global header. Compact layouts
-keep Profile in the bottom navigation.
+keep the avatar in the bottom navigation. Tapping the avatar opens a menu with
+the current user, custom status text and duration, availability, Profile, and
+Log out. Do Not Disturb uses the existing expiration choices; Away and Offline
+are set without a duration. Profile remains available from the menu.
 
 ## Relevant code
 

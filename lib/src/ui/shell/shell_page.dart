@@ -10,6 +10,7 @@ import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_control
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_thread_host.dart';
 import 'package:mattermost_flutter/src/features/profile/domain/models/current_user_profile.dart';
+import 'package:mattermost_flutter/src/features/profile/presentation/profile_avatar_menu.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/profile_page.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/widgets/profile_navigation_avatar.dart';
 import 'package:mattermost_flutter/src/features/search/presentation/message_search_controller.dart';
@@ -241,7 +242,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                                     child: _HeaderProfileButton(
                                       profile: currentUserProfile,
                                       selected: false,
-                                      onPressed: _showProfileDestination,
+                                      onPressed: _showProfileMenu,
                                     ),
                                   ),
                                 ),
@@ -295,7 +296,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                           onChannelsSelected: _showChannelsDestination,
                           onInboxSelected: _showInboxDestination,
                           onSearchSelected: _showSearchDestination,
-                          onProfileSelected: _showProfileDestination,
+                          onProfileSelected: _showProfileMenu,
                         ),
                         const Divider(height: 1),
                         Expanded(
@@ -431,6 +432,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                     inboxHasNewItems: inboxHasNewItems,
                     profile: currentUserProfile,
                     onDestinationSelected: _selectDestination,
+                    onProfileSelected: (BuildContext context) =>
+                        _showProfileMenu(context, bottomNavigation: true),
                   ),
           ),
         ),
@@ -439,15 +442,28 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
   }
 
   void _selectDestination(int index) {
-    if (index == 3) {
-      _showProfileDestination();
-    } else if (index == 2) {
+    if (index == 2) {
       _showSearchDestination();
     } else if (index == 1) {
       _showInboxDestination();
     } else {
       _showChannelsDestination();
     }
+  }
+
+  void _showProfileMenu(
+    BuildContext anchorContext, {
+    bool bottomNavigation = false,
+  }) {
+    unawaited(
+      showProfileAvatarMenu(
+        context: anchorContext,
+        ref: ref,
+        onProfile: _showProfileDestination,
+        onLogout: () => ref.read(authControllerProvider.notifier).signOut(),
+        bottomNavigation: bottomNavigation,
+      ),
+    );
   }
 
   void _showChannelsDestination() {
@@ -609,7 +625,7 @@ class _DesktopHeader extends StatelessWidget {
   final VoidCallback onChannelsSelected;
   final VoidCallback onInboxSelected;
   final VoidCallback onSearchSelected;
-  final VoidCallback onProfileSelected;
+  final ValueChanged<BuildContext> onProfileSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -726,15 +742,17 @@ class _HeaderProfileButton extends StatelessWidget {
 
   final CurrentUserProfile? profile;
   final bool selected;
-  final VoidCallback onPressed;
+  final ValueChanged<BuildContext> onPressed;
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    key: const ValueKey<String>('shell-profile-destination'),
-    tooltip: ShellStrings.profile,
-    isSelected: selected,
-    onPressed: onPressed,
-    icon: ProfileNavigationAvatar(profile: profile),
+  Widget build(BuildContext context) => Builder(
+    builder: (BuildContext buttonContext) => IconButton(
+      key: const ValueKey<String>('shell-profile-destination'),
+      tooltip: ShellStrings.profile,
+      isSelected: selected,
+      onPressed: () => onPressed(buttonContext),
+      icon: ProfileNavigationAvatar(profile: profile),
+    ),
   );
 }
 
@@ -776,18 +794,26 @@ class _BottomDestinations extends StatelessWidget {
     required this.inboxHasNewItems,
     required this.profile,
     required this.onDestinationSelected,
+    required this.onProfileSelected,
   });
 
   final int selectedIndex;
   final bool inboxHasNewItems;
   final CurrentUserProfile? profile;
   final ValueChanged<int> onDestinationSelected;
+  final ValueChanged<BuildContext> onProfileSelected;
 
   @override
   Widget build(BuildContext context) => NavigationBar(
     key: const ValueKey<String>('shell-bottom-navigation'),
     selectedIndex: selectedIndex,
-    onDestinationSelected: onDestinationSelected,
+    onDestinationSelected: (int index) {
+      if (index == 3) {
+        onProfileSelected(context);
+      } else {
+        onDestinationSelected(index);
+      }
+    },
     destinations: <NavigationDestination>[
       const NavigationDestination(
         icon: Icon(Icons.home_outlined),
