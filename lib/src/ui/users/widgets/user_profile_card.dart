@@ -103,8 +103,10 @@ class _UserProfileCardState extends ConsumerState<UserProfileCard> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 12),
-          Center(child: _PresenceBadge(presence: profile.presence)),
+          if (profile.isBot != true) ...<Widget>[
+            const SizedBox(height: 12),
+            Center(child: _PresenceBadge(presence: profile.presence)),
+          ],
           const SizedBox(height: 24),
           _ProfileField(
             icon: Icons.work_outline,

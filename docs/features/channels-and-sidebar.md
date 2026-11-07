@@ -94,12 +94,13 @@ Mattermost does not expose a separate avatar thumbnail endpoint. The UI limits
 decode size for the rendered control. A failed image request leaves the initials
 in place and does not block navigation.
 
-Direct-message avatars show the participant's availability from a batched
+Human direct-message avatars show the participant's availability from a batched
 `POST /users/status/ids` request. `status_change` WebSocket events update the
 open sidebar; reconnect or a sequence gap reloads the server state. A failed
 status request leaves conversations usable and labels presence as unavailable,
 rather than claiming the user is offline. Status labels are exposed to assistive
-technology and in a tooltip.
+technology and in a tooltip. Bot dialogs show their avatar without an
+availability dot or status label.
 
 ## Channel members
 
