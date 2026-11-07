@@ -31,6 +31,7 @@ final class SidebarChannel {
     this.lastActivityAt = 0,
     this.profileImage,
     this.presence,
+    this.customStatus,
     this.isBot = false,
     this.isUnread = false,
     this.hasUnreadMention = false,
@@ -48,6 +49,7 @@ final class SidebarChannel {
   final int lastActivityAt;
   final SidebarProfileImage? profileImage;
   final UserPresence? presence;
+  final UserCustomStatus? customStatus;
   final bool isBot;
   final bool isUnread;
   final bool hasUnreadMention;
@@ -66,6 +68,7 @@ final class SidebarChannel {
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
     presence: presence,
+    customStatus: customStatus,
     isBot: isBot,
     isUnread: isUnread,
     hasUnreadMention: hasUnreadMention,
@@ -78,6 +81,7 @@ final class SidebarChannel {
     required int profileImageUpdatedAt,
     bool isBot = false,
     UserPresence? presence,
+    UserCustomStatus? customStatus,
   }) => SidebarChannel(
     id: id,
     teamId: teamId,
@@ -91,6 +95,7 @@ final class SidebarChannel {
       updatedAt: profileImageUpdatedAt,
     ),
     presence: presence,
+    customStatus: customStatus,
     isBot: isBot,
     isUnread: isUnread,
     hasUnreadMention: hasUnreadMention,
@@ -112,6 +117,7 @@ final class SidebarChannel {
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
     presence: presence ?? this.presence,
+    customStatus: customStatus,
     isBot: isBot,
     isUnread: isUnread ?? this.isUnread,
     hasUnreadMention: hasUnreadMention ?? this.hasUnreadMention,

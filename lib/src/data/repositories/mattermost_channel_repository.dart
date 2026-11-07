@@ -33,6 +33,7 @@ final class MattermostChannelRepository
     'post_unread',
     'channel_member_updated',
     'status_change',
+    'user_updated',
   };
 
   final MattermostApi _api;
@@ -356,6 +357,7 @@ final class MattermostChannelRepository
       case 'sidebar_category_created':
       case 'sidebar_category_deleted':
       case 'channel_member_updated':
+      case 'user_updated':
         return const ChannelSidebarRefreshRequired();
       default:
         return null;
