@@ -4,14 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
-import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
 import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
+import 'package:mattermost_flutter/src/data/repositories/shared_preferences_sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
+import 'package:mattermost_flutter/src/domain/repositories/sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/features/preferences/domain/models/user_preferences.dart';
 import 'package:mattermost_flutter/src/features/preferences/domain/repositories/user_preferences_repository.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/display_settings_page.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
+  });
   final AuthSession session = AuthSession(
     serverUrl: Uri.parse('https://chat.example.com'),
     userId: 'me',
@@ -23,11 +31,17 @@ void main() {
     _UserPreferencesRepository repository, {
     Size size = const Size(390, 844),
     double textScale = 1,
+    SidebarViewPreferencesRepository? sidebarRepository,
   }) async {
     await tester.binding.setSurfaceSize(size);
     final ProviderContainer container = ProviderContainer(
       overrides: [
+        authSessionProvider.overrideWithValue(session),
         appSettingsRepositoryProvider.overrideWithValue(repository),
+        if (sidebarRepository != null)
+          sidebarViewPreferencesRepositoryProvider.overrideWithValue(
+            sidebarRepository,
+          ),
         initialAppThemeProvider.overrideWithValue(repository.initial.theme),
       ],
     );
@@ -81,6 +95,10 @@ void main() {
     );
     expect(find.text('Light'), findsOneWidget);
     expect(find.text('Dark'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('show-unread-in-collapsed-folders')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -98,8 +116,76 @@ void main() {
       find.byKey(const ValueKey<String>('display-settings-expanded')),
       findsOneWidget,
     );
-    expect(tester.getSize(find.byType(Card)).width, lessThanOrEqualTo(760));
+    expect(
+      tester
+          .getSize(
+            find.ancestor(
+              of: find.byKey(
+                const ValueKey<String>('display-settings-expanded'),
+              ),
+              matching: find.byType(Card),
+            ),
+          )
+          .width,
+      lessThanOrEqualTo(760),
+    );
+    expect(
+      find.byKey(const ValueKey<String>('show-unread-in-collapsed-folders')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('saves whether collapsed folders show unread channels', (
+    WidgetTester tester,
+  ) async {
+    final ProviderContainer container = await pumpDisplaySettings(
+      tester,
+      _UserPreferencesRepository(),
+    );
+    final Finder toggle = find.byKey(
+      const ValueKey<String>('show-unread-in-collapsed-folders'),
+    );
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    final SidebarViewPreferences saved =
+        await SharedPreferencesSidebarViewPreferencesRepository().read(
+          session.durableDataScopeId,
+        );
+    expect(saved.showUnreadInCollapsedFolders, isFalse);
+    expect(
+      container
+          .read(sidebarViewPreferencesProvider(session.durableDataScopeId))
+          .value
+          ?.showUnreadInCollapsedFolders,
+      isFalse,
+    );
+  });
+
+  testWidgets('keeps the setting when saving fails', (
+    WidgetTester tester,
+  ) async {
+    await pumpDisplaySettings(
+      tester,
+      _UserPreferencesRepository(),
+      sidebarRepository: _FailingSidebarPreferencesRepository(),
+    );
+    final Finder toggle = find.byKey(
+      const ValueKey<String>('show-unread-in-collapsed-folders'),
+    );
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    expect(
+      find.text('Could not save the channel list setting.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('reflects the provider selection and persists a new theme', (
@@ -242,4 +328,17 @@ final class _UserPreferencesRepository implements UserPreferencesRepository {
 
   @override
   Future<void> writeLastUpdateCheck(DateTime checkedAt) async {}
+}
+
+final class _FailingSidebarPreferencesRepository
+    implements SidebarViewPreferencesRepository {
+  @override
+  Future<SidebarViewPreferences> read(String accountScopeId) async =>
+      const SidebarViewPreferences();
+
+  @override
+  Future<void> write(
+    String accountScopeId,
+    SidebarViewPreferences preferences,
+  ) async => throw StateError('save failed');
 }

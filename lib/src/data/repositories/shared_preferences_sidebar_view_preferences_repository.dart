@@ -17,6 +17,7 @@ final class SharedPreferencesSidebarViewPreferencesRepository
     return SidebarViewPreferences(
       hideReadChannels: flags & 1 != 0,
       hideFolderHeadings: flags & 2 != 0,
+      showUnreadInCollapsedFolders: flags & 4 == 0,
     );
   }
 
@@ -27,6 +28,7 @@ final class SharedPreferencesSidebarViewPreferencesRepository
   ) => _storage.setInt(
     _key(accountScopeId),
     (preferences.hideReadChannels ? 1 : 0) |
-        (preferences.hideFolderHeadings ? 2 : 0),
+        (preferences.hideFolderHeadings ? 2 : 0) |
+        (preferences.showUnreadInCollapsedFolders ? 0 : 4),
   );
 }
