@@ -31,10 +31,10 @@ can collapse locally and never writes a Mattermost category.
 Collapsing a server category updates its collapse state through the v4
 single-category endpoint. If an update fails, the local choice remains usable
 and the sidebar reports that it could not be synchronized. Collapsed categories
-continue to display unmuted unread channels and the selected channel. Muted
-categories expose unread mentions when collapsed; ordinary unread activity
-remains hidden unless the channel is selected. Synthetic uncategorized sections
-keep their expansion state locally.
+hide every channel, including unread and selected channels. A dot on the category
+header indicates unread activity by the same rules as channel dots: ordinary
+activity in muted channels stays quiet, while unread mentions remain marked.
+Synthetic uncategorized sections keep their expansion state locally.
 
 Sidebar search filters the loaded snapshot locally by the displayed channel or
 conversation name. Matches remain in their original categories. Search expands
