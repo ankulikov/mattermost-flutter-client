@@ -51,6 +51,9 @@ SidebarChannel mapChannelMembership({
       : rawChannel.totalMessageCountRoot > member.msgCountRoot;
   return channel.copyWith(
     isUnread: isUnread,
+    hasUnreadMention: channel.isDialog
+        ? member.mentionCount > 0
+        : member.mentionCountRoot > 0,
     muted: member.notifyProps?.markUnread == 'mention',
   );
 }

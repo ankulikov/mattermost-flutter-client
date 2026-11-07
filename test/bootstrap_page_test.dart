@@ -2555,6 +2555,64 @@ void main() {
     );
   });
 
+  testWidgets('read filter hides muted activity but keeps mentions', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _UnreadSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(ChannelSidebarStrings.hideReadChannels));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Muted unread channel'), findsNothing);
+    expect(find.text('Muted mentioned channel'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-unread-dot-muted-mentioned')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('read filter exposes mentions in a collapsed muted folder', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _CollapsedMutedSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(ChannelSidebarStrings.hideReadChannels));
+    await tester.pumpAndSettle();
+
+    expect(find.text('MUTED CATEGORY'), findsOneWidget);
+    expect(find.text('Unread in category'), findsNothing);
+    expect(find.text('Mention in category'), findsOneWidget);
+  });
+
   testWidgets('secondary click opens actions for a channel', (
     WidgetTester tester,
   ) async {
@@ -4019,6 +4077,15 @@ final class _CollapsedMutedSidebarRepository
                 displayName: 'Quiet channel',
                 kind: ChannelKind.publicChannel,
               ),
+              SidebarChannel(
+                id: 'mention-category',
+                teamId: 'team-1',
+                name: 'mention-category',
+                displayName: 'Mention in category',
+                kind: ChannelKind.publicChannel,
+                isUnread: true,
+                hasUnreadMention: true,
+              ),
             ],
           ),
         ],
@@ -4181,6 +4248,16 @@ final class _UnreadSidebarRepository implements ChannelRepository {
                 displayName: 'Muted unread channel',
                 kind: ChannelKind.publicChannel,
                 isUnread: true,
+                muted: true,
+              ),
+              SidebarChannel(
+                id: 'muted-mentioned',
+                teamId: 'team-1',
+                name: 'muted-mentioned',
+                displayName: 'Muted mentioned channel',
+                kind: ChannelKind.publicChannel,
+                isUnread: true,
+                hasUnreadMention: true,
                 muted: true,
               ),
             ],

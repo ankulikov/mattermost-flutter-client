@@ -1,13 +1,78 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
+import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_channel_repository.dart';
+import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 
 import 'support/fake_user_repository.dart';
 
 void main() {
+  test('posted event identifies a mention of the signed-in user', () async {
+    final AuthSession session = AuthSession(
+      serverUrl: Uri.parse('https://chat.example.com'),
+      userId: 'me',
+      username: 'current',
+    );
+    final _SidebarGateway gateway = _SidebarGateway();
+    final SessionRealtimeService realtime = SessionRealtimeService(
+      gateway: gateway,
+      credentialStore: _SidebarCredentials(session.serverUrl),
+    );
+    final MattermostChannelRepository repository = MattermostChannelRepository(
+      api: _FakeMattermostApi(),
+      users: FakeUserRepository(),
+      realtime: realtime,
+    );
+    final List<ChannelSidebarRealtimeEvent> events =
+        <ChannelSidebarRealtimeEvent>[];
+    final StreamSubscription<ChannelSidebarRealtimeEvent> subscription =
+        repository.watchSidebar(session: session).listen(events.add);
+    addTearDown(() async {
+      await subscription.cancel();
+      await realtime.dispose();
+      await gateway.close();
+    });
+    for (var attempt = 0; !gateway.started && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(gateway.started, isTrue);
+
+    gateway.add(
+      WebSocketEventSignal(
+        MattermostWebSocketEvent(
+          name: 'posted',
+          sequence: 1,
+          data: <String, Object?>{
+            'post': jsonEncode(<String, Object?>{
+              'id': 'post-1',
+              'user_id': 'other',
+              'channel_id': 'channel-1',
+              'message': '@current hello',
+            }),
+            'mentions': '["me"]',
+          },
+          broadcast: const <String, Object?>{'channel_id': 'channel-1'},
+        ),
+      ),
+    );
+    for (var attempt = 0; events.isEmpty && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(events.single, isA<ChannelSidebarMessagePosted>());
+    expect(
+      (events.single as ChannelSidebarMessagePosted).mentionsCurrentUser,
+      isTrue,
+    );
+  });
+
   test(
     'loads team first, groups channels, and resolves direct names',
     () async {
@@ -427,4 +492,41 @@ final class _FakeMattermostApi implements MattermostApi {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _SidebarCredentials implements CredentialStore {
+  const _SidebarCredentials(this.serverUrl);
+
+  final Uri serverUrl;
+
+  @override
+  Future<({Uri serverUrl, String token})?> read() async =>
+      (serverUrl: serverUrl, token: 'test-token');
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<void> save({required Uri serverUrl, required String token}) async {}
+}
+
+final class _SidebarGateway implements WebSocketGateway {
+  final StreamController<WebSocketGatewaySignal> _signals =
+      StreamController<WebSocketGatewaySignal>();
+  bool started = false;
+
+  @override
+  Stream<WebSocketGatewaySignal> watch({
+    required Uri serverUrl,
+    required String token,
+    required bool Function(String eventName) acceptsEvent,
+    required bool Function(String channelId) acceptsChannel,
+  }) {
+    started = true;
+    return _signals.stream;
+  }
+
+  void add(WebSocketGatewaySignal signal) => _signals.add(signal);
+
+  Future<void> close() => _signals.close();
 }

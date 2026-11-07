@@ -322,6 +322,47 @@ void main() {
     expect(channel.muted, isTrue);
   });
 
+  test('maps unread mentions from the matching channel counters', () {
+    const MattermostChannelDto ordinaryRaw = MattermostChannelDto(
+      id: 'channel-1',
+      teamId: 'team-1',
+      name: 'channel',
+      displayName: 'Channel',
+      type: 'O',
+      totalMessageCountRoot: 2,
+    );
+    final SidebarChannel ordinary = mapChannelMembership(
+      channel: mapChannel(ordinaryRaw),
+      rawChannel: ordinaryRaw,
+      member: const MattermostChannelMemberDto(
+        channelId: 'channel-1',
+        userId: 'me',
+        mentionCount: 0,
+        mentionCountRoot: 1,
+      ),
+    );
+    const MattermostChannelDto dialogRaw = MattermostChannelDto(
+      id: 'dm-1',
+      teamId: '',
+      name: 'me__ada',
+      displayName: 'Ada',
+      type: 'D',
+      totalMessageCount: 1,
+    );
+    final SidebarChannel dialog = mapChannelMembership(
+      channel: mapChannel(dialogRaw),
+      rawChannel: dialogRaw,
+      member: const MattermostChannelMemberDto(
+        channelId: 'dm-1',
+        userId: 'me',
+        mentionCount: 1,
+      ),
+    );
+
+    expect(ordinary.hasUnreadMention, isTrue);
+    expect(dialog.hasUnreadMention, isTrue);
+  });
+
   test('keeps the team handle on a mapped channel for post permalinks', () {
     final SidebarChannel channel = mapChannel(
       const MattermostChannelDto(

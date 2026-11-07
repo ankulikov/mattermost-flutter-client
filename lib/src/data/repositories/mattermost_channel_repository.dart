@@ -315,9 +315,19 @@ final class MattermostChannelRepository
           return const ChannelSidebarRefreshRequired();
         }
         if (post.userId == session.userId) return null;
+        Object? mentions = event.data['mentions'];
+        if (mentions is String) {
+          try {
+            mentions = jsonDecode(mentions);
+          } on FormatException {
+            mentions = null;
+          }
+        }
         return ChannelSidebarMessagePosted(
           channelId: post.channelId,
           isThreadReply: post.rootId.isNotEmpty,
+          mentionsCurrentUser:
+              mentions is List<Object?> && mentions.contains(session.userId),
         );
       case 'channel_viewed':
         final String channelId = _eventChannelId(event);
