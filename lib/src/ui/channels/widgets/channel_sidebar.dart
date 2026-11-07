@@ -637,7 +637,6 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
       selectedChannelProvider.select((SidebarChannel? channel) => channel?.id),
     );
     final _ChannelListIndex index = _ChannelListIndex(
-      selectedChannelId: selectedChannelId,
       sections: widget.sections,
       collapsedSectionIds: collapsedSectionIds,
       hideFolderHeadings: widget.hideFolderHeadings,
@@ -921,21 +920,15 @@ final class _ChannelListIndex {
   _ChannelListIndex({
     required this.sections,
     required Set<String> collapsedSectionIds,
-    required String? selectedChannelId,
     required this.hideFolderHeadings,
   }) {
     var nextStart = 0;
     for (final SidebarSection section in sections) {
       _sectionStarts.add(nextStart);
       if (!hideFolderHeadings) nextStart += 1;
-      final List<int> visible = <int>[
-        for (final (int i, SidebarChannel channel) in section.channels.indexed)
-          if (!collapsedSectionIds.contains(section.id) ||
-              channel.hasUnreadMention ||
-              (channel.isUnread && !channel.muted && !section.muted) ||
-              channel.id == selectedChannelId)
-            i,
-      ];
+      final List<int> visible = collapsedSectionIds.contains(section.id)
+          ? const <int>[]
+          : List<int>.generate(section.channels.length, (int i) => i);
       _visibleChannelIndices.add(visible);
       nextStart += visible.length;
     }
@@ -991,56 +984,78 @@ class _ChannelSectionHeader extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: onTap != null,
-    expanded: isExpanded,
-    child: Opacity(
-      opacity: section.muted ? 0.55 : 1,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppLayout.sidebarItemInset,
-          AppSpacing.xs,
-          AppLayout.sidebarItemInset,
-          0,
-        ),
-        child: Material(
-          key: ValueKey<String>('channel-section-surface-${section.id}'),
-          color: Colors.transparent,
-          shape: _sidebarTileShape,
-          clipBehavior: Clip.antiAlias,
-          child: ListTile(
-            leading: AnimatedRotation(
-              turns: isExpanded ? 0 : -0.25,
-              duration: const Duration(milliseconds: 150),
-              child: const Icon(Icons.expand_more, size: 14),
-            ),
-            title: Text(
-              section.displayName.toUpperCase(),
-              semanticsLabel: section.displayName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.4,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            onTap: onTap,
-            hoverColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+  Widget build(BuildContext context) {
+    final bool hasUnread = section.channels.any(
+      (SidebarChannel channel) =>
+          channel.hasUnreadMention ||
+          (channel.isUnread && !channel.muted && !section.muted),
+    );
+    return Semantics(
+      button: onTap != null,
+      expanded: isExpanded,
+      child: Opacity(
+        opacity: section.muted ? 0.55 : 1,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppLayout.sidebarItemInset,
+            AppSpacing.xs,
+            AppLayout.sidebarItemInset,
+            0,
+          ),
+          child: Material(
+            key: ValueKey<String>('channel-section-surface-${section.id}'),
+            color: Colors.transparent,
             shape: _sidebarTileShape,
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
+            clipBehavior: Clip.antiAlias,
+            child: ListTile(
+              leading: AnimatedRotation(
+                turns: isExpanded ? 0 : -0.25,
+                duration: const Duration(milliseconds: 150),
+                child: const Icon(Icons.expand_more, size: 14),
+              ),
+              title: Text(
+                section.displayName.toUpperCase(),
+                semanticsLabel: hasUnread
+                    ? ChannelSidebarStrings.unreadChannel(section.displayName)
+                    : section.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.4,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              trailing: hasUnread
+                  ? Container(
+                      key: ValueKey<String>(
+                        'channel-section-unread-dot-${section.id}',
+                      ),
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    )
+                  : null,
+              onTap: onTap,
+              hoverColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+              shape: _sidebarTileShape,
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+              ),
+              horizontalTitleGap: AppSpacing.xs,
+              minLeadingWidth: 14,
+              minTileHeight: AppLayout.sidebarRowMinHeight,
+              minVerticalPadding: AppSpacing.xs,
             ),
-            horizontalTitleGap: AppSpacing.xs,
-            minLeadingWidth: 14,
-            minTileHeight: AppLayout.sidebarRowMinHeight,
-            minVerticalPadding: AppSpacing.xs,
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _ChannelTile extends StatelessWidget {
