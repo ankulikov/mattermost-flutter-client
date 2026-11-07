@@ -9,6 +9,38 @@ import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 
 void main() {
+  test('loads direct-user statuses in one request', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"user_id":"ada","status":"online"},'
+          '{"user_id":"grace","status":"dnd"}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostUserStatusDto> statuses = await DioMattermostApi(
+      dio: dio,
+    ).getUserStatusesByIds(<String>['ada', 'grace']);
+
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/users/status/ids');
+    expect(adapter.request?.data, '["ada","grace"]');
+    expect(statuses.map((status) => status.status), <String>['online', 'dnd']);
+  });
+
+  test('bounds direct-user status requests to 100 IDs', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(body: '[]');
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final List<String> ids = List<String>.generate(101, (int i) => 'user-$i');
+
+    await DioMattermostApi(dio: dio).getUserStatusesByIds(ids);
+
+    expect(adapter.requests, hasLength(2));
+    expect((adapter.requests.first.data as String).split(',').length, 100);
+    expect(adapter.requests.last.data, '["user-100"]');
+  });
+
   test('updates category collapse while preserving category fields', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:
@@ -1094,6 +1126,7 @@ final class _RecordingAdapter implements HttpClientAdapter {
   final String contentType;
   final int statusCode;
   RequestOptions? request;
+  final List<RequestOptions> requests = <RequestOptions>[];
 
   @override
   Future<ResponseBody> fetch(
@@ -1102,6 +1135,7 @@ final class _RecordingAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     request = options;
+    requests.add(options);
     return ResponseBody(
       bytes == null
           ? Stream<Uint8List>.value(Uint8List.fromList(body.codeUnits))

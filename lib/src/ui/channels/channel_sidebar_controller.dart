@@ -353,6 +353,8 @@ final class ChannelSidebarController
           _recoveryPending = true;
         case ChannelSidebarUnreadChanged(:final channelId, :final isUnread):
           snapshot = _withUnread(snapshot, channelId, isUnread);
+        case ChannelSidebarPresenceChanged(:final userId, :final presence):
+          snapshot = _withPresence(snapshot, userId, presence);
         case ChannelSidebarMessagePosted(
           :final channelId,
           :final isThreadReply,
@@ -429,6 +431,43 @@ final class ChannelSidebarController
             favorites: section.favorites,
             muted: section.muted,
             sorting: section.sorting,
+          );
+        })
+        .toList(growable: false);
+    return changed ? snapshot.copyWith(sections: sections) : snapshot;
+  }
+
+  ChannelSidebarSnapshot _withPresence(
+    ChannelSidebarSnapshot snapshot,
+    String userId,
+    UserPresence presence,
+  ) {
+    var changed = false;
+    final List<SidebarSection> sections = snapshot.sections
+        .map((section) {
+          var sectionChanged = false;
+          final List<SidebarChannel> channels = section.channels
+              .map((channel) {
+                if (channel.kind != ChannelKind.directMessage ||
+                    channel.profileImage?.userId != userId ||
+                    channel.presence == presence) {
+                  return channel;
+                }
+                changed = true;
+                sectionChanged = true;
+                return channel.copyWith(presence: presence);
+              })
+              .toList(growable: false);
+          if (!sectionChanged) return section;
+          return SidebarSection(
+            id: section.id,
+            displayName: section.displayName,
+            channels: channels,
+            collapsed: section.collapsed,
+            muted: section.muted,
+            sorting: section.sorting,
+            serverCategory: section.serverCategory,
+            favorites: section.favorites,
           );
         })
         .toList(growable: false);

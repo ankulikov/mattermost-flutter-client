@@ -219,8 +219,31 @@ void main() {
       tester.getCenter(inbox).dx,
       lessThan(tester.getCenter(find.text('Example team')).dx),
     );
-    expect(tester.getCenter(profile).dx, greaterThan(1200));
-    expect(tester.getCenter(profile).dy, lessThan(60));
+    final Rect sidePane = tester.getRect(
+      find.byKey(const ValueKey<String>('channels-side-pane')),
+    );
+    final Rect footer = tester.getRect(
+      find.byKey(const ValueKey<String>('sidebar-profile-footer')),
+    );
+    expect(tester.getCenter(profile).dx, lessThan(sidePane.right));
+    expect(footer.bottom, sidePane.bottom);
+    expect(
+      tester
+          .getRect(
+            find
+                .descendant(
+                  of: find.byKey(const ValueKey<String>('channels-side-pane')),
+                  matching: find.byType(Divider),
+                )
+                .last,
+          )
+          .bottom,
+      footer.top,
+    );
+    expect(
+      tester.getCenter(profile).dy,
+      inInclusiveRange(footer.top, footer.bottom),
+    );
     expect(
       find.descendant(
         of: find.byKey(const ValueKey<String>('channels-side-pane')),
@@ -273,7 +296,7 @@ void main() {
     }
   });
 
-  testWidgets('opens Profile from the desktop header and logs out', (
+  testWidgets('opens Profile from the desktop sidebar and logs out', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -297,8 +320,18 @@ void main() {
       const ValueKey<String>('shell-profile-destination'),
     );
     expect(profileDestination, findsOneWidget);
-    expect(tester.getCenter(profileDestination).dx, greaterThan(900));
-    expect(tester.getCenter(profileDestination).dy, lessThan(60));
+    final Rect sidePane = tester.getRect(
+      find.byKey(const ValueKey<String>('channels-side-pane')),
+    );
+    final Rect footer = tester.getRect(
+      find.byKey(const ValueKey<String>('sidebar-profile-footer')),
+    );
+    expect(tester.getCenter(profileDestination).dx, lessThan(sidePane.right));
+    expect(footer.bottom, sidePane.bottom);
+    expect(
+      tester.getCenter(profileDestination).dy,
+      inInclusiveRange(footer.top, footer.bottom),
+    );
 
     await tester.tap(profileDestination);
     await tester.pumpAndSettle();
@@ -1256,7 +1289,7 @@ void main() {
         )
         .dy;
     expect(channelHeader.top, 0);
-    expect(profileY, inInclusiveRange(channelHeader.top, channelHeader.bottom));
+    expect(profileY, greaterThan(channelHeader.bottom));
 
     final Finder messageRow = find
         .ancestor(
@@ -1309,7 +1342,7 @@ void main() {
     expect(tester.getSize(pane).width, 380);
     expect(
       find.descendant(
-        of: pane,
+        of: find.byKey(const ValueKey<String>('channels-side-pane')),
         matching: find.byKey(
           const ValueKey<String>('shell-profile-destination'),
         ),
@@ -1848,15 +1881,14 @@ void main() {
           find.byKey(const ValueKey<String>('shell-profile-destination')),
         )
         .dy;
-    expect(profileY, greaterThan(channelHeader.top));
-    expect(profileY, lessThan(channelHeader.bottom));
+    expect(profileY, greaterThan(channelHeader.bottom));
     expect(
       tester
           .getCenter(
             find.byKey(const ValueKey<String>('shell-profile-destination')),
           )
           .dx,
-      greaterThan(tester.getCenter(find.byType(ThreadPane)).dx),
+      lessThan(tester.getCenter(find.byType(ThreadPane)).dx),
     );
     expect(
       tester
@@ -2184,6 +2216,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Channel 0'), findsOneWidget);
     expect(find.byType(ListTile).evaluate().length, lessThan(30));
+
+    final Finder profile = find.byKey(
+      const ValueKey<String>('shell-profile-destination'),
+    );
+    final Rect footer = tester.getRect(
+      find.byKey(const ValueKey<String>('sidebar-profile-footer')),
+    );
+    await tester.drag(find.text('Channel 0'), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(find.text('Channel 0'), findsNothing);
+    expect(
+      tester.getRect(
+        find.byKey(const ValueKey<String>('sidebar-profile-footer')),
+      ),
+      footer,
+    );
+    expect(
+      tester.getCenter(profile).dy,
+      inInclusiveRange(footer.top, footer.bottom),
+    );
   });
 
   testWidgets('clips the selected channel background while scrolling', (

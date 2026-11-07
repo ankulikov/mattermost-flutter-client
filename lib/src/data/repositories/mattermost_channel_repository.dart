@@ -32,6 +32,7 @@ final class MattermostChannelRepository
     'channel_viewed',
     'post_unread',
     'channel_member_updated',
+    'status_change',
   };
 
   final MattermostApi _api;
@@ -342,6 +343,15 @@ final class MattermostChannelRepository
         return channelId.isEmpty
             ? const ChannelSidebarRefreshRequired()
             : ChannelSidebarUnreadChanged(channelId: channelId, isUnread: true);
+      case 'status_change':
+        final Object? userId = event.data['user_id'];
+        final Object? status = event.data['status'];
+        final UserPresence? presence = status is String
+            ? mapUserPresence(status)
+            : null;
+        return userId is String && userId.isNotEmpty && presence != null
+            ? ChannelSidebarPresenceChanged(userId: userId, presence: presence)
+            : const ChannelSidebarRefreshRequired();
       case 'sidebar_category_updated':
       case 'sidebar_category_created':
       case 'sidebar_category_deleted':
@@ -400,6 +410,7 @@ final class MattermostChannelRepository
         .toSet();
     final Future<List<UserSummary>> directUsersFuture = users.getUsers(
       directUserIds.toList(growable: false),
+      freshness: UserFreshness.fresh,
     );
     final Future<MattermostGroupChannelUsersDto> groupUsersFuture = api
         .getUsersForGroupChannels(
@@ -414,10 +425,28 @@ final class MattermostChannelRepository
         if (user.id.isNotEmpty) user.id: user,
     };
 
+    final Map<String, UserPresence> directPresenceById =
+        <String, UserPresence>{};
+    if (directUserIds.isNotEmpty) {
+      try {
+        final List<MattermostUserStatusDto> statuses = await api
+            .getUserStatusesByIds(directUserIds.toList(growable: false));
+        for (final MattermostUserStatusDto status in statuses) {
+          final UserPresence? presence = mapUserPresence(status.status);
+          if (directUserIds.contains(status.userId) && presence != null) {
+            directPresenceById[status.userId] = presence;
+          }
+        }
+      } on Object {
+        // Status is optional; keep direct conversations available.
+      }
+    }
+
     return resolveDialogDisplayNames(
       channels: channels,
       currentUserId: currentUserId,
       directUsersById: directUsersById,
+      directPresenceById: directPresenceById,
       groupUsersByChannelId: groupUsers.usersByChannelId.map(
         (String channelId, List<MattermostUserDto> users) =>
             MapEntry<String, List<UserSummary>>(

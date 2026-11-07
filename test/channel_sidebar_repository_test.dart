@@ -10,67 +10,62 @@ import 'package:mattermost_flutter/src/data/repositories/mattermost_channel_repo
 import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 
 import 'support/fake_user_repository.dart';
 
 void main() {
-  test('posted event identifies a mention of the signed-in user', () async {
-    final AuthSession session = AuthSession(
-      serverUrl: Uri.parse('https://chat.example.com'),
-      userId: 'me',
-      username: 'current',
-    );
-    final _SidebarGateway gateway = _SidebarGateway();
-    final SessionRealtimeService realtime = SessionRealtimeService(
-      gateway: gateway,
-      credentialStore: _SidebarCredentials(session.serverUrl),
-    );
+  test('loads direct-user bot identity and current presence', () async {
+    final _FakeMattermostApi api = _FakeMattermostApi();
     final MattermostChannelRepository repository = MattermostChannelRepository(
-      api: _FakeMattermostApi(),
-      users: FakeUserRepository(),
-      realtime: realtime,
-    );
-    final List<ChannelSidebarRealtimeEvent> events =
-        <ChannelSidebarRealtimeEvent>[];
-    final StreamSubscription<ChannelSidebarRealtimeEvent> subscription =
-        repository.watchSidebar(session: session).listen(events.add);
-    addTearDown(() async {
-      await subscription.cancel();
-      await realtime.dispose();
-      await gateway.close();
-    });
-    for (var attempt = 0; !gateway.started && attempt < 100; attempt++) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    expect(gateway.started, isTrue);
-
-    gateway.add(
-      WebSocketEventSignal(
-        MattermostWebSocketEvent(
-          name: 'posted',
-          sequence: 1,
-          data: <String, Object?>{
-            'post': jsonEncode(<String, Object?>{
-              'id': 'post-1',
-              'user_id': 'other',
-              'channel_id': 'channel-1',
-              'message': '@current hello',
-            }),
-            'mentions': '["me"]',
-          },
-          broadcast: const <String, Object?>{'channel_id': 'channel-1'},
-        ),
+      api: api,
+      users: FakeUserRepository(
+        users: const <String, UserSummary>{
+          'ada': UserSummary(
+            id: 'ada',
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            username: 'ada',
+            nickname: '',
+            position: '',
+            email: '',
+            isBot: true,
+          ),
+        },
       ),
     );
-    for (var attempt = 0; events.isEmpty && attempt < 100; attempt++) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    expect(events.single, isA<ChannelSidebarMessagePosted>());
-    expect(
-      (events.single as ChannelSidebarMessagePosted).mentionsCurrentUser,
-      isTrue,
+
+    final ChannelSidebarSnapshot snapshot = await repository.load(
+      AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      ),
     );
+    final SidebarChannel direct = snapshot.sections.first.channels.first;
+    expect(direct.isBot, isTrue);
+    expect(direct.presence, UserPresence.away);
+    expect(api.requestedStatusIds, <String>['ada']);
+  });
+
+  test('keeps direct users when status loading fails', () async {
+    final _FakeMattermostApi api = _FakeMattermostApi()..failStatuses = true;
+    final MattermostChannelRepository repository = MattermostChannelRepository(
+      api: api,
+      users: FakeUserRepository(),
+    );
+
+    final ChannelSidebarSnapshot snapshot = await repository.load(
+      AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      ),
+    );
+
+    expect(snapshot.sections.first.channels.first.displayName, 'Ada Lovelace');
+    expect(snapshot.sections.first.channels.first.presence, isNull);
   });
 
   test(
@@ -203,9 +198,89 @@ void main() {
       expect(api.leftUserId, 'me');
     },
   );
+
+  test('maps posted mentions and direct-user presence events', () async {
+    final AuthSession session = AuthSession(
+      serverUrl: Uri.parse('https://chat.example.com'),
+      userId: 'me',
+      username: 'current',
+    );
+    final _SidebarGateway gateway = _SidebarGateway();
+    final SessionRealtimeService realtime = SessionRealtimeService(
+      gateway: gateway,
+      credentialStore: _SidebarCredentials(session.serverUrl),
+    );
+    final MattermostChannelRepository repository = MattermostChannelRepository(
+      api: _FakeMattermostApi(),
+      users: FakeUserRepository(),
+      realtime: realtime,
+    );
+    final List<ChannelSidebarRealtimeEvent> events =
+        <ChannelSidebarRealtimeEvent>[];
+    final StreamSubscription<ChannelSidebarRealtimeEvent> subscription =
+        repository.watchSidebar(session: session).listen(events.add);
+    addTearDown(() async {
+      await subscription.cancel();
+      await realtime.dispose();
+      await gateway.close();
+    });
+    for (var attempt = 0; !gateway.started && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(gateway.started, isTrue);
+
+    gateway.add(
+      WebSocketEventSignal(
+        MattermostWebSocketEvent(
+          name: 'posted',
+          sequence: 1,
+          data: <String, Object?>{
+            'post': jsonEncode(<String, Object?>{
+              'id': 'post-1',
+              'user_id': 'other',
+              'channel_id': 'channel-1',
+              'message': '@current hello',
+            }),
+            'mentions': '["me"]',
+          },
+          broadcast: const <String, Object?>{'channel_id': 'channel-1'},
+        ),
+      ),
+    );
+    for (var attempt = 0; events.isEmpty && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(events.single, isA<ChannelSidebarMessagePosted>());
+    expect(
+      (events.single as ChannelSidebarMessagePosted).mentionsCurrentUser,
+      isTrue,
+    );
+
+    events.clear();
+    gateway.add(
+      const WebSocketEventSignal(
+        MattermostWebSocketEvent(
+          name: 'status_change',
+          sequence: 2,
+          data: <String, Object?>{'user_id': 'ada', 'status': 'dnd'},
+          broadcast: <String, Object?>{},
+        ),
+      ),
+    );
+    for (var attempt = 0; events.isEmpty && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(events.single, isA<ChannelSidebarPresenceChanged>());
+    expect(
+      (events.single as ChannelSidebarPresenceChanged).presence,
+      UserPresence.doNotDisturb,
+    );
+  });
 }
 
 final class _FakeMattermostApi implements MattermostApi {
+  List<String>? requestedStatusIds;
+  bool failStatuses = false;
   String? unreadPostId;
   String? mutedChannelId;
   String? movedCategoryId;
@@ -284,6 +359,17 @@ final class _FakeMattermostApi implements MattermostApi {
   @override
   Future<MattermostUserStatusDto> getUserStatus(String userId) =>
       throw UnimplementedError();
+
+  @override
+  Future<List<MattermostUserStatusDto>> getUserStatusesByIds(
+    List<String> userIds,
+  ) async {
+    requestedStatusIds = userIds;
+    if (failStatuses) throw StateError('statuses unavailable');
+    return const <MattermostUserStatusDto>[
+      MattermostUserStatusDto(userId: 'ada', status: 'away'),
+    ];
+  }
 
   @override
   Future<MattermostUserDto> getUserById(String userId) =>
