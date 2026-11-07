@@ -265,6 +265,7 @@ class _SidebarContentState extends State<_SidebarContent> {
             collapsed: section.collapsed,
             serverCategory: section.serverCategory,
             favorites: section.favorites,
+            role: section.role,
             muted: section.muted,
             sorting: section.sorting,
           );
@@ -990,6 +991,13 @@ class _ChannelSectionHeader extends StatelessWidget {
           channel.hasUnreadMention ||
           (channel.isUnread && !channel.muted && !section.muted),
     );
+    final IconData? marker = section.favorites
+        ? Icons.star_rounded
+        : switch (section.role) {
+            SidebarSectionRole.directMessages => Icons.person_outline,
+            SidebarSectionRole.bots => Icons.smart_toy_outlined,
+            SidebarSectionRole.other => null,
+          };
     return Semantics(
       button: onTap != null,
       expanded: isExpanded,
@@ -1013,18 +1021,37 @@ class _ChannelSectionHeader extends StatelessWidget {
                 duration: const Duration(milliseconds: 150),
                 child: const Icon(Icons.expand_more, size: 14),
               ),
-              title: Text(
-                section.displayName.toUpperCase(),
-                semanticsLabel: hasUnread
-                    ? ChannelSidebarStrings.unreadChannel(section.displayName)
-                    : section.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.4,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              title: Row(
+                children: <Widget>[
+                  if (marker != null) ...<Widget>[
+                    Icon(
+                      marker,
+                      key: ValueKey<String>(
+                        'channel-section-marker-${section.id}',
+                      ),
+                      size: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                  ],
+                  Flexible(
+                    child: Text(
+                      section.displayName.toUpperCase(),
+                      semanticsLabel: hasUnread
+                          ? ChannelSidebarStrings.unreadChannel(
+                              section.displayName,
+                            )
+                          : section.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.4,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               trailing: hasUnread
                   ? Container(

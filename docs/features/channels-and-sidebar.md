@@ -24,9 +24,12 @@ Direct and group-message names are resolved through the users API. An initial
 failure shows a retry state. Manual refresh keeps the existing snapshot visible
 until the replacement succeeds and reports a non-blocking failure otherwise.
 Direct-user identity is fetched fresh with the sidebar so the server's `is_bot`
-flag can move bot DMs out of Direct messages into the local Боты section.
+flag can move bot DMs out of Direct messages into the local Bots section.
 Favorites and custom server categories keep their channels. The virtual section
 can collapse locally and never writes a Mattermost category.
+The list pins Favorites, Direct Messages, and Bots in that order before the
+remaining server categories; the pinned headers show star, person, and robot
+symbols. Other categories keep their server order.
 
 Collapsing a server category updates its collapse state through the v4
 single-category endpoint. If an update fails, the local choice remains usable
