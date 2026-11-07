@@ -65,6 +65,10 @@ abstract interface class MattermostApi {
 
   Future<List<MattermostUserDto>> getUsersByIds(List<String> userIds);
 
+  Future<List<MattermostUserStatusDto>> getUserStatusesByIds(
+    List<String> userIds,
+  ) => throw UnimplementedError();
+
   /// Returns users matching the supplied exact usernames.
   Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames);
 

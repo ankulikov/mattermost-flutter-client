@@ -29,6 +29,11 @@ platform cookie manager after the browser returns to the selected Mattermost
 origin. The UI never receives cookies. Before and after an attempt, the adapter
 clears only `MMAUTHTOKEN`, `MMUSERID`, and `MMCSRF` for that server.
 
+On macOS, the embedded SSO browser hides its native navigation toolbar. The
+`flutter_inappwebview_macos` 1.1.2 teardown clears button views while the toolbar
+is still attached, which can crash AppKit on macOS 26. Restore the toolbar once
+the plugin safely detaches it before disposing its items.
+
 Flutter Web reports embedded SSO as unavailable because browser JavaScript
 cannot read cross-origin HttpOnly cookies. The client does not work around that
 boundary.

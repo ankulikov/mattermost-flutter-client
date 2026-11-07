@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
 
 void main() {
   test('parses autocomplete users and leaves optional sections absent', () {
@@ -59,6 +60,7 @@ void main() {
 
     expect(person.profileImageUpdatedAt, 123);
     expect(bot.profileImageUpdatedAt, 456);
+    expect(mapUserSummary(bot).isBot, isTrue);
   });
 
   test('decodes channel categories with their separate order', () {

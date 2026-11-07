@@ -1,3 +1,5 @@
+import 'package:mattermost_flutter/src/domain/models/user.dart';
+
 enum ChannelKind { publicChannel, privateChannel, directMessage, groupMessage }
 
 enum ChannelSorting { manual, recent }
@@ -26,6 +28,8 @@ final class SidebarChannel {
     this.teamName = '',
     this.lastActivityAt = 0,
     this.profileImage,
+    this.presence,
+    this.isBot = false,
     this.isUnread = false,
     this.hasUnreadMention = false,
     this.muted = false,
@@ -41,6 +45,8 @@ final class SidebarChannel {
   final String teamName;
   final int lastActivityAt;
   final SidebarProfileImage? profileImage;
+  final UserPresence? presence;
+  final bool isBot;
   final bool isUnread;
   final bool hasUnreadMention;
   final bool muted;
@@ -57,6 +63,8 @@ final class SidebarChannel {
     teamName: teamName,
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
+    presence: presence,
+    isBot: isBot,
     isUnread: isUnread,
     hasUnreadMention: hasUnreadMention,
     muted: muted,
@@ -66,6 +74,8 @@ final class SidebarChannel {
     required String displayName,
     required String userId,
     required int profileImageUpdatedAt,
+    bool isBot = false,
+    UserPresence? presence,
   }) => SidebarChannel(
     id: id,
     teamId: teamId,
@@ -78,6 +88,8 @@ final class SidebarChannel {
       userId: userId,
       updatedAt: profileImageUpdatedAt,
     ),
+    presence: presence,
+    isBot: isBot,
     isUnread: isUnread,
     hasUnreadMention: hasUnreadMention,
     muted: muted,
@@ -87,6 +99,7 @@ final class SidebarChannel {
     bool? isUnread,
     bool? hasUnreadMention,
     bool? muted,
+    UserPresence? presence,
   }) => SidebarChannel(
     id: id,
     teamId: teamId,
@@ -96,6 +109,8 @@ final class SidebarChannel {
     teamName: teamName,
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
+    presence: presence ?? this.presence,
+    isBot: isBot,
     isUnread: isUnread ?? this.isUnread,
     hasUnreadMention: hasUnreadMention ?? this.hasUnreadMention,
     muted: muted ?? this.muted,

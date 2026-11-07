@@ -13,6 +13,8 @@ final class DioMattermostApi
         MattermostChannelMembersApi {
   DioMattermostApi({required Dio dio}) : _dio = dio;
 
+  static const int _statusBatchSize = 100;
+
   final Dio _dio;
 
   @override
@@ -344,6 +346,27 @@ final class DioMattermostApi
   Future<MattermostUserStatusDto> getUserStatus(String userId) async {
     final Response<Object?> response = await _get('/users/$userId/status');
     return MattermostUserStatusDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<MattermostUserStatusDto>> getUserStatusesByIds(
+    List<String> userIds,
+  ) async {
+    if (userIds.isEmpty) return const <MattermostUserStatusDto>[];
+    final List<MattermostUserStatusDto> statuses = <MattermostUserStatusDto>[];
+    for (var start = 0; start < userIds.length; start += _statusBatchSize) {
+      final int end = start + _statusBatchSize < userIds.length
+          ? start + _statusBatchSize
+          : userIds.length;
+      final Response<Object?> response = await _post(
+        '/users/status/ids',
+        data: jsonEncode(userIds.sublist(start, end)),
+      );
+      statuses.addAll(
+        _dtoList(response.data, MattermostUserStatusDto.fromJson),
+      );
+    }
+    return statuses;
   }
 
   @override
