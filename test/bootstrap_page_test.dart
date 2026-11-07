@@ -2362,6 +2362,10 @@ void main() {
     );
     expect(tester.widget<ChannelAvatar>(directMessageAvatar).size, 16);
     expect(
+      tester.getRect(find.text('Ada Lovelace')).left,
+      tester.getRect(find.text('Town Square')).left,
+    );
+    expect(
       tester.getRect(find.text('Ada Lovelace')).left -
           tester.getRect(directMessageAvatar).right,
       greaterThanOrEqualTo(6),
