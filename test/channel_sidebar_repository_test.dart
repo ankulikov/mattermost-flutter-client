@@ -49,6 +49,46 @@ void main() {
     expect(api.requestedStatusIds, <String>['ada']);
   });
 
+  test(
+    'keeps a human direct participant custom status in the sidebar',
+    () async {
+      final MattermostChannelRepository repository =
+          MattermostChannelRepository(
+            api: _FakeMattermostApi(),
+            users: FakeUserRepository(
+              users: const <String, UserSummary>{
+                'ada': UserSummary(
+                  id: 'ada',
+                  firstName: 'Ada',
+                  lastName: 'Lovelace',
+                  username: 'ada',
+                  nickname: '',
+                  position: '',
+                  email: '',
+                  customStatus: UserCustomStatus(
+                    emoji: 'calendar',
+                    text: 'In a meeting',
+                  ),
+                ),
+              },
+            ),
+          );
+
+      final ChannelSidebarSnapshot snapshot = await repository.load(
+        AuthSession(
+          serverUrl: Uri.parse('https://chat.example.com'),
+          userId: 'me',
+          username: 'current',
+        ),
+      );
+
+      expect(
+        snapshot.sections.first.channels.first.customStatus?.text,
+        'In a meeting',
+      );
+    },
+  );
+
   test('keeps direct users when status loading fails', () async {
     final _FakeMattermostApi api = _FakeMattermostApi()..failStatuses = true;
     final MattermostChannelRepository repository = MattermostChannelRepository(
@@ -275,6 +315,22 @@ void main() {
       (events.single as ChannelSidebarPresenceChanged).presence,
       UserPresence.doNotDisturb,
     );
+
+    events.clear();
+    gateway.add(
+      const WebSocketEventSignal(
+        MattermostWebSocketEvent(
+          name: 'user_updated',
+          sequence: 3,
+          data: <String, Object?>{'user': '{"id":"ada"}'},
+          broadcast: <String, Object?>{},
+        ),
+      ),
+    );
+    for (var attempt = 0; events.isEmpty && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(events.single, isA<ChannelSidebarRefreshRequired>());
   });
 }
 

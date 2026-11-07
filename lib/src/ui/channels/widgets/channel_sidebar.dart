@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
@@ -1137,6 +1140,10 @@ class _ChannelTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
+    final UserCustomStatus? customStatus =
+        channel.kind == ChannelKind.directMessage && !channel.isBot
+        ? channel.customStatus
+        : null;
     final bool highlightUnread =
         channel.hasUnreadMention || (channel.isUnread && !muted);
     void showKeyboardMenu() {
@@ -1221,6 +1228,22 @@ class _ChannelTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (customStatus != null) ...<Widget>[
+                      const SizedBox(width: AppSpacing.xs),
+                      Tooltip(
+                        key: ValueKey<String>(
+                          'channel-custom-status-${channel.id}',
+                        ),
+                        message: customStatus.text.isEmpty
+                            ? customStatus.emoji
+                            : customStatus.text,
+                        child: ExcludeSemantics(
+                          child: _ChannelCustomStatusEmoji(
+                            emoji: customStatus.emoji,
+                          ),
+                        ),
+                      ),
+                    ],
                     if (favorite) ...<Widget>[
                       const SizedBox(width: AppSpacing.xs),
                       Icon(
@@ -1255,6 +1278,34 @@ class _ChannelTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ChannelCustomStatusEmoji extends ConsumerWidget {
+  const _ChannelCustomStatusEmoji({required this.emoji});
+
+  final String emoji;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final String? builtIn = mattermostSystemEmojis[emoji];
+    if (builtIn != null || emoji.isEmpty) {
+      return Text(builtIn ?? '💬', style: const TextStyle(fontSize: 13));
+    }
+    final AsyncValue<CustomEmojiContent> content = ref.watch(
+      customEmojiProvider(CustomEmojiReference(name: emoji)),
+    );
+    return content.when(
+      data: (CustomEmojiContent value) => Image.memory(
+        value.bytes,
+        width: 16,
+        height: 16,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => const Text('💬'),
+      ),
+      loading: () => const Text('💬'),
+      error: (_, _) => const Text('💬'),
     );
   }
 }
