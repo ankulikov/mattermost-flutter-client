@@ -2640,7 +2640,7 @@ void main() {
     );
   });
 
-  testWidgets('read filter exposes mentions in a collapsed muted folder', (
+  testWidgets('read filter marks mentions in a collapsed muted folder', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -2662,7 +2662,11 @@ void main() {
 
     expect(find.text('MUTED CATEGORY'), findsOneWidget);
     expect(find.text('Unread in category'), findsNothing);
-    expect(find.text('Mention in category'), findsOneWidget);
+    expect(find.text('Mention in category'), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('channel-section-unread-dot-muted')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('secondary click opens actions for a channel', (
@@ -3080,35 +3084,58 @@ void main() {
     );
   });
 
-  testWidgets('collapsed categories hide individually muted unread channels', (
+  testWidgets('collapsed folders hide channels and mark unread activity', (
     WidgetTester tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
-          channelRepositoryProvider.overrideWithValue(
-            _UnreadSidebarRepository(),
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1000, 800),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _UnreadSidebarRepository(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: BootstrapPage(),
+            ),
           ),
-        ],
-        child: const MaterialApp(home: BootstrapPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Muted unread channel'), findsOneWidget);
-    await tester.tap(find.text('CHANNELS'));
-    await tester.pumpAndSettle();
-    expect(find.text('Unread channel'), findsOneWidget);
-    expect(find.text('Muted unread channel'), findsNothing);
-    expect(find.text('Read channel'), findsNothing);
-    await tester.tap(find.text('CHANNELS'));
-    await tester.pumpAndSettle();
-    expect(find.text('Muted unread channel'), findsOneWidget);
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Muted unread channel'), findsOneWidget);
+      await tester.tap(find.text('CHANNELS'));
+      await tester.pumpAndSettle();
+      expect(find.text('Unread channel'), findsNothing);
+      expect(find.text('Muted unread channel'), findsNothing);
+      expect(find.text('Muted mentioned channel'), findsNothing);
+      expect(find.text('Read channel'), findsNothing);
+      final Finder dot = find.byKey(
+        const ValueKey<String>('channel-section-unread-dot-channels'),
+      );
+      expect(dot, findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('CHANNELS')).semanticsLabel,
+        'Channels, unread',
+      );
+      expect(
+        tester.getRect(dot).right,
+        greaterThan(tester.getRect(find.text('CHANNELS')).right),
+      );
+      await tester.tap(find.text('CHANNELS'));
+      await tester.pumpAndSettle();
+      expect(find.text('Muted unread channel'), findsOneWidget);
+    }
   });
 
-  testWidgets('keeps the selected read channel in a collapsed category', (
+  testWidgets('hides the selected channel in a collapsed category', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -3145,7 +3172,7 @@ void main() {
     expect(channel.isUnread, isFalse);
     expect(
       find.byKey(const ValueKey<String>('channel-unread-category')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('Quiet channel'), findsNothing);
 
@@ -3161,11 +3188,14 @@ void main() {
           ),
         );
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey<String>('channel-quiet')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('channel-quiet')), findsNothing);
     expect(
       find.byKey(const ValueKey<String>('channel-unread-category')),
       findsNothing,
     );
+    await tester.tap(find.text('MUTED CATEGORY'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('channel-quiet')), findsOneWidget);
   });
 
   testWidgets('keeps category toggles local when the server rejects updates', (
