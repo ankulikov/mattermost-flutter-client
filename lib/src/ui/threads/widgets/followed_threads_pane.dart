@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/resizable_pane_divider.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_preview_card.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
@@ -38,6 +39,8 @@ class FollowedThreadsPane extends ConsumerStatefulWidget {
 
 class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
   String? _selectedThreadId;
+  bool _threadClosed = false;
+  double? _threadWidth;
   late DateTime _now;
   Timer? _clockTimer;
 
@@ -59,7 +62,10 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
   @override
   void didUpdateWidget(covariant FollowedThreadsPane oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.team.id != widget.team.id) _selectedThreadId = null;
+    if (oldWidget.team.id != widget.team.id) {
+      _selectedThreadId = null;
+      _threadClosed = false;
+    }
   }
 
   @override
@@ -76,6 +82,19 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool showSideThread =
             constraints.maxWidth >= AppBreakpoints.sideThread;
+        final List<FollowedThread> items = value.value?.items ?? const [];
+        if (_selectedThreadId != null &&
+            !items.any((FollowedThread item) => item.id == _selectedThreadId)) {
+          _selectedThreadId = null;
+        }
+        final FollowedThread? selected = showSideThread && !_threadClosed
+            ? items
+                      .where(
+                        (FollowedThread item) => item.id == _selectedThreadId,
+                      )
+                      .firstOrNull ??
+                  items.firstOrNull
+            : null;
         final Widget listPane = Column(
           key: const ValueKey<String>('followed-threads-list-pane'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -92,13 +111,16 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
                 data: (FollowedThreadsViewState state) => _ThreadsBody(
                   teamId: widget.team.id,
                   state: state,
-                  selectedThreadId: _selectedThreadId,
+                  selectedThreadId: selected?.id,
                   channelsById: widget.channelsById,
                   serverUrl: serverUrl,
                   now: _now,
                   onSelect: (FollowedThread thread) {
                     if (showSideThread) {
-                      setState(() => _selectedThreadId = thread.id);
+                      setState(() {
+                        _selectedThreadId = thread.id;
+                        _threadClosed = false;
+                      });
                       return;
                     }
                     unawaited(_openThreadRoute(context, thread, serverUrl));
@@ -108,9 +130,6 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
             ),
           ],
         );
-        final FollowedThread? selected = value.value?.items
-            .where((FollowedThread item) => item.id == _selectedThreadId)
-            .firstOrNull;
         if (selected == null) return listPane;
         final SidebarChannel channel =
             widget.channelsById[selected.channelId] ??
@@ -129,6 +148,7 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
           teamId: widget.team.id,
           unreadReplies: selected.unreadReplies,
           positionAtEndWhenRead: true,
+          markReadOnOpen: _selectedThreadId == selected.id,
           onSelectChannel: widget.onSelectChannel,
           onThreadRead: (DateTime timestamp) => ref
               .read(followedThreadsProvider(widget.team.id).notifier)
@@ -136,23 +156,49 @@ class _FollowedThreadsPaneState extends ConsumerState<FollowedThreadsPane> {
           onThreadUnfollowed: (String rootPostId) => ref
               .read(followedThreadsProvider(widget.team.id).notifier)
               .removeUnfollowedThread(rootPostId),
-          onClose: () => setState(() => _selectedThreadId = null),
+          onClose: () => setState(() {
+            _selectedThreadId = null;
+            _threadClosed = true;
+          }),
         );
         if (showSideThread) {
-          return Row(
+          final double minimumWidth = constraints.maxWidth * 0.4;
+          final double maximumWidth = constraints.maxWidth * 0.6;
+          final double threadWidth =
+              (_threadWidth ?? constraints.maxWidth * 0.6).clamp(
+                minimumWidth,
+                maximumWidth,
+              );
+          return Stack(
             children: <Widget>[
-              Expanded(child: listPane),
-              const VerticalDivider(width: 1),
-              SizedBox(width: 420, child: threadPane),
+              Positioned.fill(
+                child: Row(
+                  children: <Widget>[
+                    Expanded(child: listPane),
+                    SizedBox(width: threadWidth, child: threadPane),
+                  ],
+                ),
+              ),
+              Positioned(
+                right: threadWidth - ResizablePaneDivider.width / 2,
+                top: 0,
+                bottom: 0,
+                child: ResizablePaneDivider(
+                  key: const ValueKey<String>('followed-thread-pane-divider'),
+                  label: FollowedThreadsStrings.resizeThreadPane,
+                  increaseDirection: -1,
+                  onResize: (double delta) => setState(() {
+                    _threadWidth = (threadWidth - delta).clamp(
+                      minimumWidth,
+                      maximumWidth,
+                    );
+                  }),
+                ),
+              ),
             ],
           );
         }
-        return Stack(
-          children: <Widget>[
-            Positioned.fill(child: listPane),
-            Positioned.fill(child: threadPane),
-          ],
-        );
+        return listPane;
       },
     );
   }
