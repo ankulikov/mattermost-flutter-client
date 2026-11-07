@@ -72,6 +72,52 @@ void main() {
     },
   );
 
+  testWidgets('does not show a bot availability badge', (
+    WidgetTester tester,
+  ) async {
+    for (final UserPresence presence in <UserPresence>[
+      UserPresence.online,
+      UserPresence.offline,
+    ]) {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authSessionProvider.overrideWithValue(session),
+            userProfileProvider.overrideWith(
+              (Ref ref, String userId) async => UserProfile(
+                id: 'bot',
+                firstName: '',
+                lastName: '',
+                username: 'bot',
+                nickname: '',
+                position: '',
+                email: '',
+                presence: presence,
+                isBot: true,
+              ),
+            ),
+            userAvatarProvider.overrideWith(
+              (Ref ref, UserAvatarRequest input) async => null,
+            ),
+          ],
+          child: MaterialApp(
+            home: UserProfileCard(
+              userId: 'bot',
+              onMessage: (UserProfile value) async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('bot'), findsWidgets);
+      expect(
+        find.text(presence == UserPresence.online ? 'Online' : 'Offline'),
+        findsNothing,
+      );
+    }
+  });
+
   testWidgets('opens the card from the avatar only', (
     WidgetTester tester,
   ) async {

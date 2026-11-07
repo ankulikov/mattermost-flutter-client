@@ -26,7 +26,9 @@ class ChannelAvatar extends StatelessWidget {
             dimension: size,
             child: Icon(_iconFor(channel.kind), size: size * 0.75),
           );
-    if (channel.kind != ChannelKind.directMessage) return avatar;
+    if (channel.kind != ChannelKind.directMessage || channel.isBot) {
+      return avatar;
+    }
 
     final UserPresence? presence = channel.presence;
     final String label = presence == null
