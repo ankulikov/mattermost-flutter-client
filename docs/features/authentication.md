@@ -27,7 +27,11 @@ Interactive SSO is exposed to the UI through the domain-level
 `SsoBrowserGateway`. Native adapters accept only `MMAUTHTOKEN` read by the
 platform cookie manager after the browser returns to the selected Mattermost
 origin. The UI never receives cookies. Before and after an attempt, the adapter
-clears only `MMAUTHTOKEN`, `MMUSERID`, and `MMCSRF` for that server.
+clears the app's WebView cookie store and verifies that no Mattermost auth
+cookie remains for the selected server. Android WebView does not always expose
+cookie path and domain metadata, so deleting individual cookies cannot reliably
+remove an old session. Clearing the WebView store also clears identity-provider
+cookies, which can require a fresh SSO sign-in on the next attempt.
 
 Flutter Web reports embedded SSO as unavailable because browser JavaScript
 cannot read cross-origin HttpOnly cookies. The client does not work around that
