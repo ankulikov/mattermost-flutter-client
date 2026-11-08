@@ -11,6 +11,61 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_s
 import 'support/fake_emoji_repository.dart';
 
 void main() {
+  for (final double width in <double>[390, 1200]) {
+    for (final bool touch in <bool>[true, false]) {
+      testWidgets(
+        'copies raw Markdown at $width using ${touch ? 'touch' : 'mouse'}',
+        (WidgetTester tester) async {
+          const String raw =
+              '**Hello** @alice @engineering :smile: :custom_emoji: 😀\n`code`';
+          MethodCall? clipboardCall;
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (MethodCall call) async {
+              if (call.method == 'Clipboard.setData') clipboardCall = call;
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          await tester.pumpWidget(
+            _app(
+              onOpenThread: () {},
+              width: width,
+              messageText: raw,
+              textScaler: const TextScaler.linear(1.3),
+            ),
+          );
+          if (touch) {
+            await tester.longPress(
+              find.text('Message'),
+              kind: PointerDeviceKind.touch,
+            );
+          } else {
+            final TestGesture mouse = await tester.createGesture(
+              kind: PointerDeviceKind.mouse,
+            );
+            addTearDown(mouse.removePointer);
+            await mouse.addPointer(
+              location: tester.getCenter(find.text('Message')),
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(
+              find.byKey(const ValueKey<String>('more-message-actions')),
+            );
+          }
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(find.text(MessageActionsStrings.copyText));
+          await tester.tap(find.text(MessageActionsStrings.copyText));
+          await tester.pumpAndSettle();
+          expect(clipboardCall?.arguments, <String, Object>{'text': raw});
+        },
+      );
+    }
+  }
+
   testWidgets('touch tap on Markdown text opens its thread exactly once', (
     WidgetTester tester,
   ) async {
@@ -82,7 +137,6 @@ void main() {
     for (final String label in <String>[
       MessageActionsStrings.markUnread,
       MessageActionsStrings.pinToChannel,
-      MessageActionsStrings.copyText,
     ]) {
       expect(
         tester
@@ -168,7 +222,6 @@ void main() {
     expect(clipboardCall?.arguments, <String, Object>{
       'text': 'https://chat.example.com/team-a/pl/post-1',
     });
-    expect(find.text(MessageActionsStrings.linkCopied), findsOneWidget);
   });
 
   testWidgets('runs deletion from the touch message actions', (
@@ -540,7 +593,6 @@ void main() {
     for (final String label in <String>[
       MessageActionsStrings.markUnread,
       MessageActionsStrings.pinToChannel,
-      MessageActionsStrings.copyText,
     ]) {
       expect(
         tester
@@ -613,7 +665,6 @@ void main() {
     expect(clipboardCall?.arguments, <String, Object>{
       'text': 'https://chat.example.com/team-a/pl/post-1',
     });
-    expect(find.text(MessageActionsStrings.linkCopied), findsOneWidget);
   });
 
   testWidgets('mouse popup postpones the selected message', (
@@ -817,6 +868,7 @@ void main() {
 
 Widget _app({
   required VoidCallback? onOpenThread,
+  String messageText = 'Message',
   double width = 600,
   double messageHeight = 100,
   bool followingMessage = false,
@@ -845,6 +897,7 @@ Widget _app({
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             MessageInteractionSurface(
+              messageText: messageText,
               onOpenThread: onOpenThread,
               emojiRepositoryFactory: repository == null
                   ? null

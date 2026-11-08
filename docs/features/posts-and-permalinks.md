@@ -39,6 +39,9 @@ events received during that recovery are replayed over the replacement too.
 
 ## Permalink navigation
 
+The message actions menu copies the original post message to the clipboard.
+Markdown syntax, mention handles, emoji shortcodes, and Unicode are preserved.
+
 Links for the active server with the form `/<team-name>/pl/<post-id>` stay
 inside the app. Links to another origin and other HTTP(S) links keep their
 external behavior. The resolver requests `GET /posts/{post_id}` and
