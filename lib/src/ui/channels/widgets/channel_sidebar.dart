@@ -702,6 +702,7 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
     final _ChannelMenuAction? action = await showMenu<_ChannelMenuAction>(
       context: context,
       position: _menuPosition(position),
+      popUpAnimationStyle: AnimationStyle.noAnimation,
       constraints: const BoxConstraints(minWidth: 235, maxWidth: 290),
       items: <PopupMenuEntry<_ChannelMenuAction>>[
         _channelMenuItem(
@@ -772,6 +773,7 @@ class _LazyChannelListState extends ConsumerState<_LazyChannelList> {
           final String? categoryId = await showMenu<String>(
             context: context,
             position: _menuPosition(position),
+            popUpAnimationStyle: AnimationStyle.noAnimation,
             constraints: const BoxConstraints(minWidth: 210, maxWidth: 280),
             items: <PopupMenuEntry<String>>[
               for (final SidebarSection category in categories)

@@ -46,6 +46,7 @@ Future<void> showProfileAvatarMenu({
   final _ProfileMenuAction? action = await showMenu<_ProfileMenuAction>(
     context: context,
     position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
+    popUpAnimationStyle: AnimationStyle.noAnimation,
     constraints: BoxConstraints(maxWidth: bottomNavigation ? 320 : 340),
     items: <PopupMenuEntry<_ProfileMenuAction>>[
       PopupMenuItem<_ProfileMenuAction>(

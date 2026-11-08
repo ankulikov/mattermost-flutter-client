@@ -335,7 +335,16 @@ void main() {
     );
 
     await tester.tap(profileDestination);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    final FadeTransition avatarMenuFade = tester.widget<FadeTransition>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey<String>('profile-avatar-menu')),
+            matching: find.byType(FadeTransition),
+          )
+          .first,
+    );
+    expect(avatarMenuFade.opacity.value, 1);
     expect(
       find.byKey(const ValueKey<String>('profile-avatar-menu')),
       findsOneWidget,
@@ -2934,7 +2943,17 @@ void main() {
       buttons: kSecondaryMouseButton,
     );
     await gesture.up();
-    await tester.pumpAndSettle();
+    await tester.pump();
+
+    final FadeTransition itemFade = tester.widget<FadeTransition>(
+      find
+          .ancestor(
+            of: find.text(ChannelSidebarStrings.markUnread),
+            matching: find.byType(FadeTransition),
+          )
+          .first,
+    );
+    expect(itemFade.opacity.value, 1);
 
     expect(find.text('Mark as unread'), findsOneWidget);
     expect(find.text('Add to favorites'), findsOneWidget);
@@ -3088,7 +3107,16 @@ void main() {
 
     await openMenu();
     await tester.tap(find.text(ChannelSidebarStrings.moveTo));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    final FadeTransition folderFade = tester.widget<FadeTransition>(
+      find
+          .ancestor(
+            of: find.text('Empty folder'),
+            matching: find.byType(FadeTransition),
+          )
+          .first,
+    );
+    expect(folderFade.opacity.value, 1);
     expect(find.text('Empty folder'), findsOneWidget);
     await tester.tap(find.text('Empty folder'));
     await tester.pumpAndSettle();
