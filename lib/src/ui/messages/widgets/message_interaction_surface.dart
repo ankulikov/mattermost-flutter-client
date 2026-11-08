@@ -58,6 +58,7 @@ class MessageInteractionSurface extends StatefulWidget {
   const MessageInteractionSurface({
     required this.onOpenThread,
     required this.child,
+    required this.messageText,
     this.onToggleReaction,
     this.onDelete,
     this.onEdit,
@@ -73,6 +74,7 @@ class MessageInteractionSurface extends StatefulWidget {
 
   final VoidCallback? onOpenThread;
   final Widget child;
+  final String messageText;
   final Future<bool> Function(String emojiName)? onToggleReaction;
   final Future<bool> Function()? onDelete;
   final VoidCallback? onEdit;
@@ -286,11 +288,20 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
       }
       return;
     }
-    if (action != _MessageAction.copyLink) return;
+    if (action != _MessageAction.copyLink &&
+        action != _MessageAction.copyText) {
+      return;
+    }
     final Uri? permalink = widget.postPermalink;
-    if (permalink == null) return;
+    if (action == _MessageAction.copyLink && permalink == null) return;
     try {
-      await Clipboard.setData(ClipboardData(text: permalink.toString()));
+      await Clipboard.setData(
+        ClipboardData(
+          text: action == _MessageAction.copyText
+              ? widget.messageText
+              : permalink.toString(),
+        ),
+      );
     } on Object {
       // Clipboard access is platform-owned; a failed write must not disrupt
       // the message interaction surface.
@@ -300,7 +311,13 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
     ScaffoldMessenger.maybeOf(context)
       ?..hideCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(content: Text(MessageActionsStrings.linkCopied)),
+        SnackBar(
+          content: Text(
+            action == _MessageAction.copyText
+                ? MessageActionsStrings.textCopied
+                : MessageActionsStrings.linkCopied,
+          ),
+        ),
       );
   }
 
@@ -689,7 +706,9 @@ List<PopupMenuEntry<_MessageAction>> _menuItems({
               children: <Widget>[
                 Icon(action.icon, color: color),
                 const SizedBox(width: 12),
-                Text(action.label, style: TextStyle(color: color)),
+                Flexible(
+                  child: Text(action.label, style: TextStyle(color: color)),
+                ),
               ],
             ),
           );
@@ -701,9 +720,7 @@ bool _actionEnabled(
   required bool canCopyLink,
   required bool canPostpone,
 }) => switch (action) {
-  _MessageAction.unread ||
-  _MessageAction.pin ||
-  _MessageAction.copyText => false,
+  _MessageAction.unread || _MessageAction.pin => false,
   _MessageAction.copyLink => canCopyLink,
   _MessageAction.postpone => canPostpone,
   _ => true,

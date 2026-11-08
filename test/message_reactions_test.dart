@@ -208,6 +208,7 @@ Widget _app({
             child: SizedBox(
               width: width,
               child: MessageInteractionSurface(
+                messageText: 'Message',
                 onOpenThread: () {},
                 child: MessageReactions(
                   post: post,

@@ -719,6 +719,7 @@ class _ThreadPost extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MessageInteractionSurface(
+      messageText: post.message,
       onOpenThread: null,
       touchBehavior: MessageTouchBehavior.actionsOnTap,
       onToggleReaction: onAddReaction,

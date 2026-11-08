@@ -969,6 +969,7 @@ class _PostRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MessageInteractionSurface(
+      messageText: post.message,
       onOpenThread: () => onOpenThread(post),
       onToggleReaction: (String emojiName) => onToggleReaction(post, emojiName),
       onDelete: onDelete,
