@@ -14,8 +14,8 @@ import 'package:mattermost_flutter/src/domain/services/sso_browser_gateway.dart'
 /// On Apple platforms `incognito: true` selects a non-persistent
 /// `WKWebsiteDataStore` that `CookieManager.instance()` cannot inspect. On
 /// Android the plugin implements incognito by clearing the global cookie store.
-/// Scoped Mattermost-cookie cleanup before and after every attempt provides the
-/// required session isolation without either platform-specific failure mode.
+/// Explicit cookie cleanup keeps the browser and Cookie Manager on the same
+/// store while starting each SSO attempt without a previous browser session.
 @visibleForTesting
 InAppWebViewSettings buildSsoWebViewSettings() => InAppWebViewSettings(
   allowContentAccess: false,
@@ -28,6 +28,27 @@ InAppWebViewSettings buildSsoWebViewSettings() => InAppWebViewSettings(
   supportMultipleWindows: false,
   useShouldOverrideUrlLoading: true,
 );
+
+/// Android WebView can omit cookie path and domain metadata, making deletion
+/// by name unreliable. The SSO browser is the app's only WebView consumer, so
+/// clear its cookie store before and after an attempt and verify that no
+/// Mattermost authentication cookie remains for the selected server.
+@visibleForTesting
+Future<bool> clearSsoBrowserCookies({
+  required CookieManager cookieManager,
+  required Uri serverUrl,
+}) async {
+  final bool removedAny = await cookieManager.deleteAllCookies();
+  final List<Cookie> remaining = await cookieManager.getCookies(
+    url: WebUri.uri(serverUrl),
+  );
+  if (remaining.any(
+    (Cookie cookie) => SsoBrowserPolicy.cookiesToClear.contains(cookie.name),
+  )) {
+    throw StateError('Mattermost SSO cookies remain after cleanup.');
+  }
+  return removedAny;
+}
 
 /// Native WebView implementation of [SsoBrowserGateway].
 ///
@@ -147,9 +168,12 @@ final class _NativeSsoAttempt {
       'start_url': AuthDiagnostics.safeUri(startUrl),
     });
     try {
-      final int deletedCookies = await _clearMattermostCookies();
+      final bool removedAny = await clearSsoBrowserCookies(
+        cookieManager: _cookieManager,
+        serverUrl: serverUrl,
+      );
       _log('sso.cookies.cleared_before_start', <String, Object?>{
-        'deleted_count': deletedCookies,
+        'removed_any': removedAny,
       });
     } on Object catch (error) {
       _logException('sso.cookies.clear_before_start_failed', error);
@@ -358,9 +382,12 @@ final class _NativeSsoAttempt {
 
     SsoBrowserResult finalResult = result;
     try {
-      final int deletedCookies = await _clearMattermostCookies();
+      final bool removedAny = await clearSsoBrowserCookies(
+        cookieManager: _cookieManager,
+        serverUrl: serverUrl,
+      );
       _log('sso.cookies.cleared_after_finish', <String, Object?>{
-        'deleted_count': deletedCookies,
+        'removed_any': removedAny,
       });
     } on Object catch (error) {
       _logException('sso.cookies.clear_after_finish_failed', error);
@@ -372,28 +399,6 @@ final class _NativeSsoAttempt {
       });
       _result.complete(finalResult);
     }
-  }
-
-  Future<int> _clearMattermostCookies() async {
-    final WebUri url = WebUri.uri(serverUrl);
-    final List<Cookie> cookies = await _cookieManager.getCookies(url: url);
-    var deletedCount = 0;
-    for (final Cookie cookie in cookies) {
-      if (!SsoBrowserPolicy.cookiesToClear.contains(cookie.name)) {
-        continue;
-      }
-      final bool didDelete = await _cookieManager.deleteCookie(
-        url: url,
-        name: cookie.name,
-        path: cookie.path ?? '/',
-        domain: cookie.domain,
-      );
-      if (!didDelete) {
-        throw StateError('Could not clear SSO browser cookie.');
-      }
-      deletedCount += 1;
-    }
-    return deletedCount;
   }
 
   SsoBrowserCookie _toPolicyCookie(Cookie cookie) {
