@@ -61,7 +61,6 @@ void main() {
           await tester.tap(find.text(MessageActionsStrings.copyText));
           await tester.pumpAndSettle();
           expect(clipboardCall?.arguments, <String, Object>{'text': raw});
-          expect(find.text(MessageActionsStrings.textCopied), findsOneWidget);
         },
       );
     }
@@ -223,7 +222,6 @@ void main() {
     expect(clipboardCall?.arguments, <String, Object>{
       'text': 'https://chat.example.com/team-a/pl/post-1',
     });
-    expect(find.text(MessageActionsStrings.linkCopied), findsOneWidget);
   });
 
   testWidgets('runs deletion from the touch message actions', (
@@ -667,7 +665,6 @@ void main() {
     expect(clipboardCall?.arguments, <String, Object>{
       'text': 'https://chat.example.com/team-a/pl/post-1',
     });
-    expect(find.text(MessageActionsStrings.linkCopied), findsOneWidget);
   });
 
   testWidgets('mouse popup postpones the selected message', (

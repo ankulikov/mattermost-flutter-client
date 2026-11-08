@@ -8,9 +8,7 @@ abstract final class MessageActionsStrings {
   static const String postponed = 'Task added to Postponed';
   static const String postponeFailed = 'Could not postpone the task.';
   static const String copyLink = 'Copy link';
-  static const String linkCopied = 'Link copied';
   static const String copyText = 'Copy text';
-  static const String textCopied = 'Text copied';
   static const String quote = 'Quote';
   static const String pinToChannel = 'Pin to channel';
   static const String edit = 'Edit';

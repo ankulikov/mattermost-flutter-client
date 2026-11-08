@@ -307,18 +307,6 @@ class _MessageInteractionSurfaceState extends State<MessageInteractionSurface> {
       // the message interaction surface.
       return;
     }
-    if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            action == _MessageAction.copyText
-                ? MessageActionsStrings.textCopied
-                : MessageActionsStrings.linkCopied,
-          ),
-        ),
-      );
   }
 
   @override
