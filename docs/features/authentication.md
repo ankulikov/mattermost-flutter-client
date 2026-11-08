@@ -72,6 +72,10 @@ failure instead of claiming that the credential was removed.
 - Tokens belong only in `flutter_secure_storage`.
 - Cookies, authorization headers, message bodies, and personal data are absent
   from diagnostics.
+- Mattermost REST responses with status 401, 403, or 5xx emit a status, method,
+  and full server URL path in release builds. Query strings, fragments, and
+  embedded URL credentials are omitted. On Android, filter logcat for
+  `Mattermost response:` while reproducing an authentication failure.
 - Server changes close the old API client and its connection pool.
 - SSO accepts credentials only from the selected Mattermost origin.
 - Certificate pinning, custom certificate authorities, database encryption,

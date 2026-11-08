@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:mattermost_flutter/src/data/api/debug_http_logging_interceptor.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_status_logging_interceptor.dart';
 
 /// Factory for short-lived unauthenticated Mattermost discovery transports.
 ///
@@ -51,6 +52,7 @@ final class DioMattermostServerDiscoveryClientFactory
         headers: const <String, String>{'Accept': 'application/json'},
       ),
     );
+    dio.interceptors.add(MattermostStatusLoggingInterceptor());
     if (kDebugMode) {
       dio.interceptors.add(DebugHttpLoggingInterceptor());
     }

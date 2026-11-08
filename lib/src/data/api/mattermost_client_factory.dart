@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mattermost_flutter/src/data/api/debug_http_logging_interceptor.dart';
 import 'package:mattermost_flutter/src/data/api/dio_mattermost_api.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/api/mattermost_status_logging_interceptor.dart';
 
 abstract interface class MattermostApiClientFactory {
   MattermostApiClient create({required Uri serverUrl, required String token});
@@ -31,6 +32,7 @@ final class MattermostClientFactory implements MattermostApiClientFactory {
         },
       ),
     );
+    dio.interceptors.add(MattermostStatusLoggingInterceptor());
     if (kDebugMode) {
       dio.interceptors.add(DebugHttpLoggingInterceptor());
     }
