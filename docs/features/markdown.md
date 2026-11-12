@@ -22,8 +22,7 @@ documents in its [message formatting guide](https://docs.mattermost.com/end-user
 | `=widthxheight` and `=width` image sizing | Yes | Mattermost pre-parser with a 500 px height cap |
 | Horizontal rules and block quotes | Yes | GFM with theme-aware styling |
 | Tables and alignment | Yes | Width-constrained tables with wrapping cells |
-| Inline `$LaTeX$` | Yes | `flutter_markdown_plus_latex` |
-| Fenced `latex` formulas | Yes | Custom block syntax and `flutter_markdown_plus_latex` |
+| Math formulas | No | Dollar-delimited text remains text; `latex` fences render as code |
 | Unicode and standard `:shortcode:` emoji | Yes | Unicode plus a generated Mattermost dictionary |
 | Custom emoji | Yes | Post metadata plus an authenticated account-scoped image cache |
 | User mentions | Yes | Batched profile lookup and a profile-card link |
@@ -50,8 +49,7 @@ external.
   URLs, and executable schemes are rejected.
 - Syntax highlighting is limited to 20,000 characters per block. Larger blocks
   remain selectable monospace text with Copy.
-- Tables and code wrap to the post width. Oversized formulas scale down instead
-  of adding nested scrolling.
+- Tables and code wrap to the post width.
 - One non-scrolling `SelectionArea` preserves pointer selection and keyboard
   copying across the body.
 - A touch-only interaction bridge opens the post thread or action sheet without
@@ -73,7 +71,6 @@ dart run tool/generate_mattermost_system_emojis.dart
 ## Dependencies
 
 - `flutter_markdown_plus` supplies the cross-platform Markdown parser and widgets.
-- `flutter_math_fork` renders KaTeX-style formulas.
 - `highlight` supplies pure-Dart language grammars.
 - `url_launcher` opens approved external links on every target platform.
 

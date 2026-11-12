@@ -316,7 +316,10 @@ X_k = \sum_{n=0}^{N} x_n
     expect(find.textContaining('nested', findRichText: true), findsOneWidget);
     expect(find.byIcon(Icons.check_box), findsOneWidget);
     expect(find.byType(Table), findsOneWidget);
-    expect(find.byTooltip(MattermostMarkdownStrings.copyCode), findsOneWidget);
+    expect(
+      find.byTooltip(MattermostMarkdownStrings.copyCode),
+      findsNWidgets(2),
+    );
     expect(
       find.descendant(
         of: find.byType(MattermostMarkdown),
@@ -325,10 +328,12 @@ X_k = \sum_{n=0}^{N} x_n
       findsNothing,
     );
     expect(
-      find.byWidgetPredicate(
-        (Widget widget) => widget.runtimeType.toString() == 'Math',
-      ),
-      findsNWidgets(2),
+      find.textContaining(r'$E = mc^2$', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(r'X_k = \sum_{n=0}^{N} x_n', findRichText: true),
+      findsOneWidget,
     );
 
     _tapTextSpan(tester, '~roadmap');
@@ -339,7 +344,7 @@ X_k = \sum_{n=0}^{N} x_n
     await tester.pump();
     expect(launchedUri, Uri.parse('https://mattermost.com'));
 
-    await tester.tap(find.byTooltip(MattermostMarkdownStrings.copyCode));
+    await tester.tap(find.byTooltip(MattermostMarkdownStrings.copyCode).first);
     await tester.pump();
     expect(clipboardCall?.method, 'Clipboard.setData');
     expect(clipboardCall?.arguments, <String, Object>{
