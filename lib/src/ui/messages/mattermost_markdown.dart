@@ -172,8 +172,17 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
     if (!identical(theme, _cachedTheme) || bodyStyle != _cachedBodyStyle) {
       _cachedTheme = theme;
       _cachedBodyStyle = bodyStyle;
+      final double bodySize =
+          bodyStyle.fontSize ?? theme.textTheme.bodyMedium!.fontSize!;
+      // Keep the web client's heading proportions relative to its 14 px body.
+      TextStyle headingStyle(double webSize) => bodyStyle.copyWith(
+        fontSize: (bodySize * webSize / 14).roundToDouble(),
+        fontWeight: FontWeight.w700,
+      );
+
       _cachedStyleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
         p: bodyStyle,
+        strong: const TextStyle(fontWeight: FontWeight.w600),
         blockSpacing: 8,
         a: bodyStyle.copyWith(
           color: colors.primary,
@@ -185,12 +194,12 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
           fontSize: (bodyStyle.fontSize ?? 14) * 0.9,
           backgroundColor: colors.surfaceContainerHighest,
         ),
-        h1: theme.textTheme.headlineSmall,
-        h2: theme.textTheme.titleLarge,
-        h3: theme.textTheme.titleMedium,
-        h4: theme.textTheme.titleSmall,
-        h5: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
-        h6: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+        h1: headingStyle(28),
+        h2: headingStyle(25),
+        h3: headingStyle(22),
+        h4: headingStyle(19),
+        h5: headingStyle(15),
+        h6: headingStyle(14),
         tableColumnWidth: const FlexColumnWidth(),
         tableScrollbarThumbVisibility: false,
         tableCellsPadding: const EdgeInsets.symmetric(
