@@ -120,6 +120,54 @@ void main() {
     expect(find.text('File saved.'), findsOneWidget);
   });
 
+  testWidgets('double tap toggles zoom and paging at compact and wide widths', (
+    WidgetTester tester,
+  ) async {
+    for (final double width in <double>[400, 1200]) {
+      await tester.binding.setSurfaceSize(Size(width, 700));
+      await _pump(tester, _FakeAttachmentRepository(), const <PostAttachment>[
+        firstImage,
+        secondImage,
+      ], textScaler: const TextScaler.linear(2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('first.png'));
+      await tester.pumpAndSettle();
+      final Finder zoomable = find.byKey(
+        const ValueKey<String>('zoomable-attachment-image-1'),
+      );
+      final Offset point = tester.getCenter(zoomable) + const Offset(40, 30);
+      await tester.tapAt(point);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(point);
+      await tester.pump();
+      final TransformationController controller = tester
+          .widget<InteractiveViewer>(zoomable)
+          .transformationController!;
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(controller.value.getMaxScaleOnAxis(), inExclusiveRange(1, 2));
+      await tester.pumpAndSettle();
+      expect(controller.value.getMaxScaleOnAxis(), 2);
+      expect(controller.value.getTranslation().x, lessThan(0));
+      await tester.drag(zoomable, const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('1 of 2'), findsOneWidget);
+      await tester.tapAt(point);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(point);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(controller.value.getMaxScaleOnAxis(), inExclusiveRange(1, 2));
+      await tester.pumpAndSettle();
+      expect(controller.value, Matrix4.identity());
+      await tester.drag(zoomable, Offset(-width * 0.7, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('2 of 2'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+    await tester.binding.setSurfaceSize(null);
+  });
+
   testWidgets('pinch zooms an image and prevents paging while enlarged', (
     WidgetTester tester,
   ) async {

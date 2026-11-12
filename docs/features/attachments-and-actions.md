@@ -25,7 +25,8 @@ content URIs currently require a usable image representation.
 
 A single image receives a large preview. Multiple files use compact cards, and
 the full-screen viewer pages through images from one post. Images support pinch
-zoom and panning up to 5x; page swiping pauses while an image is enlarged, and
+zoom and panning up to 5x; double tapping zooms in around the tapped point or
+returns an enlarged image to its fitted size; page swiping pauses while an image is enlarged, and
 the transform resets when the page changes. Saving the original calls a
 platform file-saver through a domain contract. Sandboxed macOS builds write
 only to a user-selected location, and iOS exports saved documents to the Files
