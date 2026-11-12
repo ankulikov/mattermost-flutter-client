@@ -502,15 +502,23 @@ class _ZoomableAttachmentImage extends StatefulWidget {
       _ZoomableAttachmentImageState();
 }
 
-class _ZoomableAttachmentImageState extends State<_ZoomableAttachmentImage> {
+class _ZoomableAttachmentImageState extends State<_ZoomableAttachmentImage>
+    with SingleTickerProviderStateMixin {
   final TransformationController _transformationController =
       TransformationController();
+  late final AnimationController _zoomAnimation = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+  )..addListener(_applyZoomAnimation);
+  Matrix4Tween? _zoomTween;
   bool _isZoomed = false;
+  Offset _doubleTapPosition = Offset.zero;
 
   @override
   void didUpdateWidget(_ZoomableAttachmentImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isCurrent && !widget.isCurrent) {
+      _zoomAnimation.stop();
       _transformationController.value = Matrix4.identity();
       _updateZoomState(false);
     }
@@ -518,28 +526,70 @@ class _ZoomableAttachmentImageState extends State<_ZoomableAttachmentImage> {
 
   @override
   void dispose() {
+    _zoomAnimation.dispose();
     _transformationController.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => InteractiveViewer(
-    key: ValueKey<String>('zoomable-attachment-${widget.attachment.id}'),
-    transformationController: _transformationController,
-    minScale: 1,
-    maxScale: 5,
-    onInteractionUpdate: (_) => _updateZoomState(
-      _transformationController.value.getMaxScaleOnAxis() > 1.01,
-    ),
-    onInteractionEnd: (_) => _updateZoomState(
-      _transformationController.value.getMaxScaleOnAxis() > 1.01,
-    ),
-    child: _AttachmentImage(
-      attachment: widget.attachment,
-      variant: AttachmentVariant.original,
-      fit: BoxFit.contain,
+  Widget build(BuildContext context) => GestureDetector(
+    onDoubleTapDown: (details) => _doubleTapPosition = details.localPosition,
+    onDoubleTap: _handleDoubleTap,
+    child: InteractiveViewer(
+      key: ValueKey<String>('zoomable-attachment-${widget.attachment.id}'),
+      transformationController: _transformationController,
+      minScale: 1,
+      maxScale: 5,
+      onInteractionStart: (_) {
+        if (_zoomAnimation.isAnimating) {
+          _zoomAnimation.stop();
+          _updateZoomState(
+            _transformationController.value.getMaxScaleOnAxis() > 1.01,
+          );
+        }
+      },
+      onInteractionUpdate: (_) => _updateZoomState(
+        _transformationController.value.getMaxScaleOnAxis() > 1.01,
+      ),
+      onInteractionEnd: (_) => _updateZoomState(
+        _transformationController.value.getMaxScaleOnAxis() > 1.01,
+      ),
+      child: _AttachmentImage(
+        attachment: widget.attachment,
+        variant: AttachmentVariant.original,
+        fit: BoxFit.contain,
+      ),
     ),
   );
+
+  void _handleDoubleTap() {
+    final bool zoomIn =
+        _transformationController.value.getMaxScaleOnAxis() <= 1.01;
+    final Matrix4 target = zoomIn
+        ? (Matrix4.identity()
+            ..setEntry(0, 0, 2)
+            ..setEntry(1, 1, 2)
+            ..setEntry(0, 3, -_doubleTapPosition.dx)
+            ..setEntry(1, 3, -_doubleTapPosition.dy))
+        : Matrix4.identity();
+    _zoomTween = Matrix4Tween(
+      begin: _transformationController.value.clone(),
+      end: target,
+    );
+    _updateZoomState(true);
+    _zoomAnimation.forward(from: 0);
+  }
+
+  void _applyZoomAnimation() {
+    _transformationController.value = _zoomTween!.transform(
+      Curves.easeOut.transform(_zoomAnimation.value),
+    );
+    if (_zoomAnimation.isCompleted) {
+      _updateZoomState(
+        _transformationController.value.getMaxScaleOnAxis() > 1.01,
+      );
+    }
+  }
 
   void _updateZoomState(bool value) {
     if (_isZoomed == value) return;
