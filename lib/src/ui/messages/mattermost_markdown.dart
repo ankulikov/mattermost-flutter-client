@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
-import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:highlight/highlight.dart' as syntax;
 import 'package:markdown/markdown.dart' as md;
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
@@ -111,13 +110,11 @@ class MattermostMarkdown extends StatefulWidget {
   State<MattermostMarkdown> createState() => _MattermostMarkdownState();
 
   static final List<md.BlockSyntax> _mattermostBlockSyntaxes = <md.BlockSyntax>[
-    const _MattermostLatexFenceSyntax(),
     ...md.ExtensionSet.gitHubFlavored.blockSyntaxes,
   ];
   static final List<md.InlineSyntax> _mattermostInlineSyntaxes =
       <md.InlineSyntax>[
         _MattermostChannelLinkSyntax(),
-        _MattermostInlineLatexSyntax(),
         _MattermostEmojiSyntax(),
         ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
       ];
@@ -205,7 +202,6 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
         ),
       );
       _cachedBuilders = <String, MarkdownElementBuilder>{
-        'latex': _MattermostLatexBuilder(textStyle: bodyStyle),
         'pre': _MattermostCodeBlockBuilder(theme: theme),
         for (final MattermostInlineReplacement replacement
             in widget.inlineReplacements)
@@ -659,91 +655,6 @@ class _MattermostChannelLinkSyntax extends md.InlineSyntax {
         '$schemePrefix${Uri.encodeComponent(channelName)}';
     parser.addNode(link);
     return true;
-  }
-}
-
-class _MattermostInlineLatexSyntax extends md.InlineSyntax {
-  _MattermostInlineLatexSyntax()
-    : super(
-        r'\$((?:\\.|[^\\$\n])+?)\$(?=[\s?!.,:？！。，：]|$)',
-        startCharacter: 0x24,
-      );
-
-  @override
-  bool onMatch(md.InlineParser parser, Match match) {
-    final md.Element latex = md.Element.text('latex', match[1]!);
-    latex.attributes['MathStyle'] = 'text';
-    parser.addNode(latex);
-    return true;
-  }
-}
-
-class _MattermostLatexFenceSyntax extends md.BlockSyntax {
-  const _MattermostLatexFenceSyntax();
-
-  @override
-  RegExp get pattern => RegExp(
-    r'^ {0,3}(`{3,})[ \t]*latex(?:[ \t]+[^\n]*)?$',
-    caseSensitive: false,
-  );
-
-  @override
-  md.Node parse(md.BlockParser parser) {
-    final RegExpMatch opening = pattern.firstMatch(parser.current.content)!;
-    final String fence = opening[1]!;
-    final StringBuffer content = StringBuffer();
-    parser.advance();
-    final RegExp closing = RegExp('^ {0,3}`{${fence.length},}[ \\t]*\$');
-    while (!parser.isDone && !closing.hasMatch(parser.current.content)) {
-      if (content.isNotEmpty) content.writeln();
-      content.write(parser.current.content);
-      parser.advance();
-    }
-    if (!parser.isDone) parser.advance();
-
-    final md.Element latex = md.Element.text('latex', content.toString());
-    latex.attributes['MathStyle'] = 'display';
-    return md.Element('p', <md.Node>[latex]);
-  }
-}
-
-class _MattermostLatexBuilder extends MarkdownElementBuilder {
-  _MattermostLatexBuilder({required this.textStyle});
-
-  final TextStyle textStyle;
-
-  @override
-  Widget visitElementAfterWithContext(
-    BuildContext context,
-    md.Element element,
-    TextStyle? preferredStyle,
-    TextStyle? parentStyle,
-  ) {
-    final String source = element.textContent;
-    if (source.isEmpty) return const SizedBox.shrink();
-    final MathStyle mathStyle = element.attributes['MathStyle'] == 'display'
-        ? MathStyle.display
-        : MathStyle.text;
-    final Widget formula = Math.tex(
-      source,
-      mathStyle: mathStyle,
-      textStyle: textStyle,
-    );
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final double maxWidth = constraints.hasBoundedWidth
-            ? constraints.maxWidth
-            : MediaQuery.sizeOf(context).width;
-        return ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: formula,
-          ),
-        );
-      },
-    );
   }
 }
 

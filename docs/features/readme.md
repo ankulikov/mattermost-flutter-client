@@ -104,7 +104,7 @@ Drift, logs, analytics, fixtures, or screenshots.
 | Realtime | `web_socket_channel` behind `WebSocketGateway` |
 | Durable data | Drift and SQLite, scoped by account/server ID |
 | Credentials | `flutter_secure_storage` |
-| Markdown | `flutter_markdown_plus`, `flutter_math_fork`, and `highlight` |
+| Markdown | `flutter_markdown_plus` and `highlight` |
 | External links | `url_launcher` |
 | Generated DTO/database code | `json_serializable`, `drift_dev`, and `build_runner` |
 
