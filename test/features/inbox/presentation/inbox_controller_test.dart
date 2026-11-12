@@ -254,25 +254,90 @@ void main() {
     },
   );
 
+  test('mark read preserves other posts in the same channel', () async {
+    final InboxPostCandidate first = _candidate('first');
+    final InboxPostCandidate second = _candidate('second');
+    final DirectMessageBundleInboxItem bundle = DirectMessageBundleInboxItem(
+      channelId: 'channel',
+      authorId: 'other',
+      automationClass: InboxAutomationClass.person,
+      messages: <InboxPostCandidate>[first, second],
+    );
+    final _InboxRepository repository = _InboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(
+          newItems: <InboxItem>[
+            bundle,
+            ChannelPostInboxItem(candidate: _candidate('third')),
+          ],
+        ),
+      ],
+    );
+    final provider = _provider(repository);
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await _waitForInitialLoad(container, provider);
+
+    expect(await container.read(provider.notifier).markRead(bundle), isTrue);
+
+    expect(repository.markedRead, same(bundle));
+    expect(
+      container.read(provider).value?.snapshot.newItems.single.postIds,
+      <String>['third'],
+    );
+  });
+
+  test('marks roots individually including the final root', () async {
+    final ChannelPostInboxItem first = ChannelPostInboxItem(
+      candidate: _candidate('first', direct: false),
+    );
+    final ChannelPostInboxItem second = ChannelPostInboxItem(
+      candidate: _candidate('second', direct: false),
+    );
+    final _InboxRepository repository = _InboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(newItems: <InboxItem>[first, second]),
+      ],
+    );
+    final provider = _provider(repository);
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await _waitForInitialLoad(container, provider);
+
+    expect(await container.read(provider.notifier).markRead(first), isTrue);
+
+    expect(repository.markedRead, same(first));
+    expect(
+      container.read(provider).requireValue.snapshot.newItems.single.key,
+      second.key,
+    );
+
+    expect(await container.read(provider.notifier).markRead(second), isTrue);
+
+    expect(repository.markedRead, same(second));
+    expect(container.read(provider).requireValue.snapshot.newItems, isEmpty);
+  });
+
   test(
-    'mark read removes every non-thread item in the viewed channel',
+    'Done during refresh preserves new messages in the same bundle',
     () async {
+      final Completer<InboxSnapshot> refresh = Completer<InboxSnapshot>();
       final InboxPostCandidate first = _candidate('first');
       final InboxPostCandidate second = _candidate('second');
-      final DirectMessageBundleInboxItem bundle = DirectMessageBundleInboxItem(
-        channelId: 'channel',
-        authorId: 'other',
-        automationClass: InboxAutomationClass.person,
-        messages: <InboxPostCandidate>[first, second],
-      );
+      DirectMessageBundleInboxItem bundle(List<InboxPostCandidate> messages) =>
+          DirectMessageBundleInboxItem(
+            channelId: 'channel',
+            authorId: 'other',
+            automationClass: InboxAutomationClass.person,
+            messages: messages,
+          );
+      final InboxItem tapped = bundle(<InboxPostCandidate>[first]);
       final _InboxRepository repository = _InboxRepository(
         <Future<InboxSnapshot> Function()>[
-          () async => InboxSnapshot(
-            newItems: <InboxItem>[
-              bundle,
-              ChannelPostInboxItem(candidate: _candidate('third')),
-            ],
-          ),
+          () async => InboxSnapshot(newItems: <InboxItem>[tapped]),
+          () => refresh.future,
         ],
       );
       final provider = _provider(repository);
@@ -281,46 +346,115 @@ void main() {
       addTearDown(container.dispose);
       await _waitForInitialLoad(container, provider);
 
-      expect(await container.read(provider.notifier).markRead(bundle), isTrue);
+      final InboxController controller = container.read(provider.notifier);
+      final Future<void> refreshing = controller.refresh();
+      final Future<bool> done = controller.markRead(tapped);
+      expect(container.read(provider).requireValue.snapshot.newItems, isEmpty);
+      expect(repository.markedRead, isNull);
 
-      expect(repository.markedRead, same(bundle));
-      expect(container.read(provider).value?.snapshot.newItems, isEmpty);
+      refresh.complete(
+        InboxSnapshot(
+          newItems: <InboxItem>[
+            bundle(<InboxPostCandidate>[first, second]),
+          ],
+        ),
+      );
+      await refreshing;
+      expect(await done, isTrue);
+      expect(repository.markedRead, same(tapped));
+      expect(
+        container.read(provider).requireValue.snapshot.newItems.single.postIds,
+        <String>['second'],
+      );
     },
   );
 
+  test('Done keeps newer replies and refreshes their unread count', () async {
+    final Completer<InboxSnapshot> refresh = Completer<InboxSnapshot>();
+    final Completer<InboxSnapshot> readback = Completer<InboxSnapshot>();
+    final ThreadInboxItem tapped = _threadItem();
+    final ThreadInboxItem newer = _threadItem(
+      lastReplyAt: DateTime.utc(2026, 1, 3),
+      unreadReplies: 2,
+    );
+    final ThreadInboxItem reconciled = _threadItem(
+      lastReplyAt: newer.thread.lastReplyAt,
+      lastViewedAt: tapped.thread.lastReplyAt,
+    );
+    final _InboxRepository repository = _InboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(newItems: <InboxItem>[tapped]),
+        () => refresh.future,
+        () => readback.future,
+      ],
+    );
+    final provider = _provider(repository);
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await _waitForInitialLoad(container, provider);
+
+    final InboxController controller = container.read(provider.notifier);
+    final Future<void> refreshing = controller.refresh();
+    final Future<bool> done = controller.markRead(tapped);
+    expect(container.read(provider).requireValue.snapshot.newItems, isEmpty);
+
+    refresh.complete(InboxSnapshot(newItems: <InboxItem>[newer]));
+    await refreshing;
+    expect(await done, isTrue);
+    expect(repository.markedRead, same(tapped));
+    expect(
+      container.read(provider).requireValue.snapshot.newItems.single,
+      same(newer),
+    );
+    expect(
+      container
+          .read(provider)
+          .requireValue
+          .isThreadReadPending(newer.thread.id),
+      isTrue,
+    );
+
+    readback.complete(InboxSnapshot(newItems: <InboxItem>[reconciled]));
+    await _waitUntil(
+      () => !container
+          .read(provider)
+          .requireValue
+          .isThreadReadPending(newer.thread.id),
+    );
+    expect(
+      container.read(provider).requireValue.snapshot.newItems.single,
+      same(reconciled),
+    );
+  });
+
   test(
-    'marks roots individually until the final root advances the channel',
+    'failed Done restores unread items and reports an Inbox failure',
     () async {
-      final ChannelPostInboxItem first = ChannelPostInboxItem(
-        candidate: _candidate('first', direct: false),
+      final InboxItem item = ChannelPostInboxItem(
+        candidate: _candidate('first'),
       );
-      final ChannelPostInboxItem second = ChannelPostInboxItem(
-        candidate: _candidate('second', direct: false),
-      );
+      final Completer<void> write = Completer<void>();
       final _InboxRepository repository = _InboxRepository(
         <Future<InboxSnapshot> Function()>[
-          () async => InboxSnapshot(newItems: <InboxItem>[first, second]),
+          () async => InboxSnapshot(newItems: <InboxItem>[item]),
         ],
-      );
+      )..markReadGate = write;
       final provider = _provider(repository);
       final ProviderContainer container = ProviderContainer()
         ..listen(provider, (_, _) {});
       addTearDown(container.dispose);
       await _waitForInitialLoad(container, provider);
 
-      expect(await container.read(provider.notifier).markRead(first), isTrue);
-
-      expect(repository.individuallyViewed, same(first));
-      expect(repository.markedRead, isNull);
-      expect(
-        container.read(provider).requireValue.snapshot.newItems.single.key,
-        second.key,
-      );
-
-      expect(await container.read(provider.notifier).markRead(second), isTrue);
-
-      expect(repository.markedRead, same(second));
+      final Future<bool> done = container
+          .read(provider.notifier)
+          .markRead(item);
       expect(container.read(provider).requireValue.snapshot.newItems, isEmpty);
+      write.completeError(StateError('write failed'));
+      expect(await done, isFalse);
+      final InboxViewState state = container.read(provider).requireValue;
+      expect(state.snapshot.newItems.single, same(item));
+      expect(state.readFailureCount, 1);
     },
   );
 
@@ -340,7 +474,7 @@ void main() {
         () async => InboxSnapshot(newItems: <InboxItem>[first, second]),
       ],
       realtime: realtime.stream,
-    )..markPostViewedGate = viewed;
+    )..markReadGate = viewed;
     final provider = _provider(repository);
     final ProviderContainer container = ProviderContainer()
       ..listen(provider, (_, _) {});
@@ -350,7 +484,7 @@ void main() {
     final Future<bool> request = container
         .read(provider.notifier)
         .markRead(first);
-    await _waitUntil(() => repository.individuallyViewed != null);
+    await _waitUntil(() => repository.markedRead != null);
     realtime.add(
       InboxPostChanged(postId: first.post.id, candidate: first.candidate),
     );
@@ -364,30 +498,26 @@ void main() {
     );
   });
 
-  test(
-    'the final ordinary channel root advances the channel boundary',
-    () async {
-      final ChannelPostInboxItem only = ChannelPostInboxItem(
-        candidate: _candidate('only', direct: false),
-      );
-      final _InboxRepository repository = _InboxRepository(
-        <Future<InboxSnapshot> Function()>[
-          () async => InboxSnapshot(newItems: <InboxItem>[only]),
-        ],
-      );
-      final provider = _provider(repository);
-      final ProviderContainer container = ProviderContainer()
-        ..listen(provider, (_, _) {});
-      addTearDown(container.dispose);
-      await _waitForInitialLoad(container, provider);
+  test('the final ordinary channel root is acknowledged by ID', () async {
+    final ChannelPostInboxItem only = ChannelPostInboxItem(
+      candidate: _candidate('only', direct: false),
+    );
+    final _InboxRepository repository = _InboxRepository(
+      <Future<InboxSnapshot> Function()>[
+        () async => InboxSnapshot(newItems: <InboxItem>[only]),
+      ],
+    );
+    final provider = _provider(repository);
+    final ProviderContainer container = ProviderContainer()
+      ..listen(provider, (_, _) {});
+    addTearDown(container.dispose);
+    await _waitForInitialLoad(container, provider);
 
-      expect(await container.read(provider.notifier).markRead(only), isTrue);
+    expect(await container.read(provider.notifier).markRead(only), isTrue);
 
-      expect(repository.markedRead, same(only));
-      expect(repository.individuallyViewed, isNull);
-      expect(container.read(provider).requireValue.snapshot.newItems, isEmpty);
-    },
-  );
+    expect(repository.markedRead, same(only));
+    expect(container.read(provider).requireValue.snapshot.newItems, isEmpty);
+  });
 
   test(
     'marking a thread read preserves other roots and suppresses its root',
@@ -409,8 +539,7 @@ void main() {
 
       expect(await container.read(provider.notifier).markRead(thread), isTrue);
 
-      expect(repository.markedThreadRead, same(thread));
-      expect(repository.preservedOtherChannelRoots, isTrue);
+      expect(repository.markedRead, same(thread));
       expect(
         container.read(provider).requireValue.snapshot.newItems.single.key,
         otherRoot.key,
@@ -607,15 +736,19 @@ InboxPostCandidate _candidate(String id, {bool direct = true}) =>
       reason: InboxAttentionReason.allMessagesSubscription,
     );
 
-ThreadInboxItem _threadItem() {
+ThreadInboxItem _threadItem({
+  DateTime? lastReplyAt,
+  DateTime? lastViewedAt,
+  int unreadReplies = 1,
+}) {
   final InboxPostCandidate root = _candidate('thread-root', direct: false);
   return ThreadInboxItem(
     thread: FollowedThread(
       root: root.post,
-      replyCount: 1,
-      lastReplyAt: DateTime.utc(2026, 1, 2),
-      lastViewedAt: DateTime.utc(2026),
-      unreadReplies: 1,
+      replyCount: 2,
+      lastReplyAt: lastReplyAt ?? DateTime.utc(2026, 1, 2),
+      lastViewedAt: lastViewedAt ?? DateTime.utc(2026),
+      unreadReplies: unreadReplies,
       unreadMentions: 0,
     ),
     channel: root.channel,
@@ -659,10 +792,7 @@ final class _InboxRepository extends InboxRepository {
   var loadCalls = 0;
   var reconnectCalls = 0;
   InboxItem? markedRead;
-  ThreadInboxItem? markedThreadRead;
-  bool? preservedOtherChannelRoots;
-  ChannelPostInboxItem? individuallyViewed;
-  Completer<void>? markPostViewedGate;
+  Completer<void>? markReadGate;
 
   @override
   Future<InboxCounters> loadCounters({required AuthSession session}) async =>
@@ -692,25 +822,7 @@ final class _InboxRepository extends InboxRepository {
     required InboxItem item,
   }) async {
     markedRead = item;
-  }
-
-  @override
-  Future<void> markThreadRead({
-    required AuthSession session,
-    required ThreadInboxItem item,
-    required bool preserveOtherChannelRoots,
-  }) async {
-    markedThreadRead = item;
-    preservedOtherChannelRoots = preserveOtherChannelRoots;
-  }
-
-  @override
-  Future<void> markPostViewed({
-    required AuthSession session,
-    required ChannelPostInboxItem item,
-  }) async {
-    individuallyViewed = item;
-    await markPostViewedGate?.future;
+    await markReadGate?.future;
   }
 }
 

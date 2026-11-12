@@ -77,7 +77,6 @@ final class MattermostInboxRepository extends InboxRepository {
   final InboxCounterCache? _counterCache;
   final SessionRealtimeService? _realtime;
   final DateTime Function() _now;
-  final Set<String> _pendingViewedPreferenceCleanup = <String>{};
   _InboxRealtimeScope? _realtimeScope;
 
   static const Set<String> _realtimeEventNames = <String>{
@@ -114,7 +113,6 @@ final class MattermostInboxRepository extends InboxRepository {
   @override
   Future<InboxSnapshot> load({required AuthSession session}) async {
     final DateTime builtAt = _now();
-    await _retryViewedPreferenceCleanup(session);
     _rawUsersAreBots.clear();
     final Future<Set<String>> groupNamesRequest = _loadCurrentGroupNames(
       session: session,
@@ -266,8 +264,7 @@ final class MattermostInboxRepository extends InboxRepository {
         if (attention.reason != InboxAttentionReason.allMessagesSubscription) {
           reconstructedMentions++;
         }
-        if (!channel.isDialog &&
-            viewedChannelPosts.forChannel(channel.id).contains(raw.id)) {
+        if (viewedChannelPosts.forChannel(channel.id).contains(raw.id)) {
           continue;
         }
         newCandidates.add(
@@ -444,9 +441,8 @@ final class MattermostInboxRepository extends InboxRepository {
     final SidebarChannel? channel = scope?.channels[raw.channelId];
     final MattermostChannelMemberDto? member = scope?.members[raw.channelId];
     if (scope == null || channel == null || member == null) return null;
-    if (!channel.isDialog &&
-        scope.viewedPostIdsByChannelId[raw.channelId]?.contains(raw.id) ==
-            true) {
+    if (scope.viewedPostIdsByChannelId[raw.channelId]?.contains(raw.id) ==
+        true) {
       return null;
     }
     if (raw.type.startsWith('system_') ||
@@ -1089,103 +1085,37 @@ final class MattermostInboxRepository extends InboxRepository {
   Future<void> markRead({
     required AuthSession session,
     required InboxItem item,
-  }) => switch (item) {
-    ThreadInboxItem() => markThreadRead(
-      session: session,
-      item: item,
-      preserveOtherChannelRoots: true,
-    ),
-    ChannelPostInboxItem(:final post) => _markChannelRead(
-      session: session,
-      channelId: post.channelId,
-    ),
-    DirectMessageBundleInboxItem(:final channelId) => _api.viewChannel(
-      userId: session.userId,
-      channelId: channelId,
-    ),
-  };
-
-  @override
-  Future<void> markThreadRead({
-    required AuthSession session,
-    required ThreadInboxItem item,
-    required bool preserveOtherChannelRoots,
   }) async {
-    await _api.updateThreadRead(
-      userId: session.userId,
-      teamId: item.teamId,
-      threadId: item.thread.id,
-      timestamp: _now().millisecondsSinceEpoch,
-    );
-    if (preserveOtherChannelRoots) {
-      await _markPostViewed(
-        session: session,
-        channelId: item.thread.channelId,
-        postId: item.thread.root.id,
+    final String channelId = switch (item) {
+      ChannelPostInboxItem(:final post) => post.channelId,
+      DirectMessageBundleInboxItem(:final channelId) => channelId,
+      ThreadInboxItem(:final thread) => thread.channelId,
+    };
+    if (item is ThreadInboxItem) {
+      final int cutoff = item.thread.lastReplyAt.millisecondsSinceEpoch;
+      final MattermostUserThreadDto? latest = await _api.getUserThread(
+        userId: session.userId,
+        teamId: item.teamId,
+        threadId: item.thread.id,
       );
-      return;
+      if (latest != null && latest.lastViewedAt < cutoff) {
+        await _api.updateThreadRead(
+          userId: session.userId,
+          teamId: item.teamId,
+          threadId: item.thread.id,
+          timestamp: cutoff,
+        );
+      }
     }
-    await _markChannelRead(session: session, channelId: item.thread.channelId);
-  }
-
-  @override
-  Future<void> markPostViewed({
-    required AuthSession session,
-    required ChannelPostInboxItem item,
-  }) => _markPostViewed(
-    session: session,
-    channelId: item.post.channelId,
-    postId: item.post.id,
-  );
-
-  Future<void> _markPostViewed({
-    required AuthSession session,
-    required String channelId,
-    required String postId,
-  }) async {
-    await _viewedChannelPosts.add(
+    final Set<String> postIds = item.postIds.toSet();
+    await _viewedChannelPosts.addAll(
       session: session,
       channelId: channelId,
-      postId: postId,
+      postIds: postIds,
     );
     _realtimeScope?.viewedPostIdsByChannelId
         .putIfAbsent(channelId, () => <String>{})
-        .add(postId);
-  }
-
-  Future<void> _markChannelRead({
-    required AuthSession session,
-    required String channelId,
-  }) async {
-    await _api.viewChannel(userId: session.userId, channelId: channelId);
-    try {
-      await _viewedChannelPosts.removeChannel(
-        session: session,
-        channelId: channelId,
-      );
-      _pendingViewedPreferenceCleanup.remove(channelId);
-      _realtimeScope?.viewedPostIdsByChannelId.remove(channelId);
-    } on Object {
-      _pendingViewedPreferenceCleanup.add(channelId);
-    }
-  }
-
-  Future<void> _retryViewedPreferenceCleanup(AuthSession session) async {
-    for (final String channelId in List<String>.of(
-      _pendingViewedPreferenceCleanup,
-    )) {
-      try {
-        await _viewedChannelPosts.removeChannel(
-          session: session,
-          channelId: channelId,
-        );
-        _pendingViewedPreferenceCleanup.remove(channelId);
-        _realtimeScope?.viewedPostIdsByChannelId.remove(channelId);
-      } on Object {
-        // The channel read boundary already moved. Keep the cleanup queued
-        // without failing an authoritative Inbox refresh.
-      }
-    }
+        .addAll(postIds);
   }
 
   Future<void> _cleanupReadChannelPreferences({
@@ -1197,14 +1127,12 @@ final class MattermostInboxRepository extends InboxRepository {
     for (final String channelId in viewedChannelPosts.postIdsByChannelId.keys) {
       final MattermostChannelDto? channel = channels[channelId];
       final MattermostChannelMemberDto? member = members[channelId];
-      if (channel == null ||
-          member == null ||
-          channel.type == 'D' ||
-          channel.type == 'G' ||
-          channel.totalMessageCountRoot > member.msgCountRoot ||
-          _pendingViewedPreferenceCleanup.contains(channelId)) {
-        continue;
-      }
+      if (channel == null || member == null) continue;
+      final bool dialog = channel.type == 'D' || channel.type == 'G';
+      final bool unread = dialog
+          ? channel.totalMessageCount > member.msgCount
+          : channel.totalMessageCountRoot > member.msgCountRoot;
+      if (unread) continue;
       try {
         await _viewedChannelPosts.removeChannel(
           session: session,
@@ -1212,7 +1140,7 @@ final class MattermostInboxRepository extends InboxRepository {
         );
         _realtimeScope?.viewedPostIdsByChannelId.remove(channelId);
       } on Object {
-        _pendingViewedPreferenceCleanup.add(channelId);
+        // Recheck the channel boundary on the next load.
       }
     }
   }
@@ -1344,10 +1272,10 @@ final class _EmptyViewedChannelPostsRepository
   }) async => ViewedChannelPostsSnapshot(const <String, Set<String>>{});
 
   @override
-  Future<void> add({
+  Future<void> addAll({
     required AuthSession session,
     required String channelId,
-    required String postId,
+    required Set<String> postIds,
   }) async {}
 
   @override

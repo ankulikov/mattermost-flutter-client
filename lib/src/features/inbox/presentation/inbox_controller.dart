@@ -25,15 +25,31 @@ final class InboxInAppNotification {
 }
 
 final class InboxViewState {
-  const InboxViewState({
-    required this.snapshot,
+  InboxViewState({
+    required InboxSnapshot snapshot,
+    List<InboxItem> pendingReads = const <InboxItem>[],
+    this.readFailureCount = 0,
+    this.threadReadsAwaitingRefresh = const <String>{},
     this.counters = InboxCounters.empty,
     this.hasLoadedSnapshot = false,
     this.initialLoadStatus = const OperationStatus.idle(),
     this.refreshStatus = const OperationStatus.idle(),
     this.connectionStatus = InboxConnectionStatus.disconnected,
     this.inAppNotification,
-  });
+  }) : _sourceSnapshot = snapshot,
+       _pendingReads = pendingReads,
+       snapshot = _withoutReadItems(snapshot, pendingReads);
+
+  final InboxSnapshot _sourceSnapshot;
+  final List<InboxItem> _pendingReads;
+  final int readFailureCount;
+  final Set<String> threadReadsAwaitingRefresh;
+
+  bool isThreadReadPending(String id) =>
+      threadReadsAwaitingRefresh.contains(id) ||
+      _pendingReads.whereType<ThreadInboxItem>().any(
+        (ThreadInboxItem item) => item.thread.id == id,
+      );
 
   final InboxSnapshot snapshot;
   final InboxCounters counters;
@@ -54,6 +70,9 @@ final class InboxViewState {
 
   InboxViewState copyWith({
     InboxSnapshot? snapshot,
+    List<InboxItem>? pendingReads,
+    int? readFailureCount,
+    Set<String>? threadReadsAwaitingRefresh,
     InboxCounters? counters,
     bool? hasLoadedSnapshot,
     OperationStatus? initialLoadStatus,
@@ -61,7 +80,11 @@ final class InboxViewState {
     InboxConnectionStatus? connectionStatus,
     InboxInAppNotification? inAppNotification,
   }) => InboxViewState(
-    snapshot: snapshot ?? this.snapshot,
+    snapshot: snapshot ?? _sourceSnapshot,
+    pendingReads: pendingReads ?? _pendingReads,
+    readFailureCount: readFailureCount ?? this.readFailureCount,
+    threadReadsAwaitingRefresh:
+        threadReadsAwaitingRefresh ?? this.threadReadsAwaitingRefresh,
     counters: counters ?? this.counters,
     hasLoadedSnapshot: hasLoadedSnapshot ?? this.hasLoadedSnapshot,
     initialLoadStatus: initialLoadStatus ?? this.initialLoadStatus,
@@ -89,6 +112,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   final List<InboxPostChanged> _pendingRealtimePostChanges =
       <InboxPostChanged>[];
   final Set<String> _individuallyViewedPostIds = <String>{};
+  final List<({InboxItem item, Completer<bool> result})> _pendingReads = [];
   _InboxOperation _operation = _InboxOperation.idle;
   bool _realtimeRefreshQueued = false;
   var _buildGeneration = 0;
@@ -110,6 +134,10 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       cancellation.cancel();
       if (generation == _buildGeneration) {
         _buildGeneration += 1;
+        for (final request in _pendingReads) {
+          request.result.complete(false);
+        }
+        _pendingReads.clear();
         unawaited(_realtimeSubscription?.cancel());
       }
     });
@@ -281,18 +309,18 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         _individuallyViewedPostIds.contains(change.postId)
         ? null
         : change.candidate;
-    final bool wasAlreadyPresent = current.snapshot.newItems.any(
+    final bool wasAlreadyPresent = current._sourceSnapshot.newItems.any(
       (InboxItem item) => item.postIds.contains(change.postId),
     );
     final InboxSnapshot snapshot = applyInboxPostChange(
-      snapshot: current.snapshot,
+      snapshot: current._sourceSnapshot,
       postId: change.postId,
       candidate: effectiveCandidate,
     );
     final bool wasAdded =
         !wasAlreadyPresent &&
         effectiveCandidate != null &&
-        snapshot.newItems.any(
+        _withoutReadItems(snapshot, current._pendingReads).newItems.any(
           (InboxItem item) => item.postIds.contains(change.postId),
         );
     final InboxCounters counters = _countersFor(snapshot);
@@ -334,6 +362,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       await retryInitialLoad();
       return;
     }
+    final int generation = _buildGeneration;
     _operation = _InboxOperation.refresh;
     state = AsyncData(
       current.copyWith(refreshStatus: const OperationStatus.inProgress()),
@@ -344,6 +373,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       final InboxSnapshot snapshot = await cancellation.run(
         () => inbox.load(session: session),
       );
+      if (generation != _buildGeneration) return;
       final InboxViewState latest = state.value ?? current;
       final InboxCounters counters = _countersFor(snapshot);
       state = AsyncData(
@@ -351,18 +381,20 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
           snapshot: snapshot,
           counters: counters,
           refreshStatus: const OperationStatus.idle(),
+          threadReadsAwaitingRefresh: const <String>{},
         ),
       );
       _persistCounters(counters);
     } on Object catch (error) {
-      if (_cancellation?.isCancelled == false) {
+      if (generation == _buildGeneration &&
+          _cancellation?.isCancelled == false) {
         final InboxViewState latest = state.value ?? current;
         state = AsyncData(
           latest.copyWith(refreshStatus: OperationStatus.failed(error)),
         );
       }
     } finally {
-      _finishBusyOperation();
+      if (generation == _buildGeneration) _finishBusyOperation();
     }
   }
 
@@ -411,10 +443,10 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
           postponedAt: now,
         );
         final List<InboxItem> newItems = List<InboxItem>.of(
-          current.snapshot.newItems,
+          current._sourceSnapshot.newItems,
         );
         final List<InboxItem> postponedItems = List<InboxItem>.of(
-          current.snapshot.postponedItems,
+          current._sourceSnapshot.postponedItems,
         );
         _removePostIds(newItems, item);
         _removePostIds(postponedItems, item);
@@ -422,9 +454,9 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         final InboxSnapshot snapshot = InboxSnapshot(
           newItems: newItems,
           postponedItems: postponedItems,
-          builtAt: current.snapshot.builtAt,
+          builtAt: current._sourceSnapshot.builtAt,
           hasIncompleteMentionReconstruction:
-              current.snapshot.hasIncompleteMentionReconstruction,
+              current._sourceSnapshot.hasIncompleteMentionReconstruction,
         );
         final InboxCounters counters = _countersFor(snapshot);
         state = AsyncData(
@@ -460,7 +492,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     final InboxViewState? current = state.value;
     if (current == null) return;
     final InboxSnapshot snapshot = _snapshotWithoutThread(
-      current.snapshot,
+      current._sourceSnapshot,
       rootPostId,
     );
     final InboxCounters counters = _countersFor(snapshot);
@@ -487,103 +519,70 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
     );
   }
 
-  Future<bool> markRead(InboxItem item) async {
+  Future<bool> markRead(InboxItem item) {
     final InboxViewState? current = state.value;
-    final AuthSession? session = _session;
-    final InboxRepository? inbox = _inbox;
-    if (_operation != _InboxOperation.idle ||
-        current == null ||
-        session == null ||
-        inbox == null) {
-      return false;
+    if (current == null || !current.hasLoadedSnapshot || _session == null) {
+      return Future<bool>.value(false);
     }
-    _operation = _InboxOperation.markRead;
-    try {
-      final bool individuallyViewed = switch (item) {
-        ChannelPostInboxItem() =>
-          !item.candidate.channel.isDialog &&
-              _channelRootCount(
-                    current.snapshot.newItems,
-                    item.post.channelId,
-                  ) >
-                  1,
-        ThreadInboxItem() =>
-          _channelRootCount(current.snapshot.newItems, item.thread.channelId) >
-              0,
-        DirectMessageBundleInboxItem() => false,
-      };
-      if (item is ThreadInboxItem) {
-        await inbox.markThreadRead(
-          session: session,
-          item: item,
-          preserveOtherChannelRoots: individuallyViewed,
-        );
-        if (individuallyViewed) {
-          _individuallyViewedPostIds.add(item.thread.root.id);
-        }
-      } else if (individuallyViewed) {
-        final ChannelPostInboxItem channelItem = item as ChannelPostInboxItem;
-        await inbox.markPostViewed(session: session, item: channelItem);
-        _individuallyViewedPostIds.add(channelItem.post.id);
-      } else {
-        await inbox.markRead(session: session, item: item);
-      }
-      final List<InboxItem> newItems = current.snapshot.newItems
-          .where(
-            (InboxItem candidate) => !_isReadBy(
-              candidate,
-              item,
-              individuallyViewed: individuallyViewed,
-            ),
-          )
-          .toList(growable: false);
-      final InboxSnapshot snapshot = InboxSnapshot(
-        newItems: newItems,
-        postponedItems: current.snapshot.postponedItems,
-        builtAt: current.snapshot.builtAt,
-        hasIncompleteMentionReconstruction:
-            current.snapshot.hasIncompleteMentionReconstruction,
-      );
-      final InboxCounters counters = _countersFor(snapshot);
-      final InboxViewState latest = state.value ?? current;
-      state = AsyncData(
-        latest.copyWith(
-          snapshot: snapshot,
-          counters: counters,
-          refreshStatus: const OperationStatus.idle(),
-        ),
-      );
-      _persistCounters(counters);
-      return true;
-    } on Object {
-      return false;
-    } finally {
-      _finishBusyOperation();
-    }
+    final Completer<bool> result = Completer<bool>();
+    _pendingReads.add((item: item, result: result));
+    state = AsyncData(current.copyWith(pendingReads: _pendingReadItems));
+    if (_operation == _InboxOperation.idle) unawaited(_drainReads());
+    return result.future;
   }
 
-  int _channelRootCount(Iterable<InboxItem> items, String channelId) => items
-      .whereType<ChannelPostInboxItem>()
-      .where((ChannelPostInboxItem item) => item.post.channelId == channelId)
-      .length;
+  List<InboxItem> get _pendingReadItems =>
+      _pendingReads.map((request) => request.item).toList(growable: false);
 
-  bool _isReadBy(
-    InboxItem candidate,
-    InboxItem readItem, {
-    required bool individuallyViewed,
-  }) {
-    if (individuallyViewed) return candidate.key == readItem.key;
-    final String channelId = switch (readItem) {
-      ChannelPostInboxItem(:final post) => post.channelId,
-      DirectMessageBundleInboxItem(:final channelId) => channelId,
-      ThreadInboxItem(:final thread) => thread.channelId,
-    };
-    return switch (candidate) {
-      ChannelPostInboxItem(:final post) => post.channelId == channelId,
-      DirectMessageBundleInboxItem(channelId: final candidateChannelId) =>
-        candidateChannelId == channelId,
-      ThreadInboxItem() => candidate.key == readItem.key,
-    };
+  Future<void> _drainReads() async {
+    final AuthSession? session = _session;
+    final InboxRepository? inbox = _inbox;
+    final RequestCancellation? cancellation = _cancellation;
+    if (session == null || inbox == null || cancellation == null) return;
+    final int generation = _buildGeneration;
+    _operation = _InboxOperation.markRead;
+    try {
+      while (_pendingReads.isNotEmpty) {
+        final request = _pendingReads.first;
+        final InboxItem item = request.item;
+        var succeeded = false;
+        try {
+          await cancellation.run(
+            () => inbox.markRead(session: session, item: item),
+          );
+          succeeded = true;
+        } on Object {
+          // The source snapshot remains available to restore unread content.
+        }
+        if (generation != _buildGeneration) return;
+        _pendingReads.removeAt(0);
+        final InboxViewState current = state.requireValue;
+        final InboxSnapshot snapshot = succeeded
+            ? _withoutReadItems(current._sourceSnapshot, <InboxItem>[item])
+            : current._sourceSnapshot;
+        if (succeeded) _individuallyViewedPostIds.addAll(item.postIds);
+        if (item is ThreadInboxItem) _realtimeRefreshQueued = true;
+        final InboxCounters counters = _countersFor(snapshot);
+        state = AsyncData(
+          current.copyWith(
+            snapshot: snapshot,
+            pendingReads: _pendingReadItems,
+            threadReadsAwaitingRefresh: succeeded && item is ThreadInboxItem
+                ? <String>{
+                    ...current.threadReadsAwaitingRefresh,
+                    item.thread.id,
+                  }
+                : current.threadReadsAwaitingRefresh,
+            counters: counters,
+            readFailureCount: current.readFailureCount + (succeeded ? 0 : 1),
+          ),
+        );
+        if (succeeded) _persistCounters(counters);
+        request.result.complete(succeeded);
+      }
+    } finally {
+      if (generation == _buildGeneration) _finishBusyOperation();
+    }
   }
 
   Future<bool> _move(InboxItem item, {required bool toPostponed}) async {
@@ -616,10 +615,10 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
         await postponed.remove(session: session, references: references);
       }
       final List<InboxItem> newItems = List<InboxItem>.of(
-        current.snapshot.newItems,
+        current._sourceSnapshot.newItems,
       );
       final List<InboxItem> postponedItems = List<InboxItem>.of(
-        current.snapshot.postponedItems,
+        current._sourceSnapshot.postponedItems,
       );
       if (toPostponed) {
         _removePostIds(newItems, item);
@@ -630,9 +629,9 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       final InboxSnapshot snapshot = InboxSnapshot(
         newItems: newItems,
         postponedItems: postponedItems,
-        builtAt: current.snapshot.builtAt,
+        builtAt: current._sourceSnapshot.builtAt,
         hasIncompleteMentionReconstruction:
-            current.snapshot.hasIncompleteMentionReconstruction,
+            current._sourceSnapshot.hasIncompleteMentionReconstruction,
       );
       final InboxCounters counters = _countersFor(snapshot);
       final InboxViewState latest = state.value ?? current;
@@ -662,7 +661,11 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
       }
       _pendingRealtimePostChanges.clear();
     }
-    if (_realtimeRefreshQueued) unawaited(_refreshFromRealtime());
+    if (_pendingReads.isNotEmpty) {
+      unawaited(_drainReads());
+    } else if (_realtimeRefreshQueued) {
+      unawaited(_refreshFromRealtime());
+    }
   }
 
   void _removePostIds(List<InboxItem> items, InboxItem removed) {
@@ -728,3 +731,49 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
 }
 
 enum _InboxOperation { idle, initialLoad, refresh, markRead, move }
+
+InboxSnapshot _withoutReadItems(InboxSnapshot source, List<InboxItem> reads) {
+  if (reads.isEmpty) return source;
+  final Set<String> postIds = reads
+      .expand((InboxItem item) => item.postIds)
+      .toSet();
+  final Map<String, DateTime> threadCutoffs = <String, DateTime>{};
+  for (final ThreadInboxItem item in reads.whereType<ThreadInboxItem>()) {
+    final DateTime? previous = threadCutoffs[item.thread.id];
+    if (previous == null || item.lastActivityAt.isAfter(previous)) {
+      threadCutoffs[item.thread.id] = item.lastActivityAt;
+    }
+  }
+  final List<InboxItem> items = <InboxItem>[];
+  for (final InboxItem item in source.newItems) {
+    switch (item) {
+      case ThreadInboxItem():
+        final DateTime? cutoff = threadCutoffs[item.thread.id];
+        if (cutoff == null || item.lastActivityAt.isAfter(cutoff)) {
+          items.add(item);
+        }
+      case ChannelPostInboxItem():
+        if (!postIds.contains(item.post.id)) items.add(item);
+      case DirectMessageBundleInboxItem():
+        final Set<String> retained = item.postIds.toSet()..removeAll(postIds);
+        if (retained.isNotEmpty) {
+          items.add(
+            retained.length == item.messages.length
+                ? item
+                : item.retainingPostIds(retained),
+          );
+        }
+    }
+  }
+  items.sort((InboxItem a, InboxItem b) {
+    final int byActivity = b.lastActivityAt.compareTo(a.lastActivityAt);
+    return byActivity == 0 ? a.key.compareTo(b.key) : byActivity;
+  });
+  return InboxSnapshot(
+    newItems: items,
+    postponedItems: source.postponedItems,
+    builtAt: source.builtAt,
+    hasIncompleteMentionReconstruction:
+        source.hasIncompleteMentionReconstruction,
+  );
+}

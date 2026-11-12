@@ -39,6 +39,16 @@ class _InboxPageState extends ConsumerState<InboxPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(
+      inboxProvider.select((value) => value.value?.readFailureCount ?? 0),
+      (int? previous, int next) {
+        if (next > (previous ?? 0)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(InboxStrings.markReadFailed)),
+          );
+        }
+      },
+    );
     final AsyncValue<InboxViewState> value = ref.watch(inboxProvider);
     return Scaffold(
       appBar: AppBar(
@@ -336,6 +346,15 @@ class _InboxItemCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final _Preview preview = _preview(item);
     final AuthSession? session = ref.watch(authSessionProvider);
+    final InboxItem card = item;
+    final bool threadReadPending =
+        card is ThreadInboxItem &&
+        ref.watch(
+          inboxProvider.select(
+            (value) =>
+                value.value?.isThreadReadPending(card.thread.id) ?? false,
+          ),
+        );
     return MessagePreviewCard(
       interactionKey: ValueKey<String>('inbox-item-${item.key}'),
       header: preview.header,
@@ -343,7 +362,7 @@ class _InboxItemCard extends ConsumerWidget {
       post: preview.post,
       serverUrl: session?.serverUrl,
       onTap: onOpen,
-      details: !isPostponed && _showsUpdates(item)
+      details: !isPostponed && !threadReadPending && _showsUpdates(item)
           ? _InboxUpdates(item: item)
           : null,
       actions: Padding(
@@ -357,18 +376,12 @@ class _InboxItemCard extends ConsumerWidget {
               )
             : _NewItemActions(
                 itemKey: item.key,
-                onRead: () => unawaited(_markRead(context, ref)),
+                onRead: () =>
+                    unawaited(ref.read(inboxProvider.notifier).markRead(item)),
                 onPostpone: () => unawaited(_postpone(context, ref)),
               ),
       ),
     );
-  }
-
-  Future<void> _markRead(BuildContext context, WidgetRef ref) async {
-    if (!await ref.read(inboxProvider.notifier).markRead(item) &&
-        context.mounted) {
-      _showFailure(context, InboxStrings.markReadFailed);
-    }
   }
 
   Future<void> _postpone(BuildContext context, WidgetRef ref) async {
