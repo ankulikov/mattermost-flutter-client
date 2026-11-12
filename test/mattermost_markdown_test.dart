@@ -2,11 +2,79 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
 import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown.dart';
 import 'package:mattermost_flutter/src/ui/messages/mattermost_markdown_strings.dart';
 
 void main() {
+  for (final double width in <double>[320, 699, 700, 1119, 1120]) {
+    testWidgets('renders the Markdown type scale at width $width', (
+      WidgetTester tester,
+    ) async {
+      await tester.binding.setSurfaceSize(Size(width, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final ThemeData theme = width < 700
+          ? MattermostTheme.light()
+          : MattermostTheme.dark();
+      const TextScaler scaler = TextScaler.linear(2);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: scaler),
+            child: const Scaffold(
+              body: SingleChildScrollView(
+                child: MattermostMarkdown(
+                  data: '''
+# H1
+## H2
+### H3
+#### H4
+##### H5
+###### H6
+
+**Bold**
+
+Regular
+''',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      RichText renderedText(String value) => tester.widget<RichText>(
+        find.byWidgetPredicate(
+          (Widget widget) =>
+              widget is RichText && widget.text.toPlainText() == value,
+          description: 'rendered text "$value"',
+        ),
+      );
+
+      TextStyle? renderedStyle(RichText richText) {
+        final TextSpan root = richText.text as TextSpan;
+        return root.style?.merge(root.children?.single.style);
+      }
+
+      const List<double> headingSizes = <double>[30, 27, 24, 20, 16, 15];
+      for (int index = 0; index < headingSizes.length; index++) {
+        final RichText heading = renderedText('H${index + 1}');
+        expect(renderedStyle(heading)?.fontSize, headingSizes[index]);
+        expect(renderedStyle(heading)?.fontWeight, FontWeight.w700);
+        expect(heading.textScaler, scaler);
+      }
+      final RichText bold = renderedText('Bold');
+      final RichText regular = renderedText('Regular');
+      expect(renderedStyle(bold)?.fontSize, 15);
+      expect(renderedStyle(bold)?.fontWeight, FontWeight.w600);
+      expect(renderedStyle(regular)?.fontSize, 15);
+      expect(renderedStyle(regular)?.fontWeight, FontWeight.w400);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   test('recognizes post permalinks only on the active Mattermost server', () {
     final Uri server = Uri.parse('https://chat.example.com/mattermost');
 
