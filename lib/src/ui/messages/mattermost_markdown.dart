@@ -184,7 +184,7 @@ class _MattermostMarkdownState extends State<MattermostMarkdown> {
         p: bodyStyle,
         strong: const TextStyle(fontWeight: FontWeight.w600),
         blockSpacing: 8,
-        a: bodyStyle.copyWith(
+        a: TextStyle(
           color: colors.primary,
           decoration: TextDecoration.underline,
           decorationColor: colors.primary,

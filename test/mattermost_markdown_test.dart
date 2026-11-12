@@ -27,17 +27,27 @@ void main() {
               body: SingleChildScrollView(
                 child: MattermostMarkdown(
                   data: '''
-# H1
-## H2
-### H3
-#### H4
-##### H5
-###### H6
+# H1 [Link](https://example.com) @same
+## H2 [Link](https://example.com) @same
+### H3 [Link](https://example.com) @same
+#### H4 [Link](https://example.com) @same
+##### H5 [Link](https://example.com) @same
+###### H6 [Link](https://example.com) @same
 
-**Bold**
+**Bold [Link](https://example.com) @same**
 
-Regular
+*Italic [Link](https://example.com) @same*
+
+Regular [Link](https://example.com) @same
 ''',
+                  inlineLinkReplacements: <MattermostInlineLinkReplacement>[
+                    MattermostInlineLinkReplacement(
+                      elementName: 'mention',
+                      pattern: r'@(same)',
+                      textBuilder: _mentionLabel,
+                      onTap: _ignoreMentionTap,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -48,29 +58,65 @@ Regular
       RichText renderedText(String value) => tester.widget<RichText>(
         find.byWidgetPredicate(
           (Widget widget) =>
-              widget is RichText && widget.text.toPlainText() == value,
+              widget is RichText &&
+              widget.text.toPlainText() == '$value Link @Same Wright',
           description: 'rendered text "$value"',
         ),
       );
 
-      TextStyle? renderedStyle(RichText richText) {
-        final TextSpan root = richText.text as TextSpan;
-        return root.style?.merge(root.children?.single.style);
+      void expectTypography(
+        String label,
+        double size,
+        FontWeight weight, {
+        FontStyle fontStyle = FontStyle.normal,
+      }) {
+        final RichText richText = renderedText(label);
+        expect(richText.textScaler, scaler);
+        final Set<String> expectedLabels = <String>{
+          label,
+          'Link',
+          '@Same Wright',
+        };
+        void checkSpan(TextSpan span, TextStyle parentStyle) {
+          final TextStyle style = parentStyle.merge(span.style);
+          final String? text = span.text?.trim();
+          if (expectedLabels.remove(text)) {
+            expect(style.fontSize, size, reason: '$label: $text');
+            expect(style.fontWeight, weight, reason: '$label: $text');
+            expect(
+              style.fontStyle ?? FontStyle.normal,
+              fontStyle,
+              reason: '$label: $text',
+            );
+            if (text != label) {
+              expect(style.color, theme.colorScheme.primary);
+              expect(style.decoration, TextDecoration.underline);
+              expect(span.recognizer, isA<TapGestureRecognizer>());
+            }
+          }
+          for (final TextSpan child
+              in (span.children ?? const <InlineSpan>[])
+                  .whereType<TextSpan>()) {
+            checkSpan(child, style);
+          }
+        }
+
+        checkSpan(richText.text as TextSpan, const TextStyle());
+        expect(expectedLabels, isEmpty);
       }
 
       const List<double> headingSizes = <double>[30, 27, 24, 20, 16, 15];
       for (int index = 0; index < headingSizes.length; index++) {
-        final RichText heading = renderedText('H${index + 1}');
-        expect(renderedStyle(heading)?.fontSize, headingSizes[index]);
-        expect(renderedStyle(heading)?.fontWeight, FontWeight.w700);
-        expect(heading.textScaler, scaler);
+        expectTypography('H${index + 1}', headingSizes[index], FontWeight.w700);
       }
-      final RichText bold = renderedText('Bold');
-      final RichText regular = renderedText('Regular');
-      expect(renderedStyle(bold)?.fontSize, 15);
-      expect(renderedStyle(bold)?.fontWeight, FontWeight.w600);
-      expect(renderedStyle(regular)?.fontSize, 15);
-      expect(renderedStyle(regular)?.fontWeight, FontWeight.w400);
+      expectTypography('Bold', 15, FontWeight.w600);
+      expectTypography(
+        'Italic',
+        15,
+        FontWeight.w400,
+        fontStyle: FontStyle.italic,
+      );
+      expectTypography('Regular', 15, FontWeight.w400);
       expect(tester.takeException(), isNull);
     });
   }
@@ -553,6 +599,10 @@ const greeting = 'hello';
     expect(tester.takeException(), isNull);
   });
 }
+
+String _mentionLabel(String value) => '@Same Wright';
+
+void _ignoreMentionTap(BuildContext context, String value) {}
 
 bool _containsWidgetSpan(InlineSpan span) {
   if (span is WidgetSpan) {
