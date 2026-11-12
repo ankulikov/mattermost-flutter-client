@@ -824,85 +824,33 @@ void main() {
     },
   );
 
-  test(
-    'marks channel and direct-message items read by viewing channel',
-    () async {
-      final _InboxApi api = _emptyApi();
-      final MattermostInboxRepository repository = _repository(api);
-      final ChannelPostInboxItem item = ChannelPostInboxItem(
-        candidate: _candidate('post', direct: true),
-      );
+  test('acknowledges the exact posts in a direct-message bundle', () async {
+    final _InboxApi api = _emptyApi();
+    final _ViewedChannelPosts viewed = _ViewedChannelPosts(
+      <String, Set<String>>{},
+    );
+    final MattermostInboxRepository repository = MattermostInboxRepository(
+      api: api,
+      messageMapper: const MattermostMessageMapper(),
+      postponed: const _Postponed(),
+      viewedChannelPosts: viewed,
+      userGroupCache: _GroupCache(),
+    );
+    final InboxItem item = DirectMessageBundleInboxItem(
+      channelId: 'dm',
+      authorId: 'other',
+      automationClass: InboxAutomationClass.person,
+      messages: <InboxPostCandidate>[
+        _candidate('first', direct: true),
+        _candidate('second', direct: true),
+      ],
+    );
 
-      await repository.markRead(session: session, item: item);
+    await repository.markRead(session: session, item: item);
 
-      expect(api.viewedChannelId, 'dm');
-      expect(api.viewedUserId, 'me');
-    },
-  );
-
-  test(
-    'tracks an individual channel root without viewing its channel',
-    () async {
-      final _InboxApi api = _emptyApi();
-      final _ViewedChannelPosts viewed = _ViewedChannelPosts(
-        <String, Set<String>>{},
-      );
-      final MattermostInboxRepository repository = MattermostInboxRepository(
-        api: api,
-        messageMapper: const MattermostMessageMapper(),
-        postponed: const _Postponed(),
-        viewedChannelPosts: viewed,
-        userGroupCache: _GroupCache(),
-      );
-      final ChannelPostInboxItem item = ChannelPostInboxItem(
-        candidate: _candidate('post'),
-      );
-
-      await repository.markPostViewed(session: session, item: item);
-
-      expect(api.viewedChannelId, isNull);
-      expect(viewed.values['channel'], <String>{'post'});
-
-      await repository.markRead(session: session, item: item);
-
-      expect(api.viewedChannelId, 'channel');
-      expect(viewed.values, isNot(contains('channel')));
-    },
-  );
-
-  test(
-    'retries stale viewed-post cleanup after channel view succeeds',
-    () async {
-      final _InboxApi api = _emptyApi();
-      final _ViewedChannelPosts viewed = _ViewedChannelPosts(
-        <String, Set<String>>{
-          'channel': <String>{'post'},
-        },
-      )..failRemove = true;
-      final MattermostInboxRepository repository = MattermostInboxRepository(
-        api: api,
-        messageMapper: const MattermostMessageMapper(),
-        postponed: const _Postponed(),
-        viewedChannelPosts: viewed,
-        userGroupCache: _GroupCache(),
-      );
-      final ChannelPostInboxItem item = ChannelPostInboxItem(
-        candidate: _candidate('post'),
-      );
-
-      await repository.markRead(session: session, item: item);
-
-      expect(api.viewedChannelId, 'channel');
-      expect(viewed.removeCalls, 1);
-      expect(viewed.values, contains('channel'));
-
-      viewed.failRemove = false;
-      await repository.load(session: session);
-
-      expect(viewed.removeCalls, 2);
-      expect(viewed.values, isNot(contains('channel')));
-    },
-  );
+    expect(api.viewedChannelId, isNull);
+    expect(viewed.values['dm'], <String>{'first', 'second'});
+  });
 
   test('cleans a stale viewed-post preference after restart', () async {
     final _InboxApi api = _InboxApi(
@@ -947,15 +895,13 @@ void main() {
     expect(viewed.values, isNot(contains('channel')));
   });
 
-  test('marks a thread and its final root read at the current time', () async {
+  test('marks a thread read at its captured reply timestamp', () async {
     final _InboxApi api = _emptyApi();
-    final DateTime now = DateTime.utc(2026, 9, 4, 12);
     final MattermostInboxRepository repository = MattermostInboxRepository(
       api: api,
       messageMapper: const MattermostMessageMapper(),
       postponed: const _Postponed(),
       userGroupCache: _GroupCache(),
-      now: () => now,
     );
     final ThreadInboxItem item = ThreadInboxItem(
       thread: _thread(),
@@ -963,16 +909,17 @@ void main() {
       teamId: 'source-team',
     );
 
-    await repository.markThreadRead(
-      session: session,
-      item: item,
-      preserveOtherChannelRoots: false,
-    );
+    await repository.markRead(session: session, item: item);
 
     expect(api.readThreadId, 'root');
     expect(api.readTeamId, 'source-team');
-    expect(api.readTimestamp, now.millisecondsSinceEpoch);
-    expect(api.viewedChannelId, 'channel');
+    expect(api.readTimestamp, item.thread.lastReplyAt.millisecondsSinceEpoch);
+    expect(api.viewedChannelId, isNull);
+
+    api.threadLastViewedAt = item.thread.lastReplyAt.millisecondsSinceEpoch + 1;
+    api.readTimestamp = null;
+    await repository.markRead(session: session, item: item);
+    expect(api.readTimestamp, isNull);
   });
 
   test('marks a thread root selectively when other roots remain', () async {
@@ -993,11 +940,7 @@ void main() {
       teamId: 'source-team',
     );
 
-    await repository.markThreadRead(
-      session: session,
-      item: item,
-      preserveOtherChannelRoots: true,
-    );
+    await repository.markRead(session: session, item: item);
 
     expect(api.readThreadId, 'root');
     expect(api.viewedChannelId, isNull);
@@ -1145,7 +1088,7 @@ void main() {
       final ChannelPostInboxItem locallyViewed = ChannelPostInboxItem(
         candidate: _candidate('locally-viewed'),
       );
-      await repository.markPostViewed(session: session, item: locallyViewed);
+      await repository.markRead(session: session, item: locallyViewed);
       gateway.add(
         WebSocketEventSignal(
           MattermostWebSocketEvent(
@@ -1406,7 +1349,6 @@ final class _InboxApi extends Fake implements MattermostApi {
   final bool failUserLookup;
   final List<String> unreadChannelIds = <String>[];
   String? viewedChannelId;
-  String? viewedUserId;
   String? readThreadId;
   String? readTeamId;
   int? readTimestamp;
@@ -1521,9 +1463,20 @@ final class _InboxApi extends Fake implements MattermostApi {
     required String channelId,
     String? previousChannelId,
   }) async {
-    viewedUserId = userId;
     viewedChannelId = channelId;
   }
+
+  int threadLastViewedAt = 0;
+
+  @override
+  Future<MattermostUserThreadDto?> getUserThread({
+    required String userId,
+    required String teamId,
+    required String threadId,
+  }) async => MattermostUserThreadDto.fromJson(<String, Object?>{
+    "id": threadId,
+    "last_viewed_at": threadLastViewedAt,
+  });
 
   @override
   Future<void> updateThreadRead({
@@ -1561,7 +1514,6 @@ final class _ViewedChannelPosts extends ViewedChannelPostsRepository {
   _ViewedChannelPosts(this.values);
 
   final Map<String, Set<String>> values;
-  var failRemove = false;
   var removeCalls = 0;
 
   @override
@@ -1570,12 +1522,12 @@ final class _ViewedChannelPosts extends ViewedChannelPostsRepository {
   }) async => ViewedChannelPostsSnapshot(values);
 
   @override
-  Future<void> add({
+  Future<void> addAll({
     required AuthSession session,
     required String channelId,
-    required String postId,
+    required Set<String> postIds,
   }) async {
-    values.putIfAbsent(channelId, () => <String>{}).add(postId);
+    values.putIfAbsent(channelId, () => <String>{}).addAll(postIds);
   }
 
   @override
@@ -1584,7 +1536,6 @@ final class _ViewedChannelPosts extends ViewedChannelPostsRepository {
     required String channelId,
   }) async {
     removeCalls++;
-    if (failRemove) throw StateError('preference delete failed');
     values.remove(channelId);
   }
 }

@@ -82,9 +82,9 @@ owns its classified attention reason and matching group handle.
 
 | Source | Snapshot | Read action |
 | --- | --- | --- |
-| Followed thread | Unread CRT threads for each team | Update thread read timestamp |
-| Channel root | Channel/member counters, then unread posts | Selective viewed-post preference, or view the channel when it is the only remaining root |
-| Direct or group-message root | Dialog counters, then unread posts | View the dialog channel |
+| Followed thread | Unread CRT threads for each team | Update through the captured reply timestamp and acknowledge the root ID |
+| Channel root | Channel/member counters, then unread posts | Acknowledge the exact post ID in the viewed-post preference |
+| Direct or group-message root | Dialog counters, then unread posts | Acknowledge the exact bundled post IDs in one preference write |
 | Postponed item | `postponed_messages` preferences, then posts by ID | No implicit completion |
 
 The repository loads all teams, their channels and memberships, unread followed
@@ -157,8 +157,8 @@ Canonicalization runs before presentation:
 4. Duplicate post IDs keep the strongest reason: direct, keyword, group,
    channel, then all-messages subscription.
 5. Postponed references suppress matching New posts or thread roots.
-6. Viewed-post references suppress only matching non-dialog channel roots from
-   New. They neither suppress threads or dialogs nor create Postponed items.
+6. Viewed-post references suppress matching channel and dialog roots from New.
+   Followed thread eligibility still comes from CRT.
 
 REST pages and realtime delivery are idempotent by post ID. One thread root may
 appear in at most one item. `New` and `Postponed` cannot contain the same post ID
@@ -171,36 +171,21 @@ contributes each bundled message to the New tab count, while a thread remains
 one communication in that tab count. Only `New` controls the Inbox indicator in
 app navigation.
 
-## Read behavior for channel roots
+## Done during refresh
 
-Mattermost has no operation that marks one arbitrary channel post read while
-preserving other unread posts. Inbox therefore uses a separate user preference
-projection for non-dialog channel roots.
+Done captures the post IDs or thread reply timestamp represented by the tapped
+card. The Inbox immediately hides that content and applies the pending action to
+incoming snapshots. A dialog bundle keeps any newly arrived posts. A thread
+with a newer reply remains visible and its Updates block waits for fresh counts.
 
-Read evaluates the reconciled New snapshot for the selected root's channel:
-
-- When two or more eligible channel-root items remain, merge the selected post
-  ID into that channel's viewed-post preference. Do not call the channel-viewed
-  endpoint. Remove only the selected item after the preference write succeeds.
-- When the selected item is the only remaining eligible channel root, view the
-  whole channel with the normal Mattermost endpoint and delete that channel's
-  viewed-post preference. The channel view clears the server unread state; the
-  preference deletion prevents stale selective-read IDs from accumulating.
-- Dialog bundles do not participate in the ordinary channel-root count. Thread
-  Read updates the thread read timestamp and also marks its root read: it stores
-  the root ID in the viewed-post preference when other eligible channel roots
-  must be preserved, or views the channel when none remain. Dialog Read views
-  the dialog channel and removes all New dialog items covered by that
-  server-side view.
-
-The count is taken after eligibility, canonicalization, postponed suppression,
-and viewed-post suppression. Preference writes happen before optimistic removal
-for the multiple-root case. For the single-root case the irreversible channel
-view happens before preference cleanup. If the channel view fails, the item
-stays in New. If only preference cleanup fails, the read still completes and
-the repository retries that deletion before its next authoritative load. A
-later process also removes viewed-post preferences whose channel read boundary
-has already caught up, so cleanup survives an app restart.
+The signed-in session serializes writes after any active refresh settles,
+including when the refresh fails. Channel and dialog actions save the exact
+post IDs in the viewed-post preference. These actions leave native channel
+unread state under Mattermost's channel-view behavior. Thread actions read the
+current server boundary, advance it through the captured reply timestamp if
+needed, and store the root ID in the viewed-post preference. A follow-up
+refresh reconciles thread counters. A failed write restores still-unread
+content and reports the failure at the Inbox level.
 
 ### Viewed-post storage
 
@@ -308,10 +293,10 @@ two devices can still race while adding viewed post IDs to the same channel
 preference. A server-side selective-read primitive or one preference per post
 would be needed to eliminate that cross-device race.
 
-The single-root decision is based on a snapshot. A new channel post accepted by
-the server between that decision and the channel-view request can also be marked
-read by Mattermost. The controller must reconcile queued realtime events with
-an authoritative refresh, but the API cannot make this sequence atomic.
+Mattermost's thread read endpoint assigns an inclusive millisecond boundary.
+Replies that share the cutoff millisecond are treated together. The preflight
+read avoids overwriting a newer boundary the client observes. The API offers
+no atomic condition for a concurrent boundary change on another device.
 
 An unavailable postponed post currently remains stored on the server but has
 no placeholder in the UI. Postponing a followed thread stores the preference,

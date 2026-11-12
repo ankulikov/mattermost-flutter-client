@@ -48,18 +48,18 @@ final class MattermostViewedChannelPostsRepository
   }
 
   @override
-  Future<void> add({
+  Future<void> addAll({
     required AuthSession session,
     required String channelId,
-    required String postId,
+    required Set<String> postIds,
   }) => _enqueue(() async {
-    if (channelId.isEmpty || postId.isEmpty) return;
+    if (channelId.isEmpty || postIds.isEmpty) return;
     final ViewedChannelPostsSnapshot current = await load(session: session);
-    final List<String> postIds = <String>{
+    final List<String> merged = <String>{
       ...current.forChannel(channelId),
-      postId,
+      ...postIds.where((String id) => id.isNotEmpty),
     }.toList()..sort();
-    final String value = _encode(channelId, postIds);
+    final String value = _encode(channelId, merged);
     if (value.length > _maxPreferenceValueLength) {
       throw StateError('Viewed post preference exceeds Mattermost limit');
     }
