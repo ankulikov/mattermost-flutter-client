@@ -59,6 +59,84 @@ void main() {
     });
   });
 
+  for (final double width in <double>[400, 1200]) {
+    for (final double scale in <double>[1, 1.8]) {
+      testWidgets(
+        'mention text inherits editor metrics at width $width scale $scale',
+        (WidgetTester tester) async {
+          final controller = MessageEditorController(
+            customEmojiBuilder: (_, _) => const SizedBox.shrink(),
+          );
+          addTearDown(controller.dispose);
+          controller.value = const TextEditingValue(
+            text: 'word @an',
+            selection: TextSelection.collapsed(offset: 8),
+          );
+          controller.replaceQueryWithMention(
+            const MentionQuery(
+              start: 5,
+              end: 8,
+              trigger: '@',
+              term: 'an',
+              key: 'an',
+            ),
+            const UserMention(
+              userId: 'u1',
+              username: 'andrey',
+              displayName: 'Andrey',
+            ),
+          );
+          controller.value = controller.value.copyWith(
+            text: '${controller.text}@team',
+            selection: TextSelection.collapsed(
+              offset: controller.text.length + 5,
+            ),
+          );
+          final int start = controller.text.indexOf('@team');
+          controller.replaceQueryWithGroupMention(
+            MentionQuery(
+              start: start,
+              end: start + 5,
+              trigger: '@',
+              term: 'team',
+              key: 'team',
+            ),
+            const GroupMention(
+              id: 'g',
+              name: 'team',
+              displayName: 'Team',
+              memberCount: 1,
+            ),
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+                child: Scaffold(
+                  body: Center(
+                    child: SizedBox(
+                      width: width,
+                      child: TextField(
+                        controller: controller,
+                        style: const TextStyle(fontSize: 24, height: 1.5),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          for (final String label in <String>['@Andrey', '@team']) {
+            final element = tester.element(find.text(label));
+            final style = DefaultTextStyle.of(element).style;
+            expect(style.fontSize, 24);
+            expect(style.height, 1.5);
+          }
+        },
+      );
+    }
+  }
+
   test('custom emoji stays editable and serializes to a shortcode', () {
     final MessageEditorController controller = MessageEditorController(
       customEmojiBuilder: (_, _) => const SizedBox.shrink(),

@@ -528,7 +528,7 @@ final class MessageEditorController extends TextEditingController {
     );
     final List<int> positions = _inlineObjectAt.keys.toList()..sort();
     for (final MarkdownVisualRun run in runs) {
-      _addProjectedRun(children, run, positions, context);
+      _addProjectedRun(children, run, positions, context, baseStyle);
     }
     return TextSpan(style: style, children: children);
   }
@@ -538,6 +538,7 @@ final class MessageEditorController extends TextEditingController {
     MarkdownVisualRun run,
     List<int> objectPositions,
     BuildContext context,
+    TextStyle baseStyle,
   ) {
     var offset = run.range.start;
     for (final int position in objectPositions) {
@@ -551,7 +552,9 @@ final class MessageEditorController extends TextEditingController {
       if (object == null || text[position] != _objectReplacementCharacter) {
         children.add(TextSpan(text: text[position], style: run.style));
       } else {
-        children.add(_inlineObjectSpan(context, object));
+        children.add(
+          _inlineObjectSpan(context, object, run.style ?? baseStyle),
+        );
       }
       offset = position + 1;
     }
@@ -565,6 +568,7 @@ final class MessageEditorController extends TextEditingController {
   WidgetSpan _inlineObjectSpan(
     BuildContext context,
     MessageInlineObject object,
+    TextStyle style,
   ) => switch (object) {
     CustomEmojiInlineObject(:final CustomEmojiReference emoji) => WidgetSpan(
       alignment: PlaceholderAlignment.middle,
@@ -582,7 +586,10 @@ final class MessageEditorController extends TextEditingController {
       child: Semantics(
         link: true,
         label: '@${mention.username}',
-        child: userMentionBuilder(context, mention),
+        child: DefaultTextStyle(
+          style: style,
+          child: userMentionBuilder(context, mention),
+        ),
       ),
     ),
     GroupMentionInlineObject(:final GroupMention mention) => WidgetSpan(
@@ -591,7 +598,10 @@ final class MessageEditorController extends TextEditingController {
       child: Semantics(
         link: true,
         label: '@${mention.name}',
-        child: groupMentionBuilder(context, mention),
+        child: DefaultTextStyle(
+          style: style,
+          child: groupMentionBuilder(context, mention),
+        ),
       ),
     ),
   };
