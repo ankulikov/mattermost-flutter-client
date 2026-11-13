@@ -13,6 +13,8 @@ final class DioMattermostApi
         MattermostChannelMembersApi {
   DioMattermostApi({required Dio dio}) : _dio = dio;
 
+  static const int _statusBatchSize = 100;
+
   final Dio _dio;
 
   @override
@@ -101,6 +103,85 @@ final class DioMattermostApi
     category['collapsed'] = collapsed;
     await _put(path, data: category);
   }
+
+  @override
+  Future<void> moveChannelToSidebarCategory({
+    required String userId,
+    required String teamId,
+    required String channelId,
+    required String categoryId,
+  }) async {
+    final String path =
+        '/users/${Uri.encodeComponent(userId)}'
+        '/teams/${Uri.encodeComponent(teamId)}/channels/categories';
+    final Response<Object?> response = await _get(path);
+    final Object? rawCategories = _object(response.data)['categories'];
+    if (rawCategories is! List<Object?>) {
+      throw const FormatException('Sidebar categories are missing');
+    }
+    final List<Map<String, Object?>> categories = rawCategories
+        .map((Object? value) => Map<String, Object?>.of(_object(value)))
+        .toList(growable: false);
+    final Map<String, Object?> target = categories.firstWhere(
+      (Map<String, Object?> category) => category['id'] == categoryId,
+      orElse: () => throw StateError('Sidebar category not found'),
+    );
+    final Map<String, Object?>? source = categories
+        .where(
+          (Map<String, Object?> category) =>
+              (category['channel_ids'] as List<Object?>? ?? const <Object?>[])
+                  .contains(channelId),
+        )
+        .firstOrNull;
+    if (identical(source, target)) return;
+    final List<Map<String, Object?>> updates = <Map<String, Object?>>[];
+    if (source != null) {
+      source['channel_ids'] = (source['channel_ids'] as List<Object?>)
+          .where((Object? id) => id != channelId)
+          .toList(growable: false);
+      updates.add(source);
+    }
+    target['channel_ids'] = <Object?>[
+      ...?target['channel_ids'] as List<Object?>?,
+      channelId,
+    ];
+    updates.add(target);
+    await _put(path, data: updates);
+  }
+
+  @override
+  Future<void> setChannelNotificationsMuted({
+    required String userId,
+    required String channelId,
+    required bool muted,
+  }) => _put(
+    '/channels/${Uri.encodeComponent(channelId)}'
+    '/members/${Uri.encodeComponent(userId)}/notify_props',
+    data: <String, String>{
+      'desktop': muted ? 'none' : 'default',
+      'push': muted ? 'none' : 'default',
+      'email': muted ? 'none' : 'default',
+      'mark_unread': muted ? 'mention' : 'all',
+    },
+  );
+
+  @override
+  Future<void> markPostUnread({
+    required String userId,
+    required String postId,
+  }) => _post(
+    '/users/${Uri.encodeComponent(userId)}'
+    '/posts/${Uri.encodeComponent(postId)}/set_unread',
+  );
+
+  @override
+  Future<void> leaveChannel({
+    required String channelId,
+    required String userId,
+  }) => _delete(
+    '/channels/${Uri.encodeComponent(channelId)}'
+    '/members/${Uri.encodeComponent(userId)}',
+  );
 
   @override
   Future<List<MattermostChannelMemberDto>> getChannelMembersForUser({
@@ -265,6 +346,27 @@ final class DioMattermostApi
   Future<MattermostUserStatusDto> getUserStatus(String userId) async {
     final Response<Object?> response = await _get('/users/$userId/status');
     return MattermostUserStatusDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<MattermostUserStatusDto>> getUserStatusesByIds(
+    List<String> userIds,
+  ) async {
+    if (userIds.isEmpty) return const <MattermostUserStatusDto>[];
+    final List<MattermostUserStatusDto> statuses = <MattermostUserStatusDto>[];
+    for (var start = 0; start < userIds.length; start += _statusBatchSize) {
+      final int end = start + _statusBatchSize < userIds.length
+          ? start + _statusBatchSize
+          : userIds.length;
+      final Response<Object?> response = await _post(
+        '/users/status/ids',
+        data: jsonEncode(userIds.sublist(start, end)),
+      );
+      statuses.addAll(
+        _dtoList(response.data, MattermostUserStatusDto.fromJson),
+      );
+    }
+    return statuses;
   }
 
   @override

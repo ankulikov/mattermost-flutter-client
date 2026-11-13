@@ -51,6 +51,9 @@ SidebarChannel mapChannelMembership({
       : rawChannel.totalMessageCountRoot > member.msgCountRoot;
   return channel.copyWith(
     isUnread: isUnread,
+    hasUnreadMention: channel.isDialog
+        ? member.mentionCount > 0
+        : member.mentionCountRoot > 0,
     muted: member.notifyProps?.markUnread == 'mention',
   );
 }
@@ -65,6 +68,7 @@ List<SidebarSection> mapSections({
   };
   final Set<String> assigned = <String>{};
   final List<SidebarSection> sections = <SidebarSection>[];
+  final List<SidebarChannel> botDialogs = <SidebarChannel>[];
   final Map<String, MattermostChannelCategoryDto> categoriesById =
       <String, MattermostChannelCategoryDto>{
         for (final MattermostChannelCategoryDto category in categories)
@@ -106,15 +110,30 @@ List<SidebarSection> mapSections({
     final List<SidebarChannel> categoryChannels = placedChannels
         .map((entry) => entry.channel)
         .toList(growable: false);
-    if (categoryChannels.isEmpty) continue;
     assigned.addAll(categoryChannels.map((SidebarChannel item) => item.id));
+    if (category.type == 'direct_messages') {
+      botDialogs.addAll(
+        categoryChannels.where((SidebarChannel item) => item.isBot),
+      );
+    }
+    final List<SidebarChannel> visibleChannels =
+        category.type == 'direct_messages'
+        ? categoryChannels
+              .where((SidebarChannel item) => !item.isBot)
+              .toList(growable: false)
+        : categoryChannels;
+    if (visibleChannels.isEmpty) continue;
     sections.add(
       SidebarSection(
         id: _required(category.id, 'category.id'),
-        displayName: _categoryDisplayName(category),
-        channels: categoryChannels,
+        displayName: categoryDisplayName(category),
+        channels: visibleChannels,
         collapsed: category.collapsed,
         serverCategory: true,
+        favorites: category.type == 'favorites',
+        role: category.type == 'direct_messages'
+            ? SidebarSectionRole.directMessages
+            : SidebarSectionRole.other,
         muted: category.muted,
         sorting: sorting,
       ),
@@ -128,8 +147,14 @@ List<SidebarSection> mapSections({
       .where((SidebarChannel channel) => !channel.isDialog)
       .toList(growable: false);
   final List<SidebarChannel> dialogs = remaining
-      .where((SidebarChannel channel) => channel.isDialog)
+      .where((SidebarChannel channel) => channel.isDialog && !channel.isBot)
       .toList(growable: false);
+  botDialogs.addAll(
+    remaining.where(
+      (SidebarChannel channel) =>
+          channel.kind == ChannelKind.directMessage && channel.isBot,
+    ),
+  );
   if (regular.isNotEmpty) {
     sections.add(
       SidebarSection(
@@ -145,10 +170,36 @@ List<SidebarSection> mapSections({
         id: 'uncategorized-dialogs',
         displayName: 'Direct messages',
         channels: dialogs,
+        role: SidebarSectionRole.directMessages,
       ),
     );
   }
-  return List<SidebarSection>.unmodifiable(sections);
+  if (botDialogs.isNotEmpty) {
+    sections.add(
+      SidebarSection(
+        id: 'virtual-bots',
+        displayName: 'Bots',
+        channels: botDialogs,
+        role: SidebarSectionRole.bots,
+      ),
+    );
+  }
+  return List<SidebarSection>.unmodifiable(<SidebarSection>[
+    ...sections.where((SidebarSection section) => section.favorites),
+    ...sections.where(
+      (SidebarSection section) =>
+          !section.favorites &&
+          section.role == SidebarSectionRole.directMessages,
+    ),
+    ...sections.where(
+      (SidebarSection section) =>
+          !section.favorites && section.role == SidebarSectionRole.bots,
+    ),
+    ...sections.where(
+      (SidebarSection section) =>
+          !section.favorites && section.role == SidebarSectionRole.other,
+    ),
+  ]);
 }
 
 String userDisplayName(MattermostUserDto user) => resolveUserDisplayName(
@@ -159,7 +210,7 @@ String userDisplayName(MattermostUserDto user) => resolveUserDisplayName(
   lastName: user.lastName,
 );
 
-String _categoryDisplayName(MattermostChannelCategoryDto dto) {
+String categoryDisplayName(MattermostChannelCategoryDto dto) {
   if (dto.displayName.trim().isNotEmpty) {
     return dto.displayName.trim();
   }

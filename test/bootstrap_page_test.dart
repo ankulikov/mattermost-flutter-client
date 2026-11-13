@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/app/app.dart';
 import 'package:mattermost_flutter/src/app/router.dart';
+import 'package:mattermost_flutter/src/data/repositories/shared_preferences_sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/authentication_methods.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
@@ -17,6 +19,7 @@ import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/repositories/auth_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/post_repository.dart';
+import 'package:mattermost_flutter/src/domain/repositories/sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/domain/repositories/thread_repository.dart';
 import 'package:mattermost_flutter/src/features/channel_members/domain/channel_member.dart';
 import 'package:mattermost_flutter/src/features/channel_members/domain/channel_members_repository.dart';
@@ -33,25 +36,38 @@ import 'package:mattermost_flutter/src/features/profile/domain/repositories/curr
 import 'package:mattermost_flutter/src/ui/auth/auth_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
 import 'package:mattermost_flutter/src/ui/channels/selected_channel_controller.dart';
+import 'package:mattermost_flutter/src/ui/channels/widgets/channel_avatar.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_sidebar.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/shell/shell_page.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'support/fake_user_repository.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
+  });
+
   Future<void> selectInbox(WidgetTester tester) async {
-    final Finder rail = find.byKey(
-      const ValueKey<String>('shell-navigation-rail'),
+    final Finder desktop = find.byKey(
+      const ValueKey<String>('shell-inbox-destination'),
     );
-    final Finder navigation = rail.evaluate().isNotEmpty
-        ? rail
-        : find.byKey(const ValueKey<String>('shell-bottom-navigation'));
-    await tester.tap(
-      find.descendant(of: navigation, matching: find.text('Inbox')),
-    );
+    if (desktop.evaluate().isNotEmpty) {
+      await tester.tap(desktop);
+    } else {
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+          matching: find.text('Inbox'),
+        ),
+      );
+    }
     await tester.pumpAndSettle();
   }
 
@@ -145,9 +161,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey<String>('medium-layout')), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('shell-navigation-rail')),
+      find.byKey(const ValueKey<String>('shell-inbox-destination')),
       findsOneWidget,
     );
+    expect(find.byType(NavigationRail), findsNothing);
     expect(
       find.byKey(const ValueKey<String>('shell-bottom-navigation')),
       findsNothing,
@@ -165,7 +182,122 @@ void main() {
     );
   });
 
-  testWidgets('opens Profile from the bottom of the rail and logs out', (
+  testWidgets('desktop uses the balanced header with icon destinations', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          currentUserProfileRepositoryProvider.overrideWithValue(
+            _CurrentProfileRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder channels = find.byKey(
+      const ValueKey<String>('shell-channels-destination'),
+    );
+    final Finder inbox = find.byKey(
+      const ValueKey<String>('shell-inbox-destination'),
+    );
+    final Finder profile = find.byKey(
+      const ValueKey<String>('shell-profile-destination'),
+    );
+    expect(find.byType(NavigationRail), findsNothing);
+    expect(channels, findsOneWidget);
+    expect(inbox, findsOneWidget);
+    expect(profile, findsOneWidget);
+    expect(tester.getCenter(channels).dx, lessThan(tester.getCenter(inbox).dx));
+    expect(
+      tester.getCenter(inbox).dx,
+      lessThan(tester.getCenter(find.text('Example team')).dx),
+    );
+    final Rect sidePane = tester.getRect(
+      find.byKey(const ValueKey<String>('channels-side-pane')),
+    );
+    final Rect footer = tester.getRect(
+      find.byKey(const ValueKey<String>('sidebar-profile-footer')),
+    );
+    expect(tester.getCenter(profile).dx, lessThan(sidePane.right));
+    expect(footer.bottom, sidePane.bottom);
+    expect(
+      tester
+          .getRect(
+            find
+                .descendant(
+                  of: find.byKey(const ValueKey<String>('channels-side-pane')),
+                  matching: find.byType(Divider),
+                )
+                .last,
+          )
+          .bottom,
+      footer.top,
+    );
+    expect(
+      tester.getCenter(profile).dy,
+      inInclusiveRange(footer.top, footer.bottom),
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('channels-side-pane')),
+        matching: find.text('Example team'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('shell-search-destination')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop header remains usable at large text scale', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+
+    for (final double width in <double>[700, 1119, 1120]) {
+      await tester.binding.setSurfaceSize(Size(width, 800));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('shell-channels-destination')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('shell-inbox-destination')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('shell-profile-destination')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('opens avatar menu from the desktop sidebar and logs out', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -189,33 +321,72 @@ void main() {
       const ValueKey<String>('shell-profile-destination'),
     );
     expect(profileDestination, findsOneWidget);
+    final Rect sidePane = tester.getRect(
+      find.byKey(const ValueKey<String>('channels-side-pane')),
+    );
+    final Rect footer = tester.getRect(
+      find.byKey(const ValueKey<String>('sidebar-profile-footer')),
+    );
+    expect(tester.getCenter(profileDestination).dx, lessThan(sidePane.right));
+    expect(footer.bottom, sidePane.bottom);
     expect(
       tester.getCenter(profileDestination).dy,
-      greaterThan(tester.getCenter(find.text('Inbox')).dy),
+      inInclusiveRange(footer.top, footer.bottom),
     );
 
     await tester.tap(profileDestination);
+    await tester.pump();
+    final FadeTransition avatarMenuFade = tester.widget<FadeTransition>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey<String>('profile-avatar-menu')),
+            matching: find.byType(FadeTransition),
+          )
+          .first,
+    );
+    expect(avatarMenuFade.opacity.value, 1);
+    expect(
+      find.byKey(const ValueKey<String>('profile-avatar-menu')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('profile-avatar-menu')),
+        matching: find.text('Ada Lovelace'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('@ada'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('profile-menu-away')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('profile-menu-custom-status')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('profile-menu-profile')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-profile')),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-logout')),
       findsOneWidget,
     );
 
-    final Finder logout = find.byKey(const ValueKey<String>('profile-logout'));
-    final Finder profileScrollable = find.descendant(
-      of: find.byKey(const ValueKey<String>('profile-scroll-view')),
-      matching: find.byType(Scrollable),
-    );
-    await tester.drag(profileScrollable, const Offset(0, -200));
+    await tester.tap(profileDestination);
     await tester.pumpAndSettle();
-    await tester.tap(logout);
+    await tester.tap(find.byKey(const ValueKey<String>('profile-menu-logout')));
     await tester.pumpAndSettle();
     expect(find.text(AuthStrings.title), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('opens Profile from the rightmost compact destination', (
+  testWidgets('opens avatar menu from the rightmost compact destination', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -252,6 +423,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const ValueKey<String>('profile-avatar-menu')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-profile')),
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('profile-logout')),
@@ -259,6 +438,152 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('changes availability and custom status from the avatar menu', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _CurrentProfileRepository profileRepository =
+        _CurrentProfileRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          currentUserProfileRepositoryProvider.overrideWithValue(
+            profileRepository,
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder avatar = find.byKey(
+      const ValueKey<String>('shell-profile-destination'),
+    );
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-doNotDisturb')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('availability-expiry-thirtyMinutes')),
+    );
+    await tester.pumpAndSettle();
+    expect(profileRepository.lastPresence, UserPresence.doNotDisturb);
+    expect(profileRepository.lastAvailabilityExpiry, isNotNull);
+
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-custom-status')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey<String>('custom-status-save')),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('custom-status-text')),
+      'Planning',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey<String>('custom-status-save')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('custom-status-save')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(profileRepository.lastCustomStatusText, 'Planning');
+
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('profile-menu-offline')),
+    );
+    await tester.pumpAndSettle();
+    expect(profileRepository.lastPresence, UserPresence.offline);
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('profile-menu-offline')),
+        matching: find.byIcon(Icons.check),
+      ),
+      findsOneWidget,
+    );
+    await tester.tapAt(const Offset(600, 500));
+    await tester.pumpAndSettle();
+
+    profileRepository.failAvailability = true;
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('profile-menu-away')));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not update your status.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'keeps the avatar menu usable with large text on compact layout',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+            currentUserProfileRepositoryProvider.overrideWithValue(
+              _CurrentProfileRepository(),
+            ),
+          ],
+          child: MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: const BootstrapPage(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('shell-bottom-navigation')),
+          matching: find.text('Profile'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('profile-avatar-menu')),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey<String>('profile-menu-profile')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('profile-menu-profile')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('profile-scroll-view')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('replaces the channel pane with Inbox on a wide screen', (
     WidgetTester tester,
@@ -298,6 +623,10 @@ void main() {
     expect(
       find.byKey(const ValueKey<String>('channels-side-pane')),
       findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('shell-inbox-destination')),
+      findsOneWidget,
     );
     final Finder inboxPane = find.byKey(
       const ValueKey<String>('inbox-thread-list-pane'),
@@ -418,7 +747,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Example team'), findsOneWidget);
-    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('FAVORITES'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-section-marker-favorites')),
+      findsOneWidget,
+    );
     expect(find.text('Town Square'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(
@@ -463,25 +796,41 @@ void main() {
         tester.getSize(threadsTile).width,
         tester.getSize(channelSelectionSurface).width,
       );
-      expect(tester.getSize(search).width, tester.getSize(threadsTile).width);
+      expect(
+        tester.getSize(search).width +
+            tester
+                .getSize(
+                  find.byKey(const ValueKey<String>('read-channel-filter')),
+                )
+                .width +
+            tester
+                .getSize(
+                  find.byKey(
+                    const ValueKey<String>('folder-visibility-toggle'),
+                  ),
+                )
+                .width +
+            AppSpacing.xs,
+        tester.getSize(threadsTile).width,
+      );
+      final double sidebarWidth = tester
+          .getSize(find.byKey(const PageStorageKey<String>('channel-sidebar')))
+          .width;
       expect(
         tester.getSize(channelSelectionSurface).width,
-        tester
-            .getSize(
-              find.byKey(const PageStorageKey<String>('channel-sidebar')),
-            )
-            .width,
+        sidebarWidth - 2 * AppLayout.sidebarItemInset,
       );
       expect(
         tester.widget<Text>(find.text(ChannelSidebarStrings.threads)).style,
-        Theme.of(
-          tester.element(threadsTile),
-        ).textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.w600),
+        Theme.of(tester.element(threadsTile)).textTheme.bodyMedium!.copyWith(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
       );
       expect(
         (tester.widget<Material>(threadsTile).shape! as RoundedRectangleBorder)
             .borderRadius,
-        BorderRadius.zero,
+        BorderRadius.circular(AppSpacing.sm),
       );
       final Finder searchIcon = find.descendant(
         of: search,
@@ -530,6 +879,12 @@ void main() {
         tester.widget<Material>(threadsTile).color,
         Theme.of(tester.element(threadsTile)).colorScheme.secondaryContainer,
       );
+      final Rect threadsRect = tester.getRect(threadsTile);
+      final Rect sidebarRect = tester.getRect(
+        find.byKey(const ValueKey<String>('channels-side-pane')),
+      );
+      expect(threadsRect.left, sidebarRect.left + AppLayout.sidebarItemInset);
+      expect(threadsRect.right, sidebarRect.right - AppLayout.sidebarItemInset);
       expect(
         find.byKey(const ValueKey<String>('channels-side-pane')),
         findsOneWidget,
@@ -637,38 +992,46 @@ void main() {
         const ValueKey<String>('channel-search-field'),
       );
       expect(search, findsOneWidget);
-      expect(tester.getSize(search).height, 56);
+      expect(tester.getSize(search).height, inInclusiveRange(40, 44));
       final TextField searchField = tester.widget<TextField>(search);
       final InputDecoration decoration = searchField.decoration!;
-      expect(searchField.style, isNull);
+      expect(searchField.style?.fontSize, 13);
       expect(searchField.textAlignVertical, isNull);
       expect(decoration.hintStyle, isNull);
-      expect(decoration.isDense, isNull);
+      expect(decoration.isDense, isTrue);
       expect(decoration.constraints, AppLayout.sidebarSearchConstraints);
-      expect(decoration.contentPadding, isNull);
-      expect(decoration.filled, isNull);
+      expect(
+        decoration.contentPadding,
+        const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      );
+      expect(decoration.filled, isTrue);
       expect(
         decoration.prefixIconConstraints,
         AppLayout.sidebarSearchPrefixIconConstraints,
       );
       expect(decoration.enabledBorder, isA<OutlineInputBorder>());
       expect(decoration.focusedBorder, isA<OutlineInputBorder>());
-      expect(find.text('Public channels'), findsOneWidget);
+      expect(
+        (decoration.enabledBorder! as OutlineInputBorder).borderRadius,
+        BorderRadius.circular(AppSpacing.sm),
+      );
+      expect(
+        (decoration.enabledBorder! as OutlineInputBorder).borderSide.style,
+        BorderStyle.solid,
+      );
+      expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
       expect(find.text('Town Square'), findsNothing);
-      expect(find.text('Direct messages'), findsOneWidget);
+      expect(find.text('DIRECT MESSAGES'), findsOneWidget);
       expect(find.text('Ada Lovelace'), findsOneWidget);
       final Finder publicChannelsHeader = find.ancestor(
-        of: find.text('Public channels'),
+        of: find.text('PUBLIC CHANNELS'),
         matching: find.byType(ListTile),
       );
       final Finder publicChannelsExpander = find.descendant(
         of: publicChannelsHeader,
         matching: find.byIcon(Icons.expand_more),
       );
-      expect(
-        tester.getCenter(find.byTooltip(ChannelSidebarStrings.refresh)).dx,
-        closeTo(tester.getCenter(publicChannelsExpander).dx, 0.01),
-      );
+      expect(find.byTooltip('Refresh channels'), findsNothing);
       expect(
         find.byKey(const ValueKey<String>('threads-sidebar-tile')),
         findsOneWidget,
@@ -680,13 +1043,14 @@ void main() {
 
       await tester.enterText(search, 'town');
       await tester.pump();
+      expect(tester.getSize(search).height, greaterThanOrEqualTo(40));
       expect(
         tester.getCenter(find.byTooltip(ChannelSidebarStrings.clearSearch)).dx,
-        closeTo(tester.getCenter(publicChannelsExpander).dx, 0.01),
+        greaterThan(tester.getCenter(publicChannelsExpander).dx),
       );
-      expect(find.text('Public channels'), findsOneWidget);
+      expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
       expect(find.text('Town Square'), findsOneWidget);
-      expect(find.text('Direct messages'), findsNothing);
+      expect(find.text('DIRECT MESSAGES'), findsNothing);
       expect(find.text('Ada Lovelace'), findsNothing);
       expect(
         find.byKey(const ValueKey<String>('threads-sidebar-tile')),
@@ -700,9 +1064,9 @@ void main() {
 
       await tester.tap(find.byTooltip(ChannelSidebarStrings.clearSearch));
       await tester.pump();
-      expect(find.text('Public channels'), findsOneWidget);
+      expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
       expect(find.text('Town Square'), findsNothing);
-      expect(find.text('Direct messages'), findsOneWidget);
+      expect(find.text('DIRECT MESSAGES'), findsOneWidget);
       expect(find.text('Ada Lovelace'), findsOneWidget);
       expect(find.byTooltip(ChannelSidebarStrings.clearSearch), findsNothing);
       expect(
@@ -712,8 +1076,8 @@ void main() {
 
       await tester.enterText(search, 'ada');
       await tester.pump();
-      expect(find.text('Public channels'), findsNothing);
-      expect(find.text('Direct messages'), findsOneWidget);
+      expect(find.text('PUBLIC CHANNELS'), findsNothing);
+      expect(find.text('DIRECT MESSAGES'), findsOneWidget);
       expect(find.text('Ada Lovelace'), findsOneWidget);
       expect(find.text('Grace Hopper'), findsNothing);
 
@@ -841,11 +1205,8 @@ void main() {
     expect(inbox.loadCalls, 1);
 
     await selectInbox(tester);
-    final Finder rail = find.byKey(
-      const ValueKey<String>('shell-navigation-rail'),
-    );
     await tester.tap(
-      find.descendant(of: rail, matching: find.text('Channels')),
+      find.byKey(const ValueKey<String>('shell-channels-destination')),
     );
     await tester.pumpAndSettle();
     await selectInbox(tester);
@@ -1087,6 +1448,52 @@ void main() {
     expect(find.byType(CircleAvatar), findsOneWidget);
   });
 
+  testWidgets('keeps channel message lines readable on a wide screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1920, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          postRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Town Square'));
+    await tester.pumpAndSettle();
+
+    final Rect channelHeader = tester.getRect(
+      find.byKey(const ValueKey<String>('channel-header')),
+    );
+    final double profileY = tester
+        .getCenter(
+          find.byKey(const ValueKey<String>('shell-profile-destination')),
+        )
+        .dy;
+    expect(channelHeader.top, 0);
+    expect(profileY, greaterThan(channelHeader.bottom));
+
+    final Finder messageRow = find
+        .ancestor(
+          of: find.byType(MessageContent).first,
+          matching: find.byType(Row),
+        )
+        .first;
+    expect(
+      tester.getSize(messageRow).width,
+      lessThanOrEqualTo(AppLayout.readableContentWidth),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('opens channel members beside messages when width allows', (
     WidgetTester tester,
   ) async {
@@ -1123,6 +1530,15 @@ void main() {
     final Finder pane = find.byType(ChannelMembersPane);
     expect(pane, findsOneWidget);
     expect(tester.getSize(pane).width, 380);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('channels-side-pane')),
+        matching: find.byKey(
+          const ValueKey<String>('shell-profile-destination'),
+        ),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Message for town-square'), findsOneWidget);
     expect(
       find.descendant(of: pane, matching: find.text('Ada Lovelace')),
@@ -1647,6 +2063,23 @@ void main() {
     expect(find.text('This message was deleted'), findsOneWidget);
     expect(find.text('Deleted reply contents'), findsNothing);
     expect(find.text('Message for town-square'), findsNWidgets(2));
+    final Rect channelHeader = tester.getRect(
+      find.byKey(const ValueKey<String>('channel-header')),
+    );
+    final double profileY = tester
+        .getCenter(
+          find.byKey(const ValueKey<String>('shell-profile-destination')),
+        )
+        .dy;
+    expect(profileY, greaterThan(channelHeader.bottom));
+    expect(
+      tester
+          .getCenter(
+            find.byKey(const ValueKey<String>('shell-profile-destination')),
+          )
+          .dx,
+      lessThan(tester.getCenter(find.byType(ThreadPane)).dx),
+    );
     expect(
       tester
           .getTopLeft(
@@ -1965,14 +2398,34 @@ void main() {
     expect(find.text('Channel 199'), findsNothing);
     expect(find.byType(ListTile).evaluate().length, lessThan(30));
 
-    await tester.tap(find.text('Large category'));
+    await tester.tap(find.text('LARGE CATEGORY'));
     await tester.pumpAndSettle();
     expect(find.text('Channel 0'), findsNothing);
 
-    await tester.tap(find.text('Large category'));
+    await tester.tap(find.text('LARGE CATEGORY'));
     await tester.pumpAndSettle();
     expect(find.text('Channel 0'), findsOneWidget);
     expect(find.byType(ListTile).evaluate().length, lessThan(30));
+
+    final Finder profile = find.byKey(
+      const ValueKey<String>('shell-profile-destination'),
+    );
+    final Rect footer = tester.getRect(
+      find.byKey(const ValueKey<String>('sidebar-profile-footer')),
+    );
+    await tester.drag(find.text('Channel 0'), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(find.text('Channel 0'), findsNothing);
+    expect(
+      tester.getRect(
+        find.byKey(const ValueKey<String>('sidebar-profile-footer')),
+      ),
+      footer,
+    );
+    expect(
+      tester.getCenter(profile).dy,
+      inInclusiveRange(footer.top, footer.bottom),
+    );
   });
 
   testWidgets('clips the selected channel background while scrolling', (
@@ -2017,23 +2470,24 @@ void main() {
     expect(material.clipBehavior, Clip.antiAlias);
     expect(
       (material.shape! as RoundedRectangleBorder).borderRadius,
-      BorderRadius.zero,
+      BorderRadius.circular(AppSpacing.sm),
     );
-    expect(
-      tester
-          .widget<ListTile>(
-            find.descendant(
-              of: selectionSurface,
-              matching: find.byType(ListTile),
-            ),
-          )
-          .selectedTileColor,
-      isNull,
-    );
-
     final Finder channelList = find.byKey(
       const PageStorageKey<String>('channel-sidebar'),
     );
+    final Rect selectionRect = tester.getRect(selectionSurface);
+    final Rect listRect = tester.getRect(channelList);
+    expect(selectionRect.left, listRect.left + AppLayout.sidebarItemInset);
+    expect(selectionRect.right, listRect.right - AppLayout.sidebarItemInset);
+    final ListTile selectedTile = tester.widget<ListTile>(
+      find.descendant(of: selectionSurface, matching: find.byType(ListTile)),
+    );
+    expect(selectedTile.selectedTileColor, isNull);
+    expect(
+      (selectedTile.shape! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(AppSpacing.sm),
+    );
+
     final ScrollableState scrollable = tester.state<ScrollableState>(
       find.descendant(of: channelList, matching: find.byType(Scrollable)),
     );
@@ -2073,6 +2527,83 @@ void main() {
     );
     expect(tester.getSize(channelTile).height, 40);
     expect(tester.getSize(channelTile).width, greaterThanOrEqualTo(40));
+    final ListTile channelRow = tester.widget<ListTile>(channelTile);
+    expect(channelRow.horizontalTitleGap, AppSpacing.xs);
+    expect(channelRow.minLeadingWidth, 20);
+    expect(tester.widget<Text>(find.text('Town Square')).style?.fontSize, 13);
+    expect(
+      tester
+          .widget<ChannelAvatar>(
+            find.descendant(
+              of: channelTile,
+              matching: find.byType(ChannelAvatar),
+            ),
+          )
+          .size,
+      18,
+    );
+    final Finder directMessageTile = find.ancestor(
+      of: find.text('Ada Lovelace'),
+      matching: find.byType(ListTile),
+    );
+    final Finder directMessageAvatar = find.descendant(
+      of: directMessageTile,
+      matching: find.byType(ChannelAvatar),
+    );
+    expect(tester.widget<ChannelAvatar>(directMessageAvatar).size, 16);
+    expect(
+      tester.getRect(find.text('Ada Lovelace')).left,
+      tester.getRect(find.text('Town Square')).left,
+    );
+    expect(
+      tester.getRect(find.text('Ada Lovelace')).left -
+          tester.getRect(directMessageAvatar).right,
+      greaterThanOrEqualTo(6),
+    );
+    final Finder channelSurface = find.byKey(
+      const ValueKey<String>('channel-selection-surface-town-square'),
+    );
+    final InkWell hoverTarget = tester.widget<InkWell>(
+      find.descendant(of: channelSurface, matching: find.byType(InkWell)).first,
+    );
+    expect(
+      (hoverTarget.customBorder! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(AppSpacing.sm),
+    );
+    final Finder groupSurface = find.byKey(
+      const ValueKey<String>('channel-section-surface-favorites'),
+    );
+    final Finder sidebarList = find.byKey(
+      const PageStorageKey<String>('channel-sidebar'),
+    );
+    expect(
+      tester.getRect(groupSurface).left,
+      tester.getRect(sidebarList).left + AppLayout.sidebarItemInset,
+    );
+    expect(
+      tester.getRect(groupSurface).right,
+      tester.getRect(sidebarList).right - AppLayout.sidebarItemInset,
+    );
+    final ListTile groupRow = tester.widget<ListTile>(
+      find.descendant(of: groupSurface, matching: find.byType(ListTile)),
+    );
+    expect(groupRow.leading, isNotNull);
+    expect(groupRow.trailing, isNull);
+    expect(groupRow.horizontalTitleGap, AppSpacing.xs);
+    expect(find.text('FAVORITES'), findsOneWidget);
+    expect(tester.getSize(groupSurface).height, greaterThanOrEqualTo(40));
+    expect(
+      (tester.widget<Material>(groupSurface).shape! as RoundedRectangleBorder)
+          .borderRadius,
+      BorderRadius.circular(AppSpacing.sm),
+    );
+    final InkWell groupHoverTarget = tester.widget<InkWell>(
+      find.descendant(of: groupSurface, matching: find.byType(InkWell)).first,
+    );
+    expect(
+      (groupHoverTarget.customBorder! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(AppSpacing.sm),
+    );
   });
 
   testWidgets('highlights unread channels at compact and expanded widths', (
@@ -2109,12 +2640,683 @@ void main() {
         find.text('Muted unread channel'),
       );
 
-      expect(unread.style?.fontWeight, FontWeight.w600);
+      expect(unread.style?.fontWeight, FontWeight.w400);
       expect(unread.semanticsLabel, 'Unread channel, unread');
       expect(read.style?.fontWeight, FontWeight.w400);
       expect(mutedUnread.style?.fontWeight, FontWeight.w400);
+      final Finder dot = find.byKey(
+        const ValueKey<String>('channel-unread-dot-unread'),
+      );
+      expect(dot, findsOneWidget);
+      final Finder surface = find.byKey(
+        const ValueKey<String>('channel-selection-surface-unread'),
+      );
+      expect(
+        tester.getRect(dot).left -
+            tester.getRect(find.text('Unread channel')).right,
+        greaterThan(AppSpacing.xxl),
+      );
+      expect(
+        tester.getRect(surface).right - tester.getRect(dot).right,
+        lessThanOrEqualTo(AppSpacing.xxl),
+      );
+      expect(
+        find.byKey(const ValueKey<String>('channel-unread-dot-read')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('channel-unread-dot-muted-unread')),
+        findsNothing,
+      );
     }
   });
+
+  testWidgets('shows a direct participant custom status beside the name', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1000, 800),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _CustomStatusSidebarRepository(),
+            ),
+          ],
+          child: MaterialApp(
+            home: const BootstrapPage(),
+            builder: (BuildContext context, Widget? child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(1.6)),
+              child: child!,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder direct = find.byKey(
+        const ValueKey<String>('channel-selection-surface-direct-ada'),
+      );
+      expect(
+        find.descendant(of: direct, matching: find.text('📆')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: direct, matching: find.byTooltip('In a meeting')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('channel-custom-status-bot')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('search expands into the filter button space while focused', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1000, 800),
+      const Size(1280, 800),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _UnreadSidebarRepository(),
+            ),
+          ],
+          child: const MaterialApp(home: BootstrapPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder search = find.byKey(
+        const ValueKey<String>('channel-search-field'),
+      );
+      final double idleWidth = tester.getSize(search).width;
+      final Finder threads = find.byKey(
+        const ValueKey<String>('threads-sidebar-tile'),
+      );
+      final double threadsTop = tester.getRect(threads).top;
+      final Finder hideRead = find.byTooltip('Hide read channels');
+      final Finder folderToggle = find.byKey(
+        const ValueKey<String>('folder-visibility-toggle'),
+      );
+      expect(hideRead, findsOneWidget);
+      expect(folderToggle, findsOneWidget);
+      expect(tester.getSize(hideRead).width, greaterThanOrEqualTo(40));
+
+      await tester.tap(search);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(search).width, greaterThan(idleWidth + 80));
+      expect(hideRead, findsNothing);
+      expect(folderToggle, findsNothing);
+      expect(tester.getRect(threads).top, threadsTop);
+
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(search).width, idleWidth);
+      expect(hideRead, findsOneWidget);
+      expect(folderToggle, findsOneWidget);
+    }
+  });
+
+  testWidgets('read filter hides read channels and empty categories', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _ReadFilterSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('EMPTY'), findsNothing);
+    expect(find.text('MIXED'), findsOneWidget);
+    expect(find.text('READ ONLY'), findsOneWidget);
+    expect(find.text('Read channel'), findsOneWidget);
+    expect(find.text('Unread channel'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('MIXED'), findsOneWidget);
+    expect(find.text('READ ONLY'), findsNothing);
+    expect(find.text('Read channel'), findsNothing);
+    expect(find.text('Unread channel'), findsOneWidget);
+    expect(find.byTooltip('Show read channels'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Hide folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('MIXED'), findsNothing);
+    expect(find.text('Unread channel'), findsOneWidget);
+    expect(find.text('Read channel'), findsNothing);
+
+    await tester.tap(find.byTooltip('Show folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('MIXED'), findsOneWidget);
+    expect(find.text('Read channel'), findsNothing);
+
+    await tester.tap(find.byTooltip('Show read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('READ ONLY'), findsOneWidget);
+    expect(find.text('Read channel'), findsOneWidget);
+    expect(find.text('EMPTY'), findsNothing);
+  });
+
+  testWidgets('favorites stay visible above read filtering and show a star', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(ChannelSidebarStrings.hideReadChannels));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Town Square'), findsOneWidget);
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-favorite-star-town-square')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip(ChannelSidebarStrings.hideFolderHeadings));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('channel-favorite-star-town-square')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('read filter hides muted activity but keeps mentions', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _UnreadSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(ChannelSidebarStrings.hideReadChannels));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Muted unread channel'), findsNothing);
+    expect(find.text('Muted mentioned channel'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-unread-dot-muted-mentioned')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('read filter marks mentions in a collapsed muted folder', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _CollapsedMutedSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(ChannelSidebarStrings.hideReadChannels));
+    await tester.pumpAndSettle();
+
+    expect(find.text('MUTED CATEGORY'), findsOneWidget);
+    expect(find.text('Unread in category'), findsNothing);
+    expect(find.text('Mention in category'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-section-unread-dot-muted')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('secondary click opens actions for a channel', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _ReadFilterSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.text('Unread channel')),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.up();
+    await tester.pump();
+
+    final FadeTransition itemFade = tester.widget<FadeTransition>(
+      find
+          .ancestor(
+            of: find.text(ChannelSidebarStrings.markUnread),
+            matching: find.byType(FadeTransition),
+          )
+          .first,
+    );
+    expect(itemFade.opacity.value, 1);
+
+    expect(find.text('Mark as unread'), findsOneWidget);
+    expect(find.text('Add to favorites'), findsOneWidget);
+    expect(find.text('Mute channel'), findsOneWidget);
+    expect(find.text('Move to…'), findsOneWidget);
+    expect(find.text('Close conversation'), findsNothing);
+  });
+
+  testWidgets('favorite dialog menu offers removal and close', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.text('Ada Lovelace')),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text(ChannelSidebarStrings.removeFavorite), findsOneWidget);
+    expect(find.text(ChannelSidebarStrings.closeConversation), findsOneWidget);
+  });
+
+  testWidgets('channel menu confirms leaving before removing membership', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _ReadFilterSidebarRepository repository =
+        _ReadFilterSidebarRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: BootstrapPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> openMenu() async {
+      final TestGesture gesture = await tester.startGesture(
+        tester.getCenter(find.text('Unread channel')),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    await openMenu();
+    expect(find.text('Покинуть канал'), findsOneWidget);
+    await tester.tap(find.text('Покинуть канал'));
+    await tester.pumpAndSettle();
+    expect(find.text('Покинуть канал?'), findsOneWidget);
+    expect(repository.lastAction, isNull);
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(repository.lastAction, isNull);
+
+    await openMenu();
+    await tester.tap(find.text('Покинуть канал'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Покинуть'));
+    await tester.pumpAndSettle();
+    expect(repository.lastAction, 'leave:unread');
+  });
+
+  testWidgets('keyboard context shortcut opens channel actions', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _ReadFilterSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Focus.of(
+      tester.element(
+        find.byKey(const ValueKey<String>('channel-selection-surface-unread')),
+      ),
+    ).requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(find.text(ChannelSidebarStrings.markUnread), findsOneWidget);
+  });
+
+  testWidgets('channel menu runs actions and lists empty folders', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final _ReadFilterSidebarRepository repository =
+        _ReadFilterSidebarRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> openMenu() async {
+      final TestGesture gesture = await tester.startGesture(
+        tester.getCenter(find.text('Unread channel')),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    await openMenu();
+    await tester.tap(find.text(ChannelSidebarStrings.markUnread));
+    await tester.pumpAndSettle();
+    expect(repository.lastAction, 'unread:unread');
+
+    await openMenu();
+    await tester.tap(find.text(ChannelSidebarStrings.moveTo));
+    await tester.pump();
+    final FadeTransition folderFade = tester.widget<FadeTransition>(
+      find
+          .ancestor(
+            of: find.text('Empty folder'),
+            matching: find.byType(FadeTransition),
+          )
+          .first,
+    );
+    expect(folderFade.opacity.value, 1);
+    expect(find.text('Empty folder'), findsOneWidget);
+    await tester.tap(find.text('Empty folder'));
+    await tester.pumpAndSettle();
+    expect(repository.lastAction, 'move:unread:empty');
+  });
+
+  testWidgets('restores both sidebar toggles after reopening the app', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const String accountScopeId = 'https://chat.example.com|user:me';
+    await SharedPreferencesSidebarViewPreferencesRepository().write(
+      accountScopeId,
+      const SidebarViewPreferences(showUnreadInCollapsedFolders: false),
+    );
+
+    Widget app() => ProviderScope(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+        channelRepositoryProvider.overrideWithValue(
+          _ReadFilterSidebarRepository(),
+        ),
+      ],
+      child: const MaterialApp(home: BootstrapPage()),
+    );
+
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Hide folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Read channel'), findsNothing);
+    expect(find.text('MIXED'), findsNothing);
+    expect(
+      (await SharedPreferencesSidebarViewPreferencesRepository().read(
+        accountScopeId,
+      )).showUnreadInCollapsedFolders,
+      isFalse,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Show read channels'), findsOneWidget);
+    expect(find.byTooltip('Show folder headings'), findsOneWidget);
+    expect(find.text('Read channel'), findsNothing);
+    expect(find.text('MIXED'), findsNothing);
+    expect(find.text('Unread channel'), findsOneWidget);
+  });
+
+  testWidgets('restores the previous filter when saving fails', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _ReadFilterSidebarRepository(),
+          ),
+          sidebarViewPreferencesRepositoryProvider.overrideWithValue(
+            _FailingSidebarPreferencesRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('Read channel'), findsOneWidget);
+    expect(find.byTooltip('Hide read channels'), findsOneWidget);
+    expect(
+      find.text(ChannelSidebarStrings.preferencesSaveFailed),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('read filter explains an empty unread list', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _SearchSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('PUBLIC CHANNELS'), findsNothing);
+    expect(find.text('DIRECT MESSAGES'), findsNothing);
+    expect(find.text('No unread channels'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Show read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
+    expect(find.text('DIRECT MESSAGES'), findsOneWidget);
+  });
+
+  testWidgets('folder button shows a flat list and restores collapsed groups', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(
+            _SearchSidebarRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
+    expect(find.text('DIRECT MESSAGES'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-section-marker-direct')),
+      findsOneWidget,
+    );
+    expect(find.text('Town Square'), findsNothing);
+
+    await tester.tap(find.byTooltip('Hide folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('PUBLIC CHANNELS'), findsNothing);
+    expect(find.text('DIRECT MESSAGES'), findsNothing);
+    expect(find.text('Town Square'), findsOneWidget);
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(find.text('Grace Hopper'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Show folder headings'));
+    await tester.pumpAndSettle();
+    expect(find.text('PUBLIC CHANNELS'), findsOneWidget);
+    expect(find.text('DIRECT MESSAGES'), findsOneWidget);
+    expect(find.text('Town Square'), findsNothing);
+  });
+
+  testWidgets(
+    'two sidebar buttons fit the narrowest pane at large text scale',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _UnreadSidebarRepository(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: BootstrapPage(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(
+        find.byKey(const ValueKey<String>('channels-pane-divider')),
+        const Offset(-120, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey<String>('channels-side-pane')))
+            .width,
+        200,
+      );
+      expect(find.byTooltip('Hide read channels'), findsOneWidget);
+      expect(find.byTooltip('Hide folder headings'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('channel-search-field')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Hide folder headings'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('applies collapsed and muted category presentation', (
     WidgetTester tester,
@@ -2135,14 +3337,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Muted category'), findsOneWidget);
+    expect(find.text('MUTED CATEGORY'), findsOneWidget);
     expect(find.text('Quiet channel'), findsNothing);
     expect(find.text('Unread in category'), findsNothing);
     expect(
       tester
           .widgetList<Opacity>(
             find.ancestor(
-              of: find.text('Muted category'),
+              of: find.text('MUTED CATEGORY'),
               matching: find.byType(Opacity),
             ),
           )
@@ -2150,7 +3352,7 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     expect(find.text('Quiet channel'), findsOneWidget);
     expect(
@@ -2166,11 +3368,66 @@ void main() {
     );
   });
 
-  testWidgets('collapsed categories hide individually muted unread channels', (
+  testWidgets('collapsed folders keep unread channels visible by default', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1000, 800),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+            channelRepositoryProvider.overrideWithValue(
+              _UnreadSidebarRepository(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: BootstrapPage(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Muted unread channel'), findsOneWidget);
+      await tester.tap(find.text('CHANNELS'));
+      await tester.pumpAndSettle();
+      expect(find.text('Unread channel'), findsOneWidget);
+      expect(find.text('Muted unread channel'), findsNothing);
+      expect(find.text('Muted mentioned channel'), findsOneWidget);
+      expect(find.text('Read channel'), findsNothing);
+      final Finder dot = find.byKey(
+        const ValueKey<String>('channel-section-unread-dot-channels'),
+      );
+      expect(dot, findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('CHANNELS')).semanticsLabel,
+        'Channels, unread',
+      );
+      expect(
+        tester.getRect(dot).right,
+        greaterThan(tester.getRect(find.text('CHANNELS')).right),
+      );
+      await tester.tap(find.text('CHANNELS'));
+      await tester.pumpAndSettle();
+      expect(find.text('Muted unread channel'), findsOneWidget);
+    }
+  });
+
+  testWidgets('saved setting hides unread channels in collapsed folders', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    await SharedPreferencesSidebarViewPreferencesRepository().write(
+      'https://chat.example.com|user:me',
+      const SidebarViewPreferences(showUnreadInCollapsedFolders: false),
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -2183,18 +3440,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Muted unread channel'), findsOneWidget);
-    await tester.tap(find.text('Channels').last);
+
+    await tester.tap(find.text('CHANNELS'));
     await tester.pumpAndSettle();
-    expect(find.text('Unread channel'), findsOneWidget);
-    expect(find.text('Muted unread channel'), findsNothing);
+    expect(find.text('Unread channel'), findsNothing);
+    expect(find.text('Muted mentioned channel'), findsNothing);
     expect(find.text('Read channel'), findsNothing);
-    await tester.tap(find.text('Channels').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Muted unread channel'), findsOneWidget);
   });
 
-  testWidgets('keeps the selected read channel in a collapsed category', (
+  testWidgets('hides the selected channel in a collapsed category', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -2211,11 +3465,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Unread in category'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     final ProviderContainer container = ProviderScope.containerOf(
       tester.element(find.byType(ChannelSidebar)),
@@ -2231,7 +3485,7 @@ void main() {
     expect(channel.isUnread, isFalse);
     expect(
       find.byKey(const ValueKey<String>('channel-unread-category')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('Quiet channel'), findsNothing);
 
@@ -2247,11 +3501,14 @@ void main() {
           ),
         );
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey<String>('channel-quiet')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('channel-quiet')), findsNothing);
     expect(
       find.byKey(const ValueKey<String>('channel-unread-category')),
       findsNothing,
     );
+    await tester.tap(find.text('MUTED CATEGORY'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('channel-quiet')), findsOneWidget);
   });
 
   testWidgets('keeps category toggles local when the server rejects updates', (
@@ -2271,7 +3528,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     expect(repository.lastCollapsed, isFalse);
     expect(find.text('Quiet channel'), findsOneWidget);
@@ -2280,11 +3537,11 @@ void main() {
       find.text('Category changed locally; could not sync with server.'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     expect(repository.lastCollapsed, isTrue);
     expect(find.text('Quiet channel'), findsNothing);
-    await tester.tap(find.text('Muted category'));
+    await tester.tap(find.text('MUTED CATEGORY'));
     await tester.pumpAndSettle();
     expect(find.text('Quiet channel'), findsOneWidget);
   });
@@ -2310,8 +3567,27 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('FAVORITES'), findsOneWidget);
     expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(find.byTooltip('Hide read channels'), findsOneWidget);
+    await tester.tap(find.byTooltip('Hide read channels'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('channel-favorite-star-town-square')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Refresh channels'), findsNothing);
+    expect(
+      tester
+          .getSize(
+            find.byKey(
+              const ValueKey<String>('channel-section-surface-favorites'),
+            ),
+          )
+          .height,
+      greaterThanOrEqualTo(40),
+    );
     final Finder channelTile = find.ancestor(
       of: find.text('Ada Lovelace'),
       matching: find.byType(ListTile),
@@ -2793,7 +4069,25 @@ final class _SignedInRepository implements AuthRepository {
   Future<void> signOut() async {}
 }
 
+final class _FailingSidebarPreferencesRepository
+    implements SidebarViewPreferencesRepository {
+  @override
+  Future<SidebarViewPreferences> read(String accountScopeId) async =>
+      const SidebarViewPreferences();
+
+  @override
+  Future<void> write(
+    String accountScopeId,
+    SidebarViewPreferences preferences,
+  ) async => throw StateError('storage failed');
+}
+
 final class _CurrentProfileRepository implements CurrentUserProfileRepository {
+  UserPresence? lastPresence;
+  DateTime? lastAvailabilityExpiry;
+  String? lastCustomStatusText;
+  bool failAvailability = false;
+
   @override
   Future<CurrentUserProfile> load() async => const CurrentUserProfile(
     user: UserSummary(
@@ -2812,7 +4106,12 @@ final class _CurrentProfileRepository implements CurrentUserProfileRepository {
   Future<Availability> setAvailability({
     required UserPresence presence,
     required DateTime? expiresAt,
-  }) async => Availability(presence: presence, expiresAt: expiresAt);
+  }) async {
+    if (failAvailability) throw StateError('status unavailable');
+    lastPresence = presence;
+    lastAvailabilityExpiry = expiresAt;
+    return Availability(presence: presence, expiresAt: expiresAt);
+  }
 
   @override
   Future<void> setCustomStatus({
@@ -2820,7 +4119,9 @@ final class _CurrentProfileRepository implements CurrentUserProfileRepository {
     required String text,
     required CustomStatusDuration duration,
     required DateTime expiresAt,
-  }) async {}
+  }) async {
+    lastCustomStatusText = text;
+  }
 
   @override
   Future<void> clearCustomStatus() async {}
@@ -2842,6 +4143,7 @@ final class _SidebarRepository implements ChannelRepository {
           SidebarSection(
             id: 'favorites',
             displayName: 'Favorites',
+            favorites: true,
             channels: <SidebarChannel>[
               SidebarChannel(
                 id: 'town-square',
@@ -2856,6 +4158,53 @@ final class _SidebarRepository implements ChannelRepository {
                 name: 'me__ada',
                 displayName: 'Ada Lovelace',
                 kind: ChannelKind.directMessage,
+              ),
+            ],
+          ),
+        ],
+      );
+}
+
+final class _CustomStatusSidebarRepository implements ChannelRepository {
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      const ChannelSidebarSnapshot(
+        team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'direct',
+            displayName: 'Direct Messages',
+            role: SidebarSectionRole.directMessages,
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'direct-ada',
+                teamId: '',
+                name: 'me__ada',
+                displayName: 'Ada Lovelace',
+                kind: ChannelKind.directMessage,
+                customStatus: UserCustomStatus(
+                  emoji: 'calendar',
+                  text: 'In a meeting',
+                ),
+              ),
+              SidebarChannel(
+                id: 'bot',
+                teamId: '',
+                name: 'me__bot',
+                displayName: 'Helper bot',
+                kind: ChannelKind.directMessage,
+                isBot: true,
+                customStatus: UserCustomStatus(
+                  emoji: 'calendar',
+                  text: 'Should stay hidden',
+                ),
               ),
             ],
           ),
@@ -2895,6 +4244,7 @@ final class _DirectMessageSidebarRepository implements ChannelRepository {
           SidebarSection(
             id: 'favorites',
             displayName: 'Favorites',
+            favorites: true,
             channels: <SidebarChannel>[_townSquare, _directGrace],
           ),
         ],
@@ -2931,6 +4281,7 @@ final class _SearchSidebarRepository implements ChannelRepository {
           SidebarSection(
             id: 'direct',
             displayName: 'Direct messages',
+            role: SidebarSectionRole.directMessages,
             channels: <SidebarChannel>[
               SidebarChannel(
                 id: 'direct-ada',
@@ -3181,6 +4532,132 @@ final class _CollapsedMutedSidebarRepository
                 displayName: 'Quiet channel',
                 kind: ChannelKind.publicChannel,
               ),
+              SidebarChannel(
+                id: 'mention-category',
+                teamId: 'team-1',
+                name: 'mention-category',
+                displayName: 'Mention in category',
+                kind: ChannelKind.publicChannel,
+                isUnread: true,
+                hasUnreadMention: true,
+              ),
+            ],
+          ),
+        ],
+      );
+}
+
+final class _ReadFilterSidebarRepository
+    implements ChannelRepository, ChannelSidebarActionsRepository {
+  String? lastAction;
+
+  @override
+  Future<List<SidebarSection>> getMovableCategories(
+    AuthSession session,
+    String teamId,
+  ) async => const <SidebarSection>[
+    SidebarSection(
+      id: 'empty',
+      displayName: 'Empty folder',
+      channels: <SidebarChannel>[],
+      serverCategory: true,
+    ),
+    SidebarSection(
+      id: 'mixed',
+      displayName: 'Mixed',
+      channels: <SidebarChannel>[],
+      serverCategory: true,
+    ),
+  ];
+
+  @override
+  Future<void> markChannelUnread(AuthSession session, String channelId) async =>
+      lastAction = 'unread:$channelId';
+
+  @override
+  Future<void> setChannelFavorite(
+    AuthSession session,
+    String teamId,
+    SidebarChannel channel,
+    bool favorite,
+  ) async => lastAction = 'favorite:${channel.id}:$favorite';
+
+  @override
+  Future<void> setChannelMuted(
+    AuthSession session,
+    String channelId,
+    bool muted,
+  ) async => lastAction = 'mute:$channelId:$muted';
+
+  @override
+  Future<void> moveChannelToCategory(
+    AuthSession session,
+    String teamId,
+    String channelId,
+    String categoryId,
+  ) async => lastAction = 'move:$channelId:$categoryId';
+
+  @override
+  Future<void> closeConversation(
+    AuthSession session,
+    SidebarChannel channel,
+  ) async => lastAction = 'close:${channel.id}';
+
+  @override
+  Future<void> leaveChannel(
+    AuthSession session,
+    SidebarChannel channel,
+  ) async => lastAction = 'leave:${channel.id}';
+
+  @override
+  Future<SidebarChannel> openDirectMessage({
+    required String currentUserId,
+    required String otherUserId,
+    required String otherUserDisplayName,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<ChannelSidebarSnapshot> load(AuthSession session) async =>
+      const ChannelSidebarSnapshot(
+        team: SidebarTeam(id: 'team-1', displayName: 'Example team'),
+        sections: <SidebarSection>[
+          SidebarSection(
+            id: 'empty',
+            displayName: 'Empty',
+            channels: <SidebarChannel>[],
+          ),
+          SidebarSection(
+            id: 'mixed',
+            displayName: 'Mixed',
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'unread',
+                teamId: 'team-1',
+                name: 'unread',
+                displayName: 'Unread channel',
+                kind: ChannelKind.publicChannel,
+                isUnread: true,
+              ),
+              SidebarChannel(
+                id: 'read',
+                teamId: 'team-1',
+                name: 'read',
+                displayName: 'Read channel',
+                kind: ChannelKind.publicChannel,
+              ),
+            ],
+          ),
+          SidebarSection(
+            id: 'read-only',
+            displayName: 'Read only',
+            channels: <SidebarChannel>[
+              SidebarChannel(
+                id: 'read-only-channel',
+                teamId: 'team-1',
+                name: 'read-only-channel',
+                displayName: 'Read only channel',
+                kind: ChannelKind.publicChannel,
+              ),
             ],
           ),
         ],
@@ -3226,6 +4703,16 @@ final class _UnreadSidebarRepository implements ChannelRepository {
                 displayName: 'Muted unread channel',
                 kind: ChannelKind.publicChannel,
                 isUnread: true,
+                muted: true,
+              ),
+              SidebarChannel(
+                id: 'muted-mentioned',
+                teamId: 'team-1',
+                name: 'muted-mentioned',
+                displayName: 'Muted mentioned channel',
+                kind: ChannelKind.publicChannel,
+                isUnread: true,
+                hasUnreadMention: true,
                 muted: true,
               ),
             ],

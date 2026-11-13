@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/ui/channels/widgets/channel_avatar.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
@@ -18,6 +19,112 @@ void main() {
     displayName: 'Ada Lovelace',
     kind: ChannelKind.directMessage,
     profileImage: SidebarProfileImage(userId: 'ada', updatedAt: 42),
+  );
+
+  testWidgets('shows direct-user presence at compact and expanded widths', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final double width in <double>[390, 1200]) {
+      await tester.binding.setSurfaceSize(Size(width, 800));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            userAvatarProvider.overrideWith(
+              (Ref ref, UserAvatarRequest request) async => null,
+            ),
+          ],
+          child: MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: Scaffold(
+                body: ChannelAvatar(
+                  channel: channel.copyWith(presence: UserPresence.away),
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byTooltip('Away'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('channel-presence-dm-1')),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('Away'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('does not show presence or unavailable status for bots', (
+    WidgetTester tester,
+  ) async {
+    for (final UserPresence? presence in <UserPresence?>[
+      UserPresence.online,
+      null,
+    ]) {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            userAvatarProvider.overrideWith(
+              (Ref ref, UserAvatarRequest request) async => null,
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ChannelAvatar(
+                channel: SidebarChannel(
+                  id: 'bot-dm',
+                  teamId: '',
+                  name: 'me__bot',
+                  displayName: 'Bot',
+                  kind: ChannelKind.directMessage,
+                  profileImage: const SidebarProfileImage(
+                    userId: 'bot',
+                    updatedAt: 0,
+                  ),
+                  isBot: true,
+                  presence: presence,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey<String>('channel-presence-bot-dm')),
+        findsNothing,
+      );
+      expect(find.byTooltip('Online'), findsNothing);
+      expect(find.byTooltip('Status unavailable'), findsNothing);
+    }
+  });
+
+  testWidgets(
+    'labels an unavailable direct-user status without claiming offline',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ChannelAvatar(
+              channel: SidebarChannel(
+                id: 'dm-unknown',
+                teamId: '',
+                name: 'me__unknown',
+                displayName: 'Unknown',
+                kind: ChannelKind.directMessage,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byTooltip('Status unavailable'), findsOneWidget);
+      expect(find.bySemanticsLabel('Status unavailable'), findsOneWidget);
+    },
   );
 
   testWidgets('shows DM initials immediately then replaces them with avatar', (

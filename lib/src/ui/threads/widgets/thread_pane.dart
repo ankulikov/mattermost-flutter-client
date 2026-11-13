@@ -37,6 +37,7 @@ class ThreadPane extends ConsumerStatefulWidget {
     this.onPostDeleted,
     this.onThreadRead,
     this.onThreadUnfollowed,
+    this.headerTrailing,
     super.key,
   });
 
@@ -61,6 +62,7 @@ class ThreadPane extends ConsumerStatefulWidget {
   final ValueChanged<ChannelPost>? onPostDeleted;
   final ValueChanged<DateTime>? onThreadRead;
   final ValueChanged<String>? onThreadUnfollowed;
+  final Widget? headerTrailing;
 
   @override
   ConsumerState<ThreadPane> createState() => _ThreadPaneState();
@@ -136,6 +138,7 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
             isUpdatingFollow:
                 displayedState?.followUpdateStatus is OperationInProgress,
             onToggleFollowing: _toggleFollowing,
+            headerTrailing: widget.headerTrailing,
           ),
           const Divider(
             key: ValueKey<String>('thread-header-divider'),
@@ -615,6 +618,7 @@ class _ThreadHeader extends StatelessWidget {
     required this.isFollowing,
     required this.isUpdatingFollow,
     required this.onToggleFollowing,
+    required this.headerTrailing,
   });
 
   final SidebarChannel channel;
@@ -623,6 +627,7 @@ class _ThreadHeader extends StatelessWidget {
   final bool? isFollowing;
   final bool isUpdatingFollow;
   final Future<void> Function() onToggleFollowing;
+  final Widget? headerTrailing;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -669,6 +674,7 @@ class _ThreadHeader extends StatelessWidget {
           onPressed: onClose,
           icon: const Icon(Icons.close),
         ),
+        ?headerTrailing,
       ],
     ),
   );

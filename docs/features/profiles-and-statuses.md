@@ -23,6 +23,12 @@ The UI draws colored initials immediately. After bytes arrive, Flutter decodes
 them to the control's target size off the build path. A load or decode failure
 keeps the initials.
 
+Human direct-message rows show a presence dot for online, away, Do Not Disturb,
+and offline; bot rows and bot profile cards show no presence indicator. The
+sidebar fetches statuses in batches of at most 100 and applies
+status-change events while open; unknown or failed status reads show an
+unavailable label.
+
 ## Current-user profile
 
 The profile page requests `GET /users/me` and
@@ -40,6 +46,13 @@ values.
 Profile mutations preserve the current profile while they run and report a
 non-blocking error on failure. Current-user profile state is not stored in
 Drift, so each page entry or process restart begins with a new server snapshot.
+On medium and expanded channel layouts, the profile avatar and presence
+indicator stay at the bottom of the left pane beneath a divider. Other desktop
+destinations show the profile control in the global header. Compact layouts
+keep the avatar in the bottom navigation. Tapping the avatar opens a menu with
+the current user, custom status text and duration, availability, Profile, and
+Log out. Do Not Disturb uses the existing expiration choices; Away and Offline
+are set without a duration. Profile remains available from the menu.
 
 ## Relevant code
 

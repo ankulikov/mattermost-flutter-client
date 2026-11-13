@@ -21,6 +21,9 @@ The controller merges pages by post ID and sorts by `create_at`, then ID.
 Closing the channel releases the snapshot. An initial failure shows retry;
 pagination failures keep the history already displayed.
 
+Channel post content is left-aligned and capped at the shared readable-content
+width on wide screens. The list and its scroll area still fill the channel pane.
+
 ## Sending and realtime changes
 
 After a successful send, the returned post is inserted into the active channel

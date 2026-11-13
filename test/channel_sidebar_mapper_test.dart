@@ -4,6 +4,119 @@ import 'package:mattermost_flutter/src/data/mappers/channel_sidebar_mapper.dart'
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
 
 void main() {
+  test('moves bot direct messages into a virtual Bots section', () {
+    final List<SidebarSection> sections = mapSections(
+      channels: const <SidebarChannel>[
+        SidebarChannel(
+          id: 'favorite-bot',
+          teamId: '',
+          name: 'me__favorite',
+          displayName: 'Favorite bot',
+          kind: ChannelKind.directMessage,
+          isBot: true,
+        ),
+        SidebarChannel(
+          id: 'bot',
+          teamId: '',
+          name: 'me__bot',
+          displayName: 'Bot',
+          kind: ChannelKind.directMessage,
+          isBot: true,
+        ),
+        SidebarChannel(
+          id: 'person',
+          teamId: '',
+          name: 'me__person',
+          displayName: 'Person',
+          kind: ChannelKind.directMessage,
+        ),
+        SidebarChannel(
+          id: 'regular',
+          teamId: 'team',
+          name: 'regular',
+          displayName: 'Regular',
+          kind: ChannelKind.publicChannel,
+        ),
+      ],
+      categories: const <MattermostChannelCategoryDto>[
+        MattermostChannelCategoryDto(
+          id: 'regular-category',
+          userId: 'me',
+          teamId: 'team',
+          type: 'custom',
+          displayName: 'Regular category',
+          sorting: 'manual',
+          channelIds: <String>['regular'],
+          muted: false,
+        ),
+        MattermostChannelCategoryDto(
+          id: 'favorites',
+          userId: 'me',
+          teamId: 'team',
+          type: 'favorites',
+          displayName: 'Favorites',
+          sorting: 'manual',
+          channelIds: <String>['favorite-bot'],
+          muted: false,
+        ),
+        MattermostChannelCategoryDto(
+          id: 'directs',
+          userId: 'me',
+          teamId: 'team',
+          type: 'direct_messages',
+          displayName: 'Direct messages',
+          sorting: 'manual',
+          channelIds: <String>['bot', 'person'],
+          muted: false,
+        ),
+      ],
+      categoryOrder: const <String>['regular-category', 'directs', 'favorites'],
+    );
+
+    expect(
+      sections.map((SidebarSection section) => section.displayName),
+      <String>['Favorites', 'Direct messages', 'Bots', 'Regular category'],
+    );
+    expect(
+      sections.map((SidebarSection section) => section.channels.single.id),
+      <String>['favorite-bot', 'person', 'bot', 'regular'],
+    );
+    expect(sections[1].role, SidebarSectionRole.directMessages);
+    expect(sections[2].role, SidebarSectionRole.bots);
+    expect(sections[2].serverCategory, isFalse);
+  });
+
+  test('groups unassigned bot DMs without moving group conversations', () {
+    final List<SidebarSection> sections = mapSections(
+      channels: const <SidebarChannel>[
+        SidebarChannel(
+          id: 'bot',
+          teamId: '',
+          name: 'me__bot',
+          displayName: 'Bot',
+          kind: ChannelKind.directMessage,
+          isBot: true,
+        ),
+        SidebarChannel(
+          id: 'group',
+          teamId: '',
+          name: 'group',
+          displayName: 'Team chat',
+          kind: ChannelKind.groupMessage,
+        ),
+      ],
+      categories: const <MattermostChannelCategoryDto>[],
+      categoryOrder: const <String>[],
+    );
+
+    expect(sections.map((section) => section.displayName), <String>[
+      'Direct messages',
+      'Bots',
+    ]);
+    expect(sections.first.channels.single.id, 'group');
+    expect(sections.last.channels.single.id, 'bot');
+  });
+
   test('uses category channel order and adds uncategorized dialogs', () {
     final List<SidebarSection> sections = mapSections(
       channels: <SidebarChannel>[
@@ -46,13 +159,13 @@ void main() {
 
     expect(
       sections.map((SidebarSection section) => section.displayName),
-      <String>['Product', 'Direct messages'],
+      <String>['Direct messages', 'Product'],
     );
     expect(
-      sections.first.channels.map((SidebarChannel channel) => channel.id),
+      sections.last.channels.map((SidebarChannel channel) => channel.id),
       <String>['channel-2', 'channel-1'],
     );
-    expect(sections.last.channels.single.id, 'direct-1');
+    expect(sections.first.channels.single.id, 'direct-1');
   });
 
   test('uses the category order returned separately by the API', () {
@@ -103,6 +216,58 @@ void main() {
       'category-1',
     ]);
   });
+
+  test(
+    'pins favorites above server order without reordering other folders',
+    () {
+      final List<SidebarSection> sections = mapSections(
+        channels: const <SidebarChannel>[
+          SidebarChannel(
+            id: 'regular',
+            teamId: 'team',
+            name: 'regular',
+            displayName: 'Regular',
+            kind: ChannelKind.publicChannel,
+          ),
+          SidebarChannel(
+            id: 'favorite',
+            teamId: 'team',
+            name: 'favorite',
+            displayName: 'Favorite',
+            kind: ChannelKind.publicChannel,
+          ),
+        ],
+        categories: const <MattermostChannelCategoryDto>[
+          MattermostChannelCategoryDto(
+            id: 'regular-category',
+            userId: 'me',
+            teamId: 'team',
+            type: 'channels',
+            displayName: 'Channels',
+            sorting: 'manual',
+            channelIds: <String>['regular'],
+            muted: false,
+          ),
+          MattermostChannelCategoryDto(
+            id: 'favorites',
+            userId: 'me',
+            teamId: 'team',
+            type: 'favorites',
+            displayName: 'Favorites',
+            sorting: 'manual',
+            channelIds: <String>['favorite'],
+            muted: false,
+          ),
+        ],
+        categoryOrder: const <String>['regular-category', 'favorites'],
+      );
+      expect(sections.map((SidebarSection section) => section.id), <String>[
+        'favorites',
+        'regular-category',
+      ]);
+      expect(sections.first.favorites, isTrue);
+    },
+  );
 
   test('maps category presentation properties and sorts recent channels', () {
     final List<SidebarSection> sections = mapSections(
@@ -268,6 +433,47 @@ void main() {
 
     expect(channel.isUnread, isTrue);
     expect(channel.muted, isTrue);
+  });
+
+  test('maps unread mentions from the matching channel counters', () {
+    const MattermostChannelDto ordinaryRaw = MattermostChannelDto(
+      id: 'channel-1',
+      teamId: 'team-1',
+      name: 'channel',
+      displayName: 'Channel',
+      type: 'O',
+      totalMessageCountRoot: 2,
+    );
+    final SidebarChannel ordinary = mapChannelMembership(
+      channel: mapChannel(ordinaryRaw),
+      rawChannel: ordinaryRaw,
+      member: const MattermostChannelMemberDto(
+        channelId: 'channel-1',
+        userId: 'me',
+        mentionCount: 0,
+        mentionCountRoot: 1,
+      ),
+    );
+    const MattermostChannelDto dialogRaw = MattermostChannelDto(
+      id: 'dm-1',
+      teamId: '',
+      name: 'me__ada',
+      displayName: 'Ada',
+      type: 'D',
+      totalMessageCount: 1,
+    );
+    final SidebarChannel dialog = mapChannelMembership(
+      channel: mapChannel(dialogRaw),
+      rawChannel: dialogRaw,
+      member: const MattermostChannelMemberDto(
+        channelId: 'dm-1',
+        userId: 'me',
+        mentionCount: 1,
+      ),
+    );
+
+    expect(ordinary.hasUnreadMention, isTrue);
+    expect(dialog.hasUnreadMention, isTrue);
   });
 
   test('keeps the team handle on a mapped channel for post permalinks', () {

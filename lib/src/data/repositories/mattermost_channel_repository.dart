@@ -17,7 +17,8 @@ final class MattermostChannelRepository
     implements
         ChannelRepository,
         ChannelSidebarRealtimeRepository,
-        ChannelSidebarCategoryRepository {
+        ChannelSidebarCategoryRepository,
+        ChannelSidebarActionsRepository {
   const MattermostChannelRepository({
     required MattermostApi api,
     required UserRepository users,
@@ -31,6 +32,8 @@ final class MattermostChannelRepository
     'channel_viewed',
     'post_unread',
     'channel_member_updated',
+    'status_change',
+    'user_updated',
   };
 
   final MattermostApi _api;
@@ -49,6 +52,111 @@ final class MattermostChannelRepository
     categoryId: categoryId,
     collapsed: collapsed,
   );
+
+  @override
+  Future<void> markChannelUnread(AuthSession session, String channelId) async {
+    final MattermostPostListDto posts = await _api.getPostsForChannel(
+      channelId: channelId,
+      perPage: 1,
+    );
+    if (posts.order.isEmpty) throw StateError('Channel has no posts');
+    await _api.markPostUnread(
+      userId: session.userId,
+      postId: posts.order.first,
+    );
+  }
+
+  @override
+  Future<List<SidebarSection>> getMovableCategories(
+    AuthSession session,
+    String teamId,
+  ) async {
+    final MattermostChannelCategoriesDto response = await _api
+        .getChannelCategories(userId: session.userId, teamId: teamId);
+    return <SidebarSection>[
+      for (final MattermostChannelCategoryDto category in response.categories)
+        SidebarSection(
+          id: category.id,
+          displayName: categoryDisplayName(category),
+          channels: const <SidebarChannel>[],
+          serverCategory: true,
+          favorites: category.type == 'favorites',
+        ),
+    ];
+  }
+
+  @override
+  Future<void> setChannelFavorite(
+    AuthSession session,
+    String teamId,
+    SidebarChannel channel,
+    bool favorite,
+  ) async {
+    final MattermostChannelCategoriesDto categories = await _api
+        .getChannelCategories(userId: session.userId, teamId: teamId);
+    final String type = favorite
+        ? 'favorites'
+        : channel.isDialog
+        ? 'direct_messages'
+        : 'channels';
+    final MattermostChannelCategoryDto category = categories.categories
+        .firstWhere(
+          (MattermostChannelCategoryDto value) => value.type == type,
+          orElse: () => throw StateError('Sidebar category not found: $type'),
+        );
+    await moveChannelToCategory(session, teamId, channel.id, category.id);
+  }
+
+  @override
+  Future<void> setChannelMuted(
+    AuthSession session,
+    String channelId,
+    bool muted,
+  ) => _api.setChannelNotificationsMuted(
+    userId: session.userId,
+    channelId: channelId,
+    muted: muted,
+  );
+
+  @override
+  Future<void> moveChannelToCategory(
+    AuthSession session,
+    String teamId,
+    String channelId,
+    String categoryId,
+  ) => _api.moveChannelToSidebarCategory(
+    userId: session.userId,
+    teamId: teamId,
+    channelId: channelId,
+    categoryId: categoryId,
+  );
+
+  @override
+  Future<void> closeConversation(
+    AuthSession session,
+    SidebarChannel channel,
+  ) async {
+    if (!channel.isDialog) throw ArgumentError.value(channel.kind, 'kind');
+    await _api.savePreferences(
+      userId: session.userId,
+      preferences: <MattermostPreferenceDto>[
+        MattermostPreferenceDto(
+          userId: session.userId,
+          category: channel.kind == ChannelKind.directMessage
+              ? 'direct_channel_show'
+              : 'group_channel_show',
+          name: channel.id,
+          value: 'false',
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> leaveChannel(AuthSession session, SidebarChannel channel) {
+    if (channel.isDialog) throw ArgumentError.value(channel.kind, 'kind');
+    return _api.leaveChannel(channelId: channel.id, userId: session.userId);
+  }
 
   @override
   Future<ChannelSidebarSnapshot> load(AuthSession session) async {
@@ -70,12 +178,37 @@ final class MattermostChannelRepository
       categoriesFuture,
       membershipsFuture,
     ).wait;
+    final Set<String> hiddenDialogs = <String>{};
+    for (final String preferenceCategory in <String>[
+      'direct_channel_show',
+      'group_channel_show',
+    ]) {
+      try {
+        final List<MattermostPreferenceDto> preferences = await _api
+            .getPreferencesByCategory(
+              userId: session.userId,
+              category: preferenceCategory,
+            );
+        hiddenDialogs.addAll(
+          preferences
+              .where((MattermostPreferenceDto value) => value.value == 'false')
+              .map((MattermostPreferenceDto value) => value.name),
+        );
+      } on UnimplementedError {
+        // Older test transports do not expose user preferences.
+      }
+    }
     final Map<String, MattermostChannelMemberDto> membershipsByChannel =
         <String, MattermostChannelMemberDto>{
           for (final MattermostChannelMemberDto member in memberships)
             member.channelId: member,
         };
     List<SidebarChannel> channels = rawChannels
+        .where(
+          (MattermostChannelDto channel) =>
+              (channel.type != 'D' && channel.type != 'G') ||
+              !hiddenDialogs.contains(channel.id),
+        )
         .map((MattermostChannelDto rawChannel) {
           final SidebarChannel channel = mapChannel(
             rawChannel,
@@ -118,6 +251,17 @@ final class MattermostChannelRepository
     final MattermostChannelDto dto = await _api.createDirectChannel(
       currentUserId: currentUserId,
       otherUserId: otherUserId,
+    );
+    await _api.savePreferences(
+      userId: currentUserId,
+      preferences: <MattermostPreferenceDto>[
+        MattermostPreferenceDto(
+          userId: currentUserId,
+          category: 'direct_channel_show',
+          name: dto.id,
+          value: 'true',
+        ),
+      ],
     );
     return mapChannel(dto).withDisplayName(otherUserDisplayName);
   }
@@ -173,9 +317,19 @@ final class MattermostChannelRepository
           return const ChannelSidebarRefreshRequired();
         }
         if (post.userId == session.userId) return null;
+        Object? mentions = event.data['mentions'];
+        if (mentions is String) {
+          try {
+            mentions = jsonDecode(mentions);
+          } on FormatException {
+            mentions = null;
+          }
+        }
         return ChannelSidebarMessagePosted(
           channelId: post.channelId,
           isThreadReply: post.rootId.isNotEmpty,
+          mentionsCurrentUser:
+              mentions is List<Object?> && mentions.contains(session.userId),
         );
       case 'channel_viewed':
         final String channelId = _eventChannelId(event);
@@ -190,10 +344,20 @@ final class MattermostChannelRepository
         return channelId.isEmpty
             ? const ChannelSidebarRefreshRequired()
             : ChannelSidebarUnreadChanged(channelId: channelId, isUnread: true);
+      case 'status_change':
+        final Object? userId = event.data['user_id'];
+        final Object? status = event.data['status'];
+        final UserPresence? presence = status is String
+            ? mapUserPresence(status)
+            : null;
+        return userId is String && userId.isNotEmpty && presence != null
+            ? ChannelSidebarPresenceChanged(userId: userId, presence: presence)
+            : const ChannelSidebarRefreshRequired();
       case 'sidebar_category_updated':
       case 'sidebar_category_created':
       case 'sidebar_category_deleted':
       case 'channel_member_updated':
+      case 'user_updated':
         return const ChannelSidebarRefreshRequired();
       default:
         return null;
@@ -248,6 +412,7 @@ final class MattermostChannelRepository
         .toSet();
     final Future<List<UserSummary>> directUsersFuture = users.getUsers(
       directUserIds.toList(growable: false),
+      freshness: UserFreshness.fresh,
     );
     final Future<MattermostGroupChannelUsersDto> groupUsersFuture = api
         .getUsersForGroupChannels(
@@ -262,10 +427,28 @@ final class MattermostChannelRepository
         if (user.id.isNotEmpty) user.id: user,
     };
 
+    final Map<String, UserPresence> directPresenceById =
+        <String, UserPresence>{};
+    if (directUserIds.isNotEmpty) {
+      try {
+        final List<MattermostUserStatusDto> statuses = await api
+            .getUserStatusesByIds(directUserIds.toList(growable: false));
+        for (final MattermostUserStatusDto status in statuses) {
+          final UserPresence? presence = mapUserPresence(status.status);
+          if (directUserIds.contains(status.userId) && presence != null) {
+            directPresenceById[status.userId] = presence;
+          }
+        }
+      } on Object {
+        // Status is optional; keep direct conversations available.
+      }
+    }
+
     return resolveDialogDisplayNames(
       channels: channels,
       currentUserId: currentUserId,
       directUsersById: directUsersById,
+      directPresenceById: directPresenceById,
       groupUsersByChannelId: groupUsers.usersByChannelId.map(
         (String channelId, List<MattermostUserDto> users) =>
             MapEntry<String, List<UserSummary>>(

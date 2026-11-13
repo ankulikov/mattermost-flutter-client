@@ -8,6 +8,7 @@ import 'package:mattermost_flutter/src/domain/models/post_navigation.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
+import 'package:mattermost_flutter/src/domain/repositories/sidebar_view_preferences_repository.dart';
 import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
@@ -45,6 +46,20 @@ final Provider<AuthSession?> authSessionProvider = Provider<AuthSession?>((
     authControllerProvider.select((AuthState state) => state.session),
   );
 });
+
+final sidebarViewPreferencesProvider =
+    FutureProvider.family<SidebarViewPreferences, String>((
+      Ref ref,
+      String accountScopeId,
+    ) async {
+      try {
+        return await ref
+            .watch(sidebarViewPreferencesRepositoryProvider)
+            .read(accountScopeId);
+      } on Object {
+        return const SidebarViewPreferences();
+      }
+    });
 
 /// Keeps the session-owned realtime service alive independently of open tabs.
 final StreamProvider<RealtimeConnectionStatus>

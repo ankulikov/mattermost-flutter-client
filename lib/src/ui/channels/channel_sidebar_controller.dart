@@ -171,12 +171,95 @@ final class ChannelSidebarController
             muted: section.muted,
             sorting: section.sorting,
             serverCategory: section.serverCategory,
+            favorites: section.favorites,
+            role: section.role,
           );
         })
         .toList(growable: false);
     state = AsyncData(
       current.copyWith(snapshot: current.snapshot.copyWith(sections: sections)),
     );
+  }
+
+  Future<void> markChannelUnread(String channelId) => _runChannelAction(
+    (ChannelSidebarActionsRepository repository, AuthSession session) =>
+        repository.markChannelUnread(session, channelId),
+  );
+
+  Future<List<SidebarSection>> getMovableCategories() async {
+    final AuthSession? session = _session;
+    final ChannelRepository? repository = _repository;
+    final String? teamId = state.value?.snapshot.team?.id;
+    if (session == null ||
+        teamId == null ||
+        repository is! ChannelSidebarActionsRepository) {
+      throw StateError('Channel actions are unavailable');
+    }
+    return _cancellation.run(
+      () => (repository as ChannelSidebarActionsRepository)
+          .getMovableCategories(session, teamId),
+    );
+  }
+
+  Future<void> setChannelFavorite(SidebarChannel channel, bool favorite) {
+    final String teamId = state.value?.snapshot.team?.id ?? '';
+    return _runChannelAction(
+      (ChannelSidebarActionsRepository repository, AuthSession session) =>
+          repository.setChannelFavorite(session, teamId, channel, favorite),
+    );
+  }
+
+  Future<void> setChannelMuted(String channelId, bool muted) =>
+      _runChannelAction(
+        (ChannelSidebarActionsRepository repository, AuthSession session) =>
+            repository.setChannelMuted(session, channelId, muted),
+      );
+
+  Future<void> moveChannelToCategory(String channelId, String categoryId) {
+    final String teamId = state.value?.snapshot.team?.id ?? '';
+    return _runChannelAction(
+      (ChannelSidebarActionsRepository repository, AuthSession session) =>
+          repository.moveChannelToCategory(
+            session,
+            teamId,
+            channelId,
+            categoryId,
+          ),
+    );
+  }
+
+  Future<void> closeConversation(SidebarChannel channel) async {
+    await _runChannelAction(
+      (ChannelSidebarActionsRepository repository, AuthSession session) =>
+          repository.closeConversation(session, channel),
+    );
+    if (ref.read(selectedChannelProvider)?.id == channel.id) {
+      ref.read(selectedChannelProvider.notifier).clear();
+    }
+  }
+
+  Future<void> leaveChannel(SidebarChannel channel) async {
+    await _runChannelAction(
+      (ChannelSidebarActionsRepository repository, AuthSession session) =>
+          repository.leaveChannel(session, channel),
+    );
+    if (ref.read(selectedChannelProvider)?.id == channel.id) {
+      ref.read(selectedChannelProvider.notifier).clear();
+    }
+  }
+
+  Future<void> _runChannelAction(
+    Future<void> Function(ChannelSidebarActionsRepository, AuthSession) action,
+  ) async {
+    final AuthSession? session = _session;
+    final ChannelRepository? repository = _repository;
+    if (session == null || repository is! ChannelSidebarActionsRepository) {
+      throw StateError('Channel actions are unavailable');
+    }
+    await _cancellation.run(
+      () => action(repository as ChannelSidebarActionsRepository, session),
+    );
+    await refresh();
   }
 
   Future<void> openDirectMessage(UserProfile profile) async {
@@ -271,9 +354,12 @@ final class ChannelSidebarController
           _recoveryPending = true;
         case ChannelSidebarUnreadChanged(:final channelId, :final isUnread):
           snapshot = _withUnread(snapshot, channelId, isUnread);
+        case ChannelSidebarPresenceChanged(:final userId, :final presence):
+          snapshot = _withPresence(snapshot, userId, presence);
         case ChannelSidebarMessagePosted(
           :final channelId,
           :final isThreadReply,
+          :final mentionsCurrentUser,
         ):
           final SidebarChannel? channel = _findChannel(snapshot, channelId);
           if (channel == null) {
@@ -284,7 +370,12 @@ final class ChannelSidebarController
           if (selectedId == channelId) {
             unawaited(_markChannelViewed(channelId));
           } else if (!isThreadReply || channel.isDialog) {
-            snapshot = _withUnread(snapshot, channelId, true);
+            snapshot = _withUnread(
+              snapshot,
+              channelId,
+              true,
+              hasUnreadMention: mentionsCurrentUser ? true : null,
+            );
           }
       }
     }
@@ -306,20 +397,29 @@ final class ChannelSidebarController
   ChannelSidebarSnapshot _withUnread(
     ChannelSidebarSnapshot snapshot,
     String channelId,
-    bool isUnread,
-  ) {
+    bool isUnread, {
+    bool? hasUnreadMention,
+  }) {
     var changed = false;
     final List<SidebarSection> sections = snapshot.sections
         .map((section) {
           var sectionChanged = false;
           final List<SidebarChannel> channels = section.channels
               .map((channel) {
-                if (channel.id != channelId || channel.isUnread == isUnread) {
+                final bool mention = isUnread
+                    ? hasUnreadMention ?? channel.hasUnreadMention
+                    : false;
+                if (channel.id != channelId ||
+                    (channel.isUnread == isUnread &&
+                        channel.hasUnreadMention == mention)) {
                   return channel;
                 }
                 changed = true;
                 sectionChanged = true;
-                return channel.copyWith(isUnread: isUnread);
+                return channel.copyWith(
+                  isUnread: isUnread,
+                  hasUnreadMention: mention,
+                );
               })
               .toList(growable: false);
           if (!sectionChanged) return section;
@@ -329,8 +429,48 @@ final class ChannelSidebarController
             channels: channels,
             collapsed: section.collapsed,
             serverCategory: section.serverCategory,
+            favorites: section.favorites,
+            role: section.role,
             muted: section.muted,
             sorting: section.sorting,
+          );
+        })
+        .toList(growable: false);
+    return changed ? snapshot.copyWith(sections: sections) : snapshot;
+  }
+
+  ChannelSidebarSnapshot _withPresence(
+    ChannelSidebarSnapshot snapshot,
+    String userId,
+    UserPresence presence,
+  ) {
+    var changed = false;
+    final List<SidebarSection> sections = snapshot.sections
+        .map((section) {
+          var sectionChanged = false;
+          final List<SidebarChannel> channels = section.channels
+              .map((channel) {
+                if (channel.kind != ChannelKind.directMessage ||
+                    channel.profileImage?.userId != userId ||
+                    channel.presence == presence) {
+                  return channel;
+                }
+                changed = true;
+                sectionChanged = true;
+                return channel.copyWith(presence: presence);
+              })
+              .toList(growable: false);
+          if (!sectionChanged) return section;
+          return SidebarSection(
+            id: section.id,
+            displayName: section.displayName,
+            channels: channels,
+            collapsed: section.collapsed,
+            muted: section.muted,
+            sorting: section.sorting,
+            serverCategory: section.serverCategory,
+            favorites: section.favorites,
+            role: section.role,
           );
         })
         .toList(growable: false);

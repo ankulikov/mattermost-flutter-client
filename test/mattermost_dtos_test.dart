@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
 
 void main() {
   test('parses autocomplete users and leaves optional sections absent', () {
@@ -59,7 +60,34 @@ void main() {
 
     expect(person.profileImageUpdatedAt, 123);
     expect(bot.profileImageUpdatedAt, 456);
+    expect(mapUserSummary(bot).isBot, isTrue);
   });
+
+  test(
+    'keeps an active custom status from user props without expired values',
+    () {
+      MattermostUserDto userWithStatus(String value) =>
+          MattermostUserDto.fromJson(<String, Object?>{
+            'id': 'ada',
+            'username': 'ada',
+            'props': <String, Object?>{'customStatus': value},
+          });
+
+      final active = mapUserSummary(
+        userWithStatus('{"emoji":"calendar","text":"In a meeting"}'),
+      );
+      final expired = mapUserSummary(
+        userWithStatus(
+          '{"emoji":"calendar","text":"Old",'
+          '"expires_at":"2000-01-01T00:00:00Z"}',
+        ),
+      );
+
+      expect(active.customStatus?.emoji, 'calendar');
+      expect(active.customStatus?.text, 'In a meeting');
+      expect(expired.customStatus, isNull);
+    },
+  );
 
   test('decodes channel categories with their separate order', () {
     final MattermostChannelCategoriesDto result =

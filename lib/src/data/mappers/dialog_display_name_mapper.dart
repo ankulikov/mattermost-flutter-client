@@ -10,6 +10,7 @@ List<SidebarChannel> resolveDialogDisplayNames({
   required Iterable<SidebarChannel> channels,
   required String currentUserId,
   required Map<String, UserSummary> directUsersById,
+  Map<String, UserPresence> directPresenceById = const <String, UserPresence>{},
   required Map<String, List<UserSummary>> groupUsersByChannelId,
 }) => channels
     .map((SidebarChannel channel) {
@@ -25,6 +26,11 @@ List<SidebarChannel> resolveDialogDisplayNames({
                 displayName: participant.fullName,
                 userId: participant.id,
                 profileImageUpdatedAt: participant.profileImageUpdatedAt,
+                isBot: participant.isBot == true,
+                presence: directPresenceById[participant.id],
+                customStatus: participant.isBot == true
+                    ? null
+                    : participant.customStatus,
               );
       }
       if (channel.kind == ChannelKind.groupMessage) {

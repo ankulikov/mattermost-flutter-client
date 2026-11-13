@@ -1,6 +1,10 @@
+import 'package:mattermost_flutter/src/domain/models/user.dart';
+
 enum ChannelKind { publicChannel, privateChannel, directMessage, groupMessage }
 
 enum ChannelSorting { manual, recent }
+
+enum SidebarSectionRole { other, directMessages, bots }
 
 final class SidebarTeam {
   const SidebarTeam({
@@ -26,7 +30,11 @@ final class SidebarChannel {
     this.teamName = '',
     this.lastActivityAt = 0,
     this.profileImage,
+    this.presence,
+    this.customStatus,
+    this.isBot = false,
     this.isUnread = false,
+    this.hasUnreadMention = false,
     this.muted = false,
   });
 
@@ -40,7 +48,11 @@ final class SidebarChannel {
   final String teamName;
   final int lastActivityAt;
   final SidebarProfileImage? profileImage;
+  final UserPresence? presence;
+  final UserCustomStatus? customStatus;
+  final bool isBot;
   final bool isUnread;
+  final bool hasUnreadMention;
   final bool muted;
 
   bool get isDialog =>
@@ -55,7 +67,11 @@ final class SidebarChannel {
     teamName: teamName,
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
+    presence: presence,
+    customStatus: customStatus,
+    isBot: isBot,
     isUnread: isUnread,
+    hasUnreadMention: hasUnreadMention,
     muted: muted,
   );
 
@@ -63,6 +79,9 @@ final class SidebarChannel {
     required String displayName,
     required String userId,
     required int profileImageUpdatedAt,
+    bool isBot = false,
+    UserPresence? presence,
+    UserCustomStatus? customStatus,
   }) => SidebarChannel(
     id: id,
     teamId: teamId,
@@ -75,11 +94,20 @@ final class SidebarChannel {
       userId: userId,
       updatedAt: profileImageUpdatedAt,
     ),
+    presence: presence,
+    customStatus: customStatus,
+    isBot: isBot,
     isUnread: isUnread,
+    hasUnreadMention: hasUnreadMention,
     muted: muted,
   );
 
-  SidebarChannel copyWith({bool? isUnread, bool? muted}) => SidebarChannel(
+  SidebarChannel copyWith({
+    bool? isUnread,
+    bool? hasUnreadMention,
+    bool? muted,
+    UserPresence? presence,
+  }) => SidebarChannel(
     id: id,
     teamId: teamId,
     name: name,
@@ -88,7 +116,11 @@ final class SidebarChannel {
     teamName: teamName,
     lastActivityAt: lastActivityAt,
     profileImage: profileImage,
+    presence: presence ?? this.presence,
+    customStatus: customStatus,
+    isBot: isBot,
     isUnread: isUnread ?? this.isUnread,
+    hasUnreadMention: hasUnreadMention ?? this.hasUnreadMention,
     muted: muted ?? this.muted,
   );
 }
@@ -113,6 +145,8 @@ final class SidebarSection {
     this.muted = false,
     this.sorting = ChannelSorting.manual,
     this.serverCategory = false,
+    this.favorites = false,
+    this.role = SidebarSectionRole.other,
   });
 
   final String id;
@@ -122,6 +156,8 @@ final class SidebarSection {
   final bool muted;
   final ChannelSorting sorting;
   final bool serverCategory;
+  final bool favorites;
+  final SidebarSectionRole role;
 }
 
 final class ChannelSidebarSnapshot {

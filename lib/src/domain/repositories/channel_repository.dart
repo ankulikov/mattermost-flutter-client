@@ -1,5 +1,6 @@
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
 
 /// Owns channel navigation and direct-message channel operations.
 abstract interface class ChannelRepository {
@@ -19,6 +20,39 @@ abstract interface class ChannelSidebarCategoryRepository {
     required String categoryId,
     required bool collapsed,
   });
+}
+
+abstract interface class ChannelSidebarActionsRepository {
+  Future<List<SidebarSection>> getMovableCategories(
+    AuthSession session,
+    String teamId,
+  );
+
+  Future<void> markChannelUnread(AuthSession session, String channelId);
+
+  Future<void> setChannelFavorite(
+    AuthSession session,
+    String teamId,
+    SidebarChannel channel,
+    bool favorite,
+  );
+
+  Future<void> setChannelMuted(
+    AuthSession session,
+    String channelId,
+    bool muted,
+  );
+
+  Future<void> moveChannelToCategory(
+    AuthSession session,
+    String teamId,
+    String channelId,
+    String categoryId,
+  );
+
+  Future<void> closeConversation(AuthSession session, SidebarChannel channel);
+
+  Future<void> leaveChannel(AuthSession session, SidebarChannel channel);
 }
 
 /// Optional realtime capability for a channel sidebar repository.
@@ -47,10 +81,12 @@ final class ChannelSidebarMessagePosted extends ChannelSidebarRealtimeEvent {
   const ChannelSidebarMessagePosted({
     required this.channelId,
     required this.isThreadReply,
+    this.mentionsCurrentUser = false,
   });
 
   final String channelId;
   final bool isThreadReply;
+  final bool mentionsCurrentUser;
 }
 
 /// An authoritative read/unread transition broadcast by Mattermost.
@@ -62,6 +98,16 @@ final class ChannelSidebarUnreadChanged extends ChannelSidebarRealtimeEvent {
 
   final String channelId;
   final bool isUnread;
+}
+
+final class ChannelSidebarPresenceChanged extends ChannelSidebarRealtimeEvent {
+  const ChannelSidebarPresenceChanged({
+    required this.userId,
+    required this.presence,
+  });
+
+  final String userId;
+  final UserPresence presence;
 }
 
 /// The volatile sidebar snapshot must be reconciled from REST.

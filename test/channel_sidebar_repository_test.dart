@@ -1,13 +1,113 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/realtime/session_realtime_service.dart';
+import 'package:mattermost_flutter/src/data/realtime/websocket_gateway.dart';
 import 'package:mattermost_flutter/src/data/repositories/mattermost_channel_repository.dart';
+import 'package:mattermost_flutter/src/data/storage/credential_store.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/domain/models/user.dart';
+import 'package:mattermost_flutter/src/domain/repositories/channel_repository.dart';
 
 import 'support/fake_user_repository.dart';
 
 void main() {
+  test('loads direct-user bot identity and current presence', () async {
+    final _FakeMattermostApi api = _FakeMattermostApi();
+    final MattermostChannelRepository repository = MattermostChannelRepository(
+      api: api,
+      users: FakeUserRepository(
+        users: const <String, UserSummary>{
+          'ada': UserSummary(
+            id: 'ada',
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            username: 'ada',
+            nickname: '',
+            position: '',
+            email: '',
+            isBot: true,
+          ),
+        },
+      ),
+    );
+
+    final ChannelSidebarSnapshot snapshot = await repository.load(
+      AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      ),
+    );
+    final SidebarChannel direct = snapshot.sections.first.channels.first;
+    expect(direct.isBot, isTrue);
+    expect(direct.presence, UserPresence.away);
+    expect(api.requestedStatusIds, <String>['ada']);
+  });
+
+  test(
+    'keeps a human direct participant custom status in the sidebar',
+    () async {
+      final MattermostChannelRepository repository =
+          MattermostChannelRepository(
+            api: _FakeMattermostApi(),
+            users: FakeUserRepository(
+              users: const <String, UserSummary>{
+                'ada': UserSummary(
+                  id: 'ada',
+                  firstName: 'Ada',
+                  lastName: 'Lovelace',
+                  username: 'ada',
+                  nickname: '',
+                  position: '',
+                  email: '',
+                  customStatus: UserCustomStatus(
+                    emoji: 'calendar',
+                    text: 'In a meeting',
+                  ),
+                ),
+              },
+            ),
+          );
+
+      final ChannelSidebarSnapshot snapshot = await repository.load(
+        AuthSession(
+          serverUrl: Uri.parse('https://chat.example.com'),
+          userId: 'me',
+          username: 'current',
+        ),
+      );
+
+      expect(
+        snapshot.sections.first.channels.first.customStatus?.text,
+        'In a meeting',
+      );
+    },
+  );
+
+  test('keeps direct users when status loading fails', () async {
+    final _FakeMattermostApi api = _FakeMattermostApi()..failStatuses = true;
+    final MattermostChannelRepository repository = MattermostChannelRepository(
+      api: api,
+      users: FakeUserRepository(),
+    );
+
+    final ChannelSidebarSnapshot snapshot = await repository.load(
+      AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      ),
+    );
+
+    expect(snapshot.sections.first.channels.first.displayName, 'Ada Lovelace');
+    expect(snapshot.sections.first.channels.first.presence, isNull);
+  });
+
   test(
     'loads team first, groups channels, and resolves direct names',
     () async {
@@ -50,9 +150,244 @@ void main() {
       expect(snapshot.sections.first.channels.first.muted, isFalse);
     },
   );
+
+  test(
+    'channel actions use posts, notifications, and server categories',
+    () async {
+      final _FakeMattermostApi api = _FakeMattermostApi();
+      final MattermostChannelRepository repository =
+          MattermostChannelRepository(api: api, users: FakeUserRepository());
+      final AuthSession session = AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      );
+      await repository.markChannelUnread(session, 'town-square');
+      expect(api.unreadPostId, 'post-1');
+
+      await repository.setChannelMuted(session, 'town-square', true);
+      expect(api.mutedChannelId, 'town-square');
+
+      await repository.setChannelFavorite(
+        session,
+        'team-1',
+        const SidebarChannel(
+          id: 'town-square',
+          teamId: 'team-1',
+          name: 'town-square',
+          displayName: 'Town Square',
+          kind: ChannelKind.publicChannel,
+        ),
+        true,
+      );
+      expect(api.movedCategoryId, 'favorites');
+    },
+  );
+
+  test(
+    'closing a direct conversation persists and hides it on reload',
+    () async {
+      final _FakeMattermostApi api = _FakeMattermostApi();
+      final MattermostChannelRepository repository =
+          MattermostChannelRepository(api: api, users: FakeUserRepository());
+      final AuthSession session = AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      );
+      final SidebarChannel direct = (await repository.load(
+        session,
+      )).sections.first.channels.first;
+      await repository.closeConversation(session, direct);
+      expect(api.savedPreferences.single.category, 'direct_channel_show');
+      expect(api.savedPreferences.single.value, 'false');
+      final ChannelSidebarSnapshot reloaded = await repository.load(session);
+      expect(
+        reloaded.sections
+            .expand((SidebarSection section) => section.channels)
+            .any((SidebarChannel channel) => channel.id == direct.id),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'leaving a channel removes its membership for the signed-in user',
+    () async {
+      final _FakeMattermostApi api = _FakeMattermostApi();
+      final MattermostChannelRepository repository =
+          MattermostChannelRepository(api: api, users: FakeUserRepository());
+      final AuthSession session = AuthSession(
+        serverUrl: Uri.parse('https://chat.example.com'),
+        userId: 'me',
+        username: 'current',
+      );
+
+      await repository.leaveChannel(
+        session,
+        const SidebarChannel(
+          id: 'project',
+          teamId: 'team-1',
+          name: 'project',
+          displayName: 'Project',
+          kind: ChannelKind.publicChannel,
+        ),
+      );
+
+      expect(api.leftChannelId, 'project');
+      expect(api.leftUserId, 'me');
+    },
+  );
+
+  test('maps posted mentions and direct-user presence events', () async {
+    final AuthSession session = AuthSession(
+      serverUrl: Uri.parse('https://chat.example.com'),
+      userId: 'me',
+      username: 'current',
+    );
+    final _SidebarGateway gateway = _SidebarGateway();
+    final SessionRealtimeService realtime = SessionRealtimeService(
+      gateway: gateway,
+      credentialStore: _SidebarCredentials(session.serverUrl),
+    );
+    final MattermostChannelRepository repository = MattermostChannelRepository(
+      api: _FakeMattermostApi(),
+      users: FakeUserRepository(),
+      realtime: realtime,
+    );
+    final List<ChannelSidebarRealtimeEvent> events =
+        <ChannelSidebarRealtimeEvent>[];
+    final StreamSubscription<ChannelSidebarRealtimeEvent> subscription =
+        repository.watchSidebar(session: session).listen(events.add);
+    addTearDown(() async {
+      await subscription.cancel();
+      await realtime.dispose();
+      await gateway.close();
+    });
+    for (var attempt = 0; !gateway.started && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(gateway.started, isTrue);
+
+    gateway.add(
+      WebSocketEventSignal(
+        MattermostWebSocketEvent(
+          name: 'posted',
+          sequence: 1,
+          data: <String, Object?>{
+            'post': jsonEncode(<String, Object?>{
+              'id': 'post-1',
+              'user_id': 'other',
+              'channel_id': 'channel-1',
+              'message': '@current hello',
+            }),
+            'mentions': '["me"]',
+          },
+          broadcast: const <String, Object?>{'channel_id': 'channel-1'},
+        ),
+      ),
+    );
+    for (var attempt = 0; events.isEmpty && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(events.single, isA<ChannelSidebarMessagePosted>());
+    expect(
+      (events.single as ChannelSidebarMessagePosted).mentionsCurrentUser,
+      isTrue,
+    );
+
+    events.clear();
+    gateway.add(
+      const WebSocketEventSignal(
+        MattermostWebSocketEvent(
+          name: 'status_change',
+          sequence: 2,
+          data: <String, Object?>{'user_id': 'ada', 'status': 'dnd'},
+          broadcast: <String, Object?>{},
+        ),
+      ),
+    );
+    for (var attempt = 0; events.isEmpty && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(events.single, isA<ChannelSidebarPresenceChanged>());
+    expect(
+      (events.single as ChannelSidebarPresenceChanged).presence,
+      UserPresence.doNotDisturb,
+    );
+
+    events.clear();
+    gateway.add(
+      const WebSocketEventSignal(
+        MattermostWebSocketEvent(
+          name: 'user_updated',
+          sequence: 3,
+          data: <String, Object?>{'user': '{"id":"ada"}'},
+          broadcast: <String, Object?>{},
+        ),
+      ),
+    );
+    for (var attempt = 0; events.isEmpty && attempt < 100; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(events.single, isA<ChannelSidebarRefreshRequired>());
+  });
 }
 
 final class _FakeMattermostApi implements MattermostApi {
+  List<String>? requestedStatusIds;
+  bool failStatuses = false;
+  String? unreadPostId;
+  String? mutedChannelId;
+  String? movedCategoryId;
+  String? leftChannelId;
+  String? leftUserId;
+  final List<MattermostPreferenceDto> savedPreferences =
+      <MattermostPreferenceDto>[];
+
+  @override
+  Future<void> markPostUnread({
+    required String userId,
+    required String postId,
+  }) async => unreadPostId = postId;
+
+  @override
+  Future<void> setChannelNotificationsMuted({
+    required String userId,
+    required String channelId,
+    required bool muted,
+  }) async => mutedChannelId = channelId;
+
+  @override
+  Future<void> moveChannelToSidebarCategory({
+    required String userId,
+    required String teamId,
+    required String channelId,
+    required String categoryId,
+  }) async => movedCategoryId = categoryId;
+
+  @override
+  Future<void> leaveChannel({
+    required String channelId,
+    required String userId,
+  }) async {
+    leftChannelId = channelId;
+    leftUserId = userId;
+  }
+
+  @override
+  Future<void> savePreferences({
+    required String userId,
+    required List<MattermostPreferenceDto> preferences,
+  }) async => savedPreferences.addAll(preferences);
+
+  @override
+  Future<List<MattermostPreferenceDto>> getPreferencesByCategory({
+    required String userId,
+    required String category,
+  }) async => savedPreferences
+      .where((MattermostPreferenceDto value) => value.category == category)
+      .toList(growable: false);
   @override
   Future<List<MattermostUserDto>> getUsersByUsernames(List<String> usernames) =>
       throw UnimplementedError();
@@ -80,6 +415,17 @@ final class _FakeMattermostApi implements MattermostApi {
   @override
   Future<MattermostUserStatusDto> getUserStatus(String userId) =>
       throw UnimplementedError();
+
+  @override
+  Future<List<MattermostUserStatusDto>> getUserStatusesByIds(
+    List<String> userIds,
+  ) async {
+    requestedStatusIds = userIds;
+    if (failStatuses) throw StateError('statuses unavailable');
+    return const <MattermostUserStatusDto>[
+      MattermostUserStatusDto(userId: 'ada', status: 'away'),
+    ];
+  }
 
   @override
   Future<MattermostUserDto> getUserById(String userId) =>
@@ -162,6 +508,16 @@ final class _FakeMattermostApi implements MattermostApi {
           channelIds: <String>['direct-1', 'town-square'],
           muted: false,
         ),
+        MattermostChannelCategoryDto(
+          id: 'favorites',
+          userId: 'me',
+          teamId: 'team-1',
+          type: 'favorites',
+          displayName: 'Favorites',
+          sorting: 'manual',
+          channelIds: <String>[],
+          muted: false,
+        ),
       ],
       order: <String>['category-1'],
     );
@@ -219,7 +575,13 @@ final class _FakeMattermostApi implements MattermostApi {
     int page = 0,
     int perPage = 60,
     String? etag,
-  }) => throw UnimplementedError();
+  }) async => const MattermostPostListDto(
+    order: <String>['post-1'],
+    posts: <String, MattermostPostDto>{},
+    nextPostId: '',
+    previousPostId: '',
+    hasNext: false,
+  );
 
   @override
   Future<MattermostPostListDto> getPostsBefore({
@@ -272,4 +634,41 @@ final class _FakeMattermostApi implements MattermostApi {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _SidebarCredentials implements CredentialStore {
+  const _SidebarCredentials(this.serverUrl);
+
+  final Uri serverUrl;
+
+  @override
+  Future<({Uri serverUrl, String token})?> read() async =>
+      (serverUrl: serverUrl, token: 'test-token');
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<void> save({required Uri serverUrl, required String token}) async {}
+}
+
+final class _SidebarGateway implements WebSocketGateway {
+  final StreamController<WebSocketGatewaySignal> _signals =
+      StreamController<WebSocketGatewaySignal>();
+  bool started = false;
+
+  @override
+  Stream<WebSocketGatewaySignal> watch({
+    required Uri serverUrl,
+    required String token,
+    required bool Function(String eventName) acceptsEvent,
+    required bool Function(String channelId) acceptsChannel,
+  }) {
+    started = true;
+    return _signals.stream;
+  }
+
+  void add(WebSocketGatewaySignal signal) => _signals.add(signal);
+
+  Future<void> close() => _signals.close();
 }

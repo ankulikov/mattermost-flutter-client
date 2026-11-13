@@ -9,6 +9,38 @@ import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 
 void main() {
+  test('loads direct-user statuses in one request', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '[{"user_id":"ada","status":"online"},'
+          '{"user_id":"grace","status":"dnd"}]',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final List<MattermostUserStatusDto> statuses = await DioMattermostApi(
+      dio: dio,
+    ).getUserStatusesByIds(<String>['ada', 'grace']);
+
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/users/status/ids');
+    expect(adapter.request?.data, '["ada","grace"]');
+    expect(statuses.map((status) => status.status), <String>['online', 'dnd']);
+  });
+
+  test('bounds direct-user status requests to 100 IDs', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(body: '[]');
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    final List<String> ids = List<String>.generate(101, (int i) => 'user-$i');
+
+    await DioMattermostApi(dio: dio).getUserStatusesByIds(ids);
+
+    expect(adapter.requests, hasLength(2));
+    expect((adapter.requests.first.data as String).split(',').length, 100);
+    expect(adapter.requests.last.data, '["user-100"]');
+  });
+
   test('updates category collapse while preserving category fields', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:
@@ -33,6 +65,92 @@ void main() {
       'channel_ids': <String>['a', 'b'],
       'sorting': 'recent',
     });
+  });
+
+  test('moves a channel while preserving both category objects', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body:
+          '{"categories":['
+          '{"id":"old","channel_ids":["a","b"],"sorting":"recent"},'
+          '{"id":"new","channel_ids":["c"],"collapsed":true}]}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    await DioMattermostApi(dio: dio).moveChannelToSidebarCategory(
+      userId: 'user',
+      teamId: 'team',
+      channelId: 'b',
+      categoryId: 'new',
+    );
+
+    expect(adapter.request?.method, 'PUT');
+    expect(adapter.request?.path, '/users/user/teams/team/channels/categories');
+    expect(adapter.request?.data, <Map<String, Object?>>[
+      <String, Object?>{
+        'id': 'old',
+        'channel_ids': <Object?>['a'],
+        'sorting': 'recent',
+      },
+      <String, Object?>{
+        'id': 'new',
+        'channel_ids': <Object?>['c', 'b'],
+        'collapsed': true,
+      },
+    ]);
+  });
+
+  test('mutes channel notifications through member settings', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"status":"OK"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    await DioMattermostApi(dio: dio).setChannelNotificationsMuted(
+      userId: 'user',
+      channelId: 'channel',
+      muted: true,
+    );
+
+    expect(adapter.request?.method, 'PUT');
+    expect(
+      adapter.request?.path,
+      '/channels/channel/members/user/notify_props',
+    );
+    expect(adapter.request?.data, <String, String>{
+      'desktop': 'none',
+      'push': 'none',
+      'email': 'none',
+      'mark_unread': 'mention',
+    });
+  });
+
+  test('marks a post unread for the current user', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"status":"OK"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+    await DioMattermostApi(
+      dio: dio,
+    ).markPostUnread(userId: 'user', postId: 'post');
+    expect(adapter.request?.method, 'POST');
+    expect(adapter.request?.path, '/users/user/posts/post/set_unread');
+  });
+
+  test('leaves a channel by removing the current membership', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"status":"OK"}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    await DioMattermostApi(
+      dio: dio,
+    ).leaveChannel(channelId: 'channel', userId: 'user');
+
+    expect(adapter.request?.method, 'DELETE');
+    expect(adapter.request?.path, '/channels/channel/members/user');
   });
 
   test('loads channel statistics', () async {
@@ -419,6 +537,26 @@ void main() {
       'dnd_end_time': 1789057800,
     });
     expect(status.dndEndTime, 1789057800);
+  });
+
+  test('sends and reads a manually selected offline status', () async {
+    final _RecordingAdapter adapter = _RecordingAdapter(
+      body: '{"user_id":"ada","status":"offline","manual":true}',
+    );
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://chat.example.com/api/v4'))
+      ..httpClientAdapter = adapter;
+
+    final MattermostUserStatusDto status = await DioMattermostApi(
+      dio: dio,
+    ).updateUserStatus(userId: 'ada', status: 'offline', dndEndTime: 0);
+
+    expect(adapter.request?.data, <String, Object?>{
+      'user_id': 'ada',
+      'status': 'offline',
+      'dnd_end_time': 0,
+    });
+    expect(status.status, 'offline');
+    expect(status.manual, isTrue);
   });
 
   test('sets and clears a custom user status', () async {
@@ -1008,6 +1146,7 @@ final class _RecordingAdapter implements HttpClientAdapter {
   final String contentType;
   final int statusCode;
   RequestOptions? request;
+  final List<RequestOptions> requests = <RequestOptions>[];
 
   @override
   Future<ResponseBody> fetch(
@@ -1016,6 +1155,7 @@ final class _RecordingAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     request = options;
+    requests.add(options);
     return ResponseBody(
       bytes == null
           ? Stream<Uint8List>.value(Uint8List.fromList(body.codeUnits))
