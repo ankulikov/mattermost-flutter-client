@@ -435,14 +435,18 @@ void main() {
     (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1280, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
+      final List<String> markedThreads = <String>[];
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             authRepositoryProvider.overrideWithValue(_SignedInRepository()),
             channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+            postRepositoryProvider.overrideWithValue(
+              const _DelayedPostRepository(delay: Duration.zero),
+            ),
             threadRepositoryProvider.overrideWithValue(
-              const _ThreadRepository(),
+              _ThreadRepository(onMarkRead: markedThreads.add),
             ),
           ],
           child: const MaterialApp(home: BootstrapPage()),
@@ -544,6 +548,19 @@ void main() {
       expect(find.text('Unreads'), findsNothing);
       expect(find.text('Done'), findsNothing);
       expect(find.text('Postpone'), findsNothing);
+      expect(
+        tester.widget<ThreadPane>(find.byType(ThreadPane)).rootPostId,
+        'unread-root',
+      );
+      expect(
+        tester.widget<ThreadPane>(find.byType(ThreadPane)).markReadOnOpen,
+        isFalse,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('thread-unread-count-unread-root')),
+        findsOneWidget,
+      );
+      expect(markedThreads, isEmpty);
 
       await tester.tap(
         find.byKey(const ValueKey<String>('followed-thread-card-unread-root')),
@@ -552,6 +569,15 @@ void main() {
 
       expect(find.byType(ThreadPane), findsOneWidget);
       expect(
+        tester.widget<ThreadPane>(find.byType(ThreadPane)).markReadOnOpen,
+        isTrue,
+      );
+      expect(markedThreads, <String>['unread-root']);
+      expect(
+        find.byKey(const ValueKey<String>('thread-unread-count-unread-root')),
+        findsNothing,
+      );
+      expect(
         find.byKey(const ValueKey<String>('channels-side-pane')),
         findsOneWidget,
       );
@@ -559,9 +585,108 @@ void main() {
         find.byKey(const ValueKey<String>('followed-threads-list-pane')),
         findsOneWidget,
       );
+      final Finder listPane = find.byKey(
+        const ValueKey<String>('followed-threads-list-pane'),
+      );
+      final double listWidth = tester.getSize(listPane).width;
+      final double threadWidth = tester.getSize(find.byType(ThreadPane)).width;
+      expect(threadWidth, closeTo((listWidth + threadWidth) * 0.6, 1));
+      expect(listWidth, greaterThanOrEqualTo(320));
       expect(tester.takeException(), isNull);
+
+      final Finder divider = find.byKey(
+        const ValueKey<String>('followed-thread-pane-divider'),
+      );
+      await tester.drag(divider, const Offset(100, 0));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byType(ThreadPane)).width,
+        lessThan(threadWidth),
+      );
+
+      await tester.drag(divider, const Offset(-200, 0));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byType(ThreadPane)).width,
+        closeTo(threadWidth, 1),
+      );
+
+      await tester.tap(divider);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(
+        tester.getSize(find.byType(ThreadPane)).width,
+        closeTo(threadWidth - 20, 1),
+      );
     },
   );
+
+  testWidgets('falls back to the first thread when the selection disappears', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final List<String> markedThreads = <String>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_SignedInRepository()),
+          channelRepositoryProvider.overrideWithValue(_SidebarRepository()),
+          postRepositoryProvider.overrideWithValue(
+            const _DelayedPostRepository(delay: Duration.zero),
+          ),
+          threadRepositoryProvider.overrideWithValue(
+            _ThreadRepository(onMarkRead: markedThreads.add),
+          ),
+        ],
+        child: const MaterialApp(home: BootstrapPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('threads-sidebar-tile')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('followed-thread-card-read-root')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<ThreadPane>(find.byType(ThreadPane)).rootPostId,
+      'read-root',
+    );
+
+    final ProviderContainer container = ProviderScope.containerOf(
+      tester.element(find.byType(ThreadPane)),
+    );
+    container
+        .read(followedThreadsProvider('team-1').notifier)
+        .removeUnfollowedThread('read-root');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<ThreadPane>(find.byType(ThreadPane)).rootPostId,
+      'unread-root',
+    );
+    expect(
+      tester.widget<ThreadPane>(find.byType(ThreadPane)).markReadOnOpen,
+      isFalse,
+    );
+    expect(markedThreads, isEmpty);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(ThreadPane),
+        matching: find.byIcon(Icons.close),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ThreadPane), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('followed-thread-card-unread-root')),
+    );
+    await tester.pumpAndSettle();
+    expect(markedThreads, <String>['unread-root']);
+  });
 
   testWidgets('stacks followed threads from the compact channel list', (
     WidgetTester tester,
@@ -2520,9 +2645,10 @@ final class _PermalinkPostRepository extends PostRepository {
 }
 
 final class _ThreadRepository extends ThreadRepository {
-  const _ThreadRepository({this.longThread = false});
+  const _ThreadRepository({this.longThread = false, this.onMarkRead});
 
   final bool longThread;
+  final void Function(String)? onMarkRead;
 
   MessageThread _thread(String rootPostId) => MessageThread(
     rootPostId: rootPostId,
@@ -2581,7 +2707,7 @@ final class _ThreadRepository extends ThreadRepository {
     required String teamId,
     required String rootPostId,
     required DateTime timestamp,
-  }) async {}
+  }) async => onMarkRead?.call(rootPostId);
 
   @override
   Future<FollowedThreadsPage> loadFollowed({

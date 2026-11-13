@@ -83,7 +83,7 @@ class MessagePreviewCard extends StatelessWidget {
                               if (headerTrailing
                                   case final Widget trailing) ...<Widget>[
                                 const SizedBox(width: 8),
-                                trailing,
+                                Flexible(child: trailing),
                               ],
                             ],
                           ),

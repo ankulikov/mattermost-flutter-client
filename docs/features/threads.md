@@ -35,18 +35,24 @@ removed from the open-thread projection, and reconnect/sequence-gap recovery
 reloads the complete thread without temporarily clearing it. Closing the thread
 cancels its subscription.
 
-After the first frame of a complete followed thread, the client updates the
-thread read timestamp to the time captured before loading began. The timestamp
-cannot jump past replies that arrived during the request. Inbox is the
-exception: opening an Inbox thread positions the unread boundary but leaves it
-unread until the user selects Done on its Inbox card.
+After the first frame of a complete explicitly opened followed thread, the
+client updates its read timestamp to the time captured before loading began.
+The timestamp cannot jump past replies that arrived during the request. On the
+Threads destination, the first thread is shown automatically without marking
+it read; clicking its card applies the usual read behavior. Inbox threads
+position the unread boundary but remain unread until the user selects Done on
+the Inbox card.
 
 ## Presentation
 
 Threads is a channel-sidebar destination. Its one activity-ordered list includes
 both read and unread followed threads; it does not split into All and Unread
 tabs. Expanded layouts keep the channel sidebar, thread-card list, and selected
-thread visible as three panes. Compact layouts stack those same destinations.
+thread visible as three panes. The first thread is selected when the destination
+opens. The thread pane starts at 60% of the content width. Its divider supports
+dragging and arrow keys. Either pane can occupy 40–60% of the content width;
+at the 800 px two-pane threshold, both retain at least 320 px. Compact layouts
+stack those same destinations.
 Thread cards share the Inbox message-card surface but omit Inbox's Done and
 Postpone actions. Cards show unread replies as new replies. Before the participants, a badge
 shows unread mentions, or a dot indicates unread replies when there are no

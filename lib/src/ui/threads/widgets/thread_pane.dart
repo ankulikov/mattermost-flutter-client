@@ -51,9 +51,8 @@ class ThreadPane extends ConsumerStatefulWidget {
 
   /// Whether reaching the initial unread-reply position completes the thread.
   ///
-  /// Inbox keeps completion explicit through its Done action, so its thread
-  /// host disables this while other thread entry points retain their normal
-  /// read-on-open behavior.
+  /// Inbox keeps completion explicit through Done; the automatically shown
+  /// first followed thread also waits for a card click.
   final bool markReadOnOpen;
   final ValueChanged<String>? onSelectChannel;
   final String? stateScopeId;
@@ -90,6 +89,15 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.highlightedPostId != widget.highlightedPostId) {
       _threadFocusCenterKey = GlobalKey();
+    }
+    if (!oldWidget.markReadOnOpen &&
+        widget.markReadOnOpen &&
+        _initialUnreadReplies > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !widget.markReadOnOpen) return;
+        final ThreadViewState? state = ref.read(_threadStateProvider).value;
+        if (state?.thread.isComplete ?? false) unawaited(_markRead(state!));
+      });
     }
   }
 
