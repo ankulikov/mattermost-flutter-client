@@ -6,7 +6,7 @@ are shared across consumers and direct conversations are deduplicated by their
 destination. The composer retains the same raw Markdown buffer in quick and
 full-editor modes and suspends draft writes while editing a posted message.
 
-Changes are debounced for 750 ms and operations for a destination are
+Changes are debounced for 5 seconds and operations for a destination are
 serialized. An attachment-only draft remains in session memory because the v4
 API treats an empty message as deletion. Local typing takes precedence over a server draft that arrives later and is
 synchronized normally. Server-provided type, props, priority,

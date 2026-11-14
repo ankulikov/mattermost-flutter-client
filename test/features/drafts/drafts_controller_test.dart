@@ -74,6 +74,21 @@ void main() {
   });
   tearDown(() => container.dispose());
 
+  testWidgets('syncs five seconds after the latest edit', (tester) async {
+    repository.save = Completer<Draft?>()..complete(remote);
+    final controller = container.read(provider.notifier);
+    controller.update(local);
+    await tester.pump(const Duration(seconds: 4));
+    expect(repository.calls, isEmpty);
+
+    controller.update(remote);
+    await tester.pump(const Duration(milliseconds: 4999));
+    expect(repository.calls, isEmpty);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(repository.calls, ['save']);
+  });
+
   test('late hydration preserves and saves the active draft', () async {
     repository.load = Completer<List<Draft>>();
     repository.save = Completer<Draft?>();

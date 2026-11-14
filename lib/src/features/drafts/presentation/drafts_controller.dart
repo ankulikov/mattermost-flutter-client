@@ -304,7 +304,7 @@ final class DraftsController extends Notifier<DraftsState>
     _timers.remove(key)?.cancel();
     // Empty-message attachment drafts cannot be represented by the API.
     if (draft.message.isEmpty && draft.fileIds.isNotEmpty) return;
-    _timers[key] = Timer(const Duration(milliseconds: 750), () {
+    _timers[key] = Timer(const Duration(seconds: 5), () {
       unawaited(flush(key));
     });
   }
