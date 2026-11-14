@@ -787,11 +787,22 @@ final class DioMattermostApi
     required String userId,
     required String category,
   }) async {
-    final Response<Object?> response = await _get(
-      '/users/${Uri.encodeComponent(userId)}'
-      '/preferences/${Uri.encodeComponent(category)}',
-    );
-    return _dtoList(response.data, MattermostPreferenceDto.fromJson);
+    try {
+      final Response<Object?> response = await _get(
+        '/users/${Uri.encodeComponent(userId)}'
+        '/preferences/${Uri.encodeComponent(category)}',
+      );
+      if (response.data == null) return const <MattermostPreferenceDto>[];
+      return _dtoList(response.data, MattermostPreferenceDto.fromJson);
+    } on DioException catch (error) {
+      final data = error.response?.data;
+      if (error.response?.statusCode == 404 &&
+          data is Map &&
+          data['id'] == 'api.preference.preferences_category.get.app_error') {
+        return const <MattermostPreferenceDto>[];
+      }
+      rethrow;
+    }
   }
 
   @override
