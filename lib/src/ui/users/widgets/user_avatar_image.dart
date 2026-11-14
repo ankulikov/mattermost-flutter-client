@@ -33,7 +33,7 @@ class UserAvatarImage extends ConsumerWidget {
     final Widget fallback = CircleAvatar(
       key: ValueKey<String>('user-avatar-fallback-$userId'),
       radius: radius,
-      backgroundColor: _avatarColor(userId),
+      backgroundColor: avatarColor(userId),
       foregroundColor: Colors.white,
       child: Text(
         avatarInitials(displayName),
@@ -73,7 +73,7 @@ class UserAvatarImage extends ConsumerWidget {
   }
 }
 
-Color _avatarColor(String id) {
+Color avatarColor(String id) {
   const List<Color> colors = <Color>[
     Color(0xff3f51b5),
     Color(0xff00796b),

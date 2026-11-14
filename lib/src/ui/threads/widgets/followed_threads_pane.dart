@@ -9,6 +9,7 @@ import 'package:mattermost_flutter/src/domain/models/post.dart';
 import 'package:mattermost_flutter/src/domain/models/thread.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/core/widgets/relative_time.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_preview_card.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/threads/followed_threads_controller.dart';
@@ -16,6 +17,9 @@ import 'package:mattermost_flutter/src/ui/threads/followed_threads_strings.dart'
 import 'package:mattermost_flutter/src/ui/threads/thread_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+
+export 'package:mattermost_flutter/src/ui/core/widgets/relative_time.dart'
+    show formatFollowedThreadLastReplyTime;
 
 class FollowedThreadsPane extends ConsumerStatefulWidget {
   const FollowedThreadsPane({
@@ -417,22 +421,6 @@ class _LastReplyTime extends StatelessWidget {
       ),
     );
   }
-}
-
-String formatFollowedThreadLastReplyTime({
-  required DateTime lastReplyAt,
-  required DateTime now,
-  required MaterialLocalizations localizations,
-}) {
-  final Duration elapsed = now.toLocal().difference(lastReplyAt.toLocal());
-  final int minutes = elapsed.isNegative ? 0 : elapsed.inMinutes;
-  if (minutes == 0) return FollowedThreadsStrings.now;
-  if (minutes < 60) return FollowedThreadsStrings.minutesAgo(minutes);
-
-  final int hours = elapsed.inHours;
-  if (hours < 24) return FollowedThreadsStrings.hoursAgo(hours);
-
-  return localizations.formatMediumDate(lastReplyAt.toLocal());
 }
 
 class _ThreadSummary extends StatelessWidget {

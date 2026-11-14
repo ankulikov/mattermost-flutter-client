@@ -9,9 +9,13 @@ import 'package:mattermost_flutter/src/features/drafts/presentation/draft_send_c
 import 'package:mattermost_flutter/src/features/drafts/presentation/drafts_controller.dart';
 import 'package:mattermost_flutter/src/features/drafts/presentation/drafts_strings.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
+import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
+import 'package:mattermost_flutter/src/ui/core/widgets/avatar_initials.dart';
+import 'package:mattermost_flutter/src/ui/core/widgets/relative_time.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
 import 'package:mattermost_flutter/src/ui/threads/widgets/thread_pane.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
+import 'package:mattermost_flutter/src/ui/users/widgets/user_avatar_image.dart';
 
 class DraftsPane extends ConsumerStatefulWidget {
   const DraftsPane({
@@ -33,10 +37,16 @@ class DraftsPane extends ConsumerStatefulWidget {
 class _DraftsPaneState extends ConsumerState<DraftsPane> {
   Draft? _selected;
   bool _focusSelected = false;
+  late DateTime _now;
+  Timer? _clockTimer;
 
   @override
   void initState() {
     super.initState();
+    _now = DateTime.now();
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
     unawaited(
       Future<void>(
         () => ref
@@ -46,20 +56,60 @@ class _DraftsPaneState extends ConsumerState<DraftsPane> {
     );
   }
 
-  void _open(Draft draft, {bool focus = false}) {
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
+
+  void _open(Draft draft) {
     if (draft.rootId == null || draft.rootId!.isEmpty) {
       final channel = widget.channelsById[draft.channelId];
       if (channel != null) {
-        if (focus) {
-          ref.read(draftFocusRequestProvider.notifier).request(channel.id);
-        }
+        ref.read(draftFocusRequestProvider.notifier).request(channel.id);
         widget.onSelectChannel(channel.name);
       }
     } else {
       setState(() {
         _selected = draft;
-        _focusSelected = focus;
+        _focusSelected = true;
       });
+    }
+  }
+
+  Future<void> _confirmDelete(DraftKey key, String destination) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Expanded(child: Text(DraftsStrings.deleteTitle)),
+            IconButton(
+              tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+              onPressed: () => Navigator.of(context).pop(false),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+        content: Text(DraftsStrings.deleteConfirmation(destination)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(DraftsStrings.cancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(DraftsStrings.confirmDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await ref.read(draftsControllerProvider.notifier).delete(key);
     }
   }
 
@@ -84,19 +134,37 @@ class _DraftsPaneState extends ConsumerState<DraftsPane> {
     );
     final list = Column(
       children: [
-        ListTile(
-          leading: widget.onBack == null
-              ? null
-              : BackButton(onPressed: widget.onBack),
-          title: const Text(DraftsStrings.title),
-          trailing: IconButton(
-            tooltip: DraftsStrings.refresh,
-            onPressed: () => unawaited(
-              ref
-                  .read(draftsControllerProvider.notifier)
-                  .loadTeam(widget.team.id, refresh: true),
-            ),
-            icon: const Icon(Icons.refresh),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            widget.onBack == null ? 20 : 4,
+            14,
+            20,
+            12,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.onBack case final VoidCallback onBack) ...[
+                BackButton(onPressed: onBack),
+                const SizedBox(width: 4),
+              ],
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      DraftsStrings.title,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(DraftsStrings.subtitle),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
         const Divider(height: 1),
@@ -140,119 +208,220 @@ class _DraftsPaneState extends ConsumerState<DraftsPane> {
                 )
               : entries.isEmpty
               ? const Center(child: Text(DraftsStrings.empty))
-              : ListView.builder(
-                  itemCount: entries.length,
-                  itemBuilder: (context, index) {
-                    final key = entries[index].key;
-                    final entry = entries[index].value;
-                    final draft = entry.draft;
-                    final sendStatus = sends[key];
-                    final channel = widget.channelsById[draft.channelId];
-                    final title = channel?.displayName ?? draft.channelId;
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          InkWell(
-                            onTap: channel == null ? null : () => _open(draft),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
+              : LayoutBuilder(
+                  builder: (context, constraints) => ListView.builder(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: constraints.maxWidth >= AppBreakpoints.compact
+                          ? AppLayout.expandedPageGutter
+                          : AppLayout.compactPageGutter,
+                      vertical: AppSpacing.md,
+                    ),
+                    itemCount: entries.length,
+                    itemBuilder: (context, index) {
+                      final key = entries[index].key;
+                      final entry = entries[index].value;
+                      final draft = entry.draft;
+                      final sendStatus = sends[key];
+                      final channel = widget.channelsById[draft.channelId];
+                      final title = channel == null
+                          ? draft.channelId
+                          : (channel.displayName.trim().isEmpty
+                                ? channel.name
+                                : channel.displayName);
+                      final theme = Theme.of(context);
+                      return Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: AppLayout.readableContentWidth,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Card(
+                              margin: EdgeInsets.zero,
+                              elevation: 0,
+                              surfaceTintColor: Colors.transparent,
+                              clipBehavior: Clip.antiAlias,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(
+                                  color: theme.colorScheme.outlineVariant,
+                                ),
+                              ),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Text(
-                                    draft.rootId?.isNotEmpty == true
-                                        ? '$title · ${DraftsStrings.thread}'
-                                        : title,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleSmall,
-                                  ),
-                                  if (draft.updateAt > 0)
-                                    Text(
-                                      MaterialLocalizations.of(
-                                        context,
-                                      ).formatShortDate(
-                                        DateTime.fromMillisecondsSinceEpoch(
-                                          draft.updateAt,
-                                        ),
+                                  InkWell(
+                                    onTap: channel == null
+                                        ? null
+                                        : () => _open(draft),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          _DraftAvatar(
+                                            channel: channel,
+                                            title: title,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment
+                                                          .baseline,
+                                                  textBaseline:
+                                                      TextBaseline.alphabetic,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        draft.rootId?.isNotEmpty ==
+                                                                true
+                                                            ? '$title · ${DraftsStrings.thread}'
+                                                            : title,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: theme
+                                                            .textTheme
+                                                            .labelLarge,
+                                                      ),
+                                                    ),
+                                                    if (draft.updateAt > 0) ...[
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                        formatFollowedThreadLastReplyTime(
+                                                          lastReplyAt:
+                                                              DateTime.fromMillisecondsSinceEpoch(
+                                                                draft.updateAt,
+                                                              ),
+                                                          now: _now,
+                                                          localizations:
+                                                              MaterialLocalizations.of(
+                                                                context,
+                                                              ),
+                                                        ),
+                                                        style: theme
+                                                            .textTheme
+                                                            .labelMedium
+                                                            ?.copyWith(
+                                                              color: theme
+                                                                  .colorScheme
+                                                                  .onSurfaceVariant,
+                                                            ),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+                                                MessageMarkdown(
+                                                  data: draft.message,
+                                                  serverUrl: serverUrl,
+                                                ),
+                                                if (draft.fileIds.isNotEmpty)
+                                                  Text(
+                                                    DraftsStrings.attachments(
+                                                      draft.fileIds.length,
+                                                    ),
+                                                  ),
+                                                if (sendStatus?.phase ==
+                                                    DraftSendPhase.failed)
+                                                  const Text(
+                                                    DraftsStrings.sendFailed,
+                                                  ),
+                                                if (sendStatus?.phase ==
+                                                    DraftSendPhase
+                                                        .cleanupPending)
+                                                  const Text(
+                                                    DraftsStrings
+                                                        .cleanupPending,
+                                                  ),
+                                                if (sendStatus?.phase ==
+                                                    DraftSendPhase.unsupported)
+                                                  const Text(
+                                                    DraftsStrings
+                                                        .unsupportedOptions,
+                                                  ),
+                                                if (entry.error != null)
+                                                  const Text(
+                                                    DraftsStrings.syncFailed,
+                                                  ),
+                                                if (entry.dirty &&
+                                                    draft.message.isEmpty)
+                                                  const Text(
+                                                    DraftsStrings.unsynced,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  const SizedBox(height: 8),
-                                  MessageMarkdown(
-                                    data: draft.message,
-                                    serverUrl: serverUrl,
                                   ),
-                                  if (draft.fileIds.isNotEmpty)
-                                    Text(
-                                      '${draft.fileIds.length} attachment(s)',
+                                  Divider(
+                                    height: 1,
+                                    color: theme.colorScheme.outlineVariant,
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
                                     ),
-                                  if (sendStatus?.phase ==
-                                      DraftSendPhase.failed)
-                                    const Text(DraftsStrings.sendFailed),
-                                  if (sendStatus?.phase ==
-                                      DraftSendPhase.cleanupPending)
-                                    const Text(DraftsStrings.cleanupPending),
-                                  if (sendStatus?.phase ==
-                                      DraftSendPhase.unsupported)
-                                    const Text(
-                                      DraftsStrings.unsupportedOptions,
+                                    child: OverflowBar(
+                                      alignment: MainAxisAlignment.end,
+                                      children: [
+                                        TextButton.icon(
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor:
+                                                theme.colorScheme.error,
+                                          ),
+                                          onPressed: () => unawaited(
+                                            _confirmDelete(key, title),
+                                          ),
+                                          label: const Text(
+                                            DraftsStrings.delete,
+                                          ),
+                                        ),
+                                        TextButton.icon(
+                                          icon: const Icon(Icons.send_outlined),
+                                          onPressed:
+                                              sendStatus?.phase ==
+                                                  DraftSendPhase.sending
+                                              ? null
+                                              : () => unawaited(
+                                                  ref
+                                                      .read(
+                                                        draftSendControllerProvider
+                                                            .notifier,
+                                                      )
+                                                      .send(key),
+                                                ),
+                                          label: Text(
+                                            sendStatus?.phase ==
+                                                    DraftSendPhase
+                                                        .cleanupPending
+                                                ? DraftsStrings.retry
+                                                : DraftsStrings.send,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  if (entry.error != null)
-                                    const Text(DraftsStrings.syncFailed),
-                                  if (entry.dirty && draft.message.isEmpty)
-                                    const Text(DraftsStrings.unsynced),
+                                  ),
                                 ],
                               ),
                             ),
                           ),
-                          const Divider(height: 1),
-                          OverflowBar(
-                            alignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                onPressed: channel == null
-                                    ? null
-                                    : () => _open(draft, focus: true),
-                                child: const Text(DraftsStrings.edit),
-                              ),
-                              TextButton(
-                                onPressed: () => unawaited(
-                                  ref
-                                      .read(draftsControllerProvider.notifier)
-                                      .delete(key),
-                                ),
-                                child: const Text(DraftsStrings.delete),
-                              ),
-                              TextButton(
-                                onPressed:
-                                    sendStatus?.phase == DraftSendPhase.sending
-                                    ? null
-                                    : () => unawaited(
-                                        ref
-                                            .read(
-                                              draftSendControllerProvider
-                                                  .notifier,
-                                            )
-                                            .send(key),
-                                      ),
-                                child: Text(
-                                  sendStatus?.phase ==
-                                          DraftSendPhase.cleanupPending
-                                      ? DraftsStrings.retry
-                                      : DraftsStrings.send,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                        ),
+                      );
+                    },
+                  ),
                 ),
         ),
       ],
@@ -281,6 +450,34 @@ class _DraftsPaneState extends ConsumerState<DraftsPane> {
               ],
             )
           : thread,
+    );
+  }
+}
+
+class _DraftAvatar extends StatelessWidget {
+  const _DraftAvatar({required this.channel, required this.title});
+
+  final SidebarChannel? channel;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = channel?.profileImage;
+    if (channel?.kind == ChannelKind.directMessage && profile != null) {
+      return UserAvatarImage(
+        userId: profile.userId,
+        displayName: title,
+        profileImageUpdatedAt: profile.updatedAt,
+        radius: 22,
+      );
+    }
+    return ExcludeSemantics(
+      child: CircleAvatar(
+        radius: 22,
+        backgroundColor: avatarColor(title),
+        foregroundColor: Colors.white,
+        child: Text(avatarInitials(title)),
+      ),
     );
   }
 }
