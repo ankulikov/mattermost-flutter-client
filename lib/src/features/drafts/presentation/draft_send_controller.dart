@@ -40,7 +40,7 @@ final class DraftSendController
     final session = ref.read(_sessionProvider);
     final entry = ref.read(_draftsProvider).entries[key];
     final draft = entry?.draft;
-    if (session == null || draft == null || entry?.conflict != null) return;
+    if (session == null || draft == null) return;
     final generation = _generation;
     if (current?.phase == DraftSendPhase.cleanupPending) {
       state = {

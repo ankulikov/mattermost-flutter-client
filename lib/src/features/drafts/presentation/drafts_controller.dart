@@ -30,7 +30,6 @@ final class DraftEntry {
     this.dirty = false,
     this.saving = false,
     this.error,
-    this.conflict,
     this.cleanupPending = false,
   });
   final Draft draft;
@@ -38,8 +37,6 @@ final class DraftEntry {
   final bool saving;
   final Object? error;
 
-  /// Server version awaiting an explicit choice when local typing races loading.
-  final Draft? conflict;
   final bool cleanupPending;
 }
 
@@ -258,17 +255,6 @@ final class DraftsController extends Notifier<DraftsState>
                   );
                   keys.add(key);
                   final current = entries[key];
-                  if (current != null &&
-                      current.dirty &&
-                      (current.draft.message != draft.message ||
-                          current.draft.fileIds.join('\u0000') !=
-                              draft.fileIds.join('\u0000'))) {
-                    entries[key] = DraftEntry(
-                      draft: current.draft,
-                      dirty: true,
-                      conflict: draft,
-                    );
-                  }
                   if ((versions[key] ?? 0) == (_versions[key] ?? 0) &&
                       !(current?.dirty ?? false)) {
                     entries[key] = DraftEntry(draft: draft);
@@ -312,11 +298,7 @@ final class DraftsController extends Notifier<DraftsState>
     state = state.copyWith(
       entries: {
         ...state.entries,
-        key: DraftEntry(
-          draft: draft,
-          dirty: true,
-          conflict: state.entries[key]?.conflict,
-        ),
+        key: DraftEntry(draft: draft, dirty: true),
       },
     );
     _timers.remove(key)?.cancel();
@@ -338,7 +320,6 @@ final class DraftsController extends Notifier<DraftsState>
       if (entry == null ||
           !entry.dirty ||
           entry.cleanupPending ||
-          entry.conflict != null ||
           (entry.draft.message.isEmpty && entry.draft.fileIds.isNotEmpty)) {
         return;
       }
@@ -390,29 +371,6 @@ final class DraftsController extends Notifier<DraftsState>
         }
       }
     });
-  }
-
-  /// Resolve a late-load conflict without silently discarding either version.
-  void resolveConflict(DraftKey key, {required bool keepLocal}) {
-    final entry = state.entries[key];
-    if (entry?.conflict == null) return;
-    if (keepLocal) {
-      state = state.copyWith(
-        entries: {
-          ...state.entries,
-          key: DraftEntry(draft: entry!.draft, dirty: true),
-        },
-      );
-      unawaited(flush(key));
-    } else {
-      _advanceVersion(key);
-      state = state.copyWith(
-        entries: {
-          ...state.entries,
-          key: DraftEntry(draft: entry!.conflict!),
-        },
-      );
-    }
   }
 
   Future<void> delete(DraftKey key) {

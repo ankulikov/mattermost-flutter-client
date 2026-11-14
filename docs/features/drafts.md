@@ -8,8 +8,8 @@ full-editor modes and suspends draft writes while editing a posted message.
 
 Changes are debounced for 750 ms and operations for a destination are
 serialized. An attachment-only draft remains in session memory because the v4
-API treats an empty message as deletion. A late server draft that differs from
-local typing requires an explicit choice. Server-provided type, props, priority,
+API treats an empty message as deletion. Local typing takes precedence over a server draft that arrives later and is
+synchronized normally. Server-provided type, props, priority,
 and file metadata are preserved when saving an edited draft.
 
 The Drafts destination lists drafts for the selected team and direct

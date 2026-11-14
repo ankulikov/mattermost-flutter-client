@@ -28,11 +28,6 @@ abstract final class MessageComposerStrings {
       'Attachment-only drafts are available in this session.';
   static const String cleanupPending = 'Sent · cleanup pending';
   static const String retryCleanup = 'Retry cleanup';
-  static const String draftConflictTitle = 'Choose a draft';
-  static const String draftConflictBody =
-      'A saved draft arrived after you started typing. Which version would you like to keep?';
-  static const String useServerDraft = 'Use saved draft';
-  static const String keepLocalDraft = 'Keep my text';
   static const String uploadFinalizing = 'Finalizing upload…';
   static const String uploadQueued = 'Waiting to upload';
   static const String tooManyFiles = 'Choose up to five files per message.';

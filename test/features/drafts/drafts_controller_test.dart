@@ -74,28 +74,23 @@ void main() {
   });
   tearDown(() => container.dispose());
 
-  test(
-    'late hydration keeps both versions until conflict is resolved',
-    () async {
-      repository.load = Completer<List<Draft>>();
-      repository.save = Completer<Draft?>();
-      final controller = container.read(provider.notifier);
-      final loading = controller.loadTeam('team');
-      controller.update(local);
-      final flushing = controller.flush(key);
-      repository.load!.complete([remote]);
-      await loading;
-      await flushing;
-      expect(repository.calls, isEmpty);
-      expect(container.read(provider).entries[key]!.draft.message, 'local');
-      expect(
-        container.read(provider).entries[key]!.conflict!.message,
-        'remote',
-      );
-      controller.resolveConflict(key, keepLocal: false);
-      expect(container.read(provider).entries[key]!.draft.message, 'remote');
-    },
-  );
+  test('late hydration preserves and saves the active draft', () async {
+    repository.load = Completer<List<Draft>>();
+    repository.save = Completer<Draft?>();
+    final controller = container.read(provider.notifier);
+    final loading = controller.loadTeam('team');
+    controller.update(local);
+    final flushing = controller.flush(key);
+    repository.load!.complete([remote]);
+    await loading;
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(provider).entries[key]!.draft.message, 'local');
+    expect(repository.calls, ['save']);
+    repository.save!.complete(local);
+    await flushing;
+    expect(container.read(provider).entries[key]!.draft.message, 'local');
+    expect(container.read(provider).entries[key]!.dirty, isFalse);
+  });
 
   test('delete waits for a pending save', () async {
     repository.save = Completer<Draft?>();

@@ -135,7 +135,6 @@ class _MessageComposerState extends ConsumerState<MessageComposer> {
   ProviderSubscription<DraftsState>? _draftSubscription;
   DraftsController? _drafts;
   bool _applyingDraft = false;
-  bool _conflictOpen = false;
   bool _hadSyncedDraft = false;
   String _lastDraftText = '';
   DraftKey? get _draftKey =>
@@ -169,12 +168,6 @@ class _MessageComposerState extends ConsumerState<MessageComposer> {
     final key = _draftKey;
     if (key == null || !mounted || _editingPostId != null) return;
     final entry = state.entries[key];
-    if (entry?.conflict != null && !_conflictOpen) {
-      _conflictOpen = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_chooseDraft(key));
-      });
-    }
     if (entry == null) {
       if (_hadSyncedDraft && _controller.messageText == _lastDraftText) {
         _applyingDraft = true;
@@ -212,31 +205,6 @@ class _MessageComposerState extends ConsumerState<MessageComposer> {
       name: (int index) => MessageComposerStrings.restoredFile(index),
     );
     _applyingDraft = false;
-  }
-
-  Future<void> _chooseDraft(DraftKey key) async {
-    final keepLocal = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text(MessageComposerStrings.draftConflictTitle),
-        content: const Text(MessageComposerStrings.draftConflictBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(MessageComposerStrings.useServerDraft),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(MessageComposerStrings.keepLocalDraft),
-          ),
-        ],
-      ),
-    );
-    _conflictOpen = false;
-    if (mounted && keepLocal != null && key == _draftKey) {
-      _drafts?.resolveConflict(key, keepLocal: keepLocal);
-    }
   }
 
   void _writeDraft() {
@@ -770,7 +738,6 @@ class _MessageComposerState extends ConsumerState<MessageComposer> {
     final draftEntry = draftKey == null
         ? null
         : ref.read(draftsControllerProvider).entries[draftKey];
-    if (draftEntry?.conflict != null) return false;
     final sentDraft = draftEntry?.draft;
     if (sentDraft != null &&
         ((sentDraft.type?.isNotEmpty ?? false) ||
