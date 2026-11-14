@@ -3,10 +3,45 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
+import 'package:mattermost_flutter/src/features/drafts/domain/draft.dart';
 import 'package:mattermost_flutter/src/features/file_upload/domain/file_upload.dart';
 import 'package:mattermost_flutter/src/features/file_upload/presentation/composer_upload_controller.dart';
 
 void main() {
+  test('restores metadata by file ID and keeps missing metadata usable', () {
+    final controller = ComposerUploadController(
+      repository: _Repository(),
+      channelId: 'channel',
+    );
+    controller.restoreUploaded(
+      ['first', 'second'],
+      name: (index) => 'Attachment $index',
+      fileInfos: [
+        const DraftFileInfo(
+          id: 'second',
+          name: 'photo.jpeg',
+          size: 222892,
+          mimeType: 'image/jpeg',
+        ),
+      ],
+    );
+    expect(controller.tiles.first.name, 'Attachment 1');
+    expect(controller.tiles.last.name, 'photo.jpeg');
+    expect(controller.tiles.last.size, 222892);
+    expect(controller.tiles.last.type, 'image/jpeg');
+    expect(controller.uploadedIds, ['first', 'second']);
+    controller.restoreUploaded(
+      ['first', 'second'],
+      name: (index) => 'Attachment $index',
+      fileInfos: [
+        const DraftFileInfo(id: 'first', name: 'later.txt', size: 12),
+      ],
+    );
+    expect(controller.tiles.first.name, 'later.txt');
+    expect(controller.tiles.length, 2);
+    controller.dispose();
+  });
+
   test(
     'bounds concurrent uploads, keeps order, and requires failed tile retry',
     () async {

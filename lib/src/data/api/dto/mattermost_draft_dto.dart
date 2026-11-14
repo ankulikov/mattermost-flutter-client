@@ -1,7 +1,9 @@
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+
 /// Wire representation of a Mattermost draft.
 ///
-/// Extension-owned properties, priority options, and file metadata retain their
-/// JSON objects because their contents can vary between server versions.
+/// Extension-owned properties and priority options retain their JSON objects
+/// because their contents can vary between server versions.
 final class MattermostDraftDto {
   const MattermostDraftDto({
     required this.channelId,
@@ -9,7 +11,7 @@ final class MattermostDraftDto {
     this.userId = '',
     this.rootId,
     this.fileIds = const <String>[],
-    this.fileInfos = const <Map<String, Object?>>[],
+    this.fileInfos = const <MattermostFileInfoDto>[],
     this.createAt = 0,
     this.updateAt = 0,
     this.type,
@@ -25,9 +27,7 @@ final class MattermostDraftDto {
         rootId: json['root_id'] as String?,
         fileIds: (json['file_ids'] as List<Object?>? ?? const <Object?>[])
             .cast<String>(),
-        fileInfos: (json['file_infos'] as List<Object?>? ?? const <Object?>[])
-            .whereType<Map<String, Object?>>()
-            .toList(growable: false),
+        fileInfos: _parseFiles(json),
         createAt: (json['create_at'] as num?)?.toInt() ?? 0,
         updateAt: (json['update_at'] as num?)?.toInt() ?? 0,
         type: json['type'] as String?,
@@ -40,7 +40,7 @@ final class MattermostDraftDto {
   final String userId;
   final String? rootId;
   final List<String> fileIds;
-  final List<Map<String, Object?>> fileInfos;
+  final List<MattermostFileInfoDto> fileInfos;
   final int createAt;
   final int updateAt;
   final String? type;
@@ -57,4 +57,15 @@ final class MattermostDraftDto {
     if (props != null) 'props': props,
     if (priority != null) 'priority': priority,
   };
+}
+
+List<MattermostFileInfoDto> _parseFiles(Map<String, Object?> json) {
+  final metadata = json['metadata'];
+  final files = metadata is Map<String, Object?> ? metadata['files'] : null;
+  final values = files is List<Object?> ? files : json['file_infos'];
+  if (values is! List<Object?>) return const [];
+  return values
+      .whereType<Map<String, Object?>>()
+      .map(MattermostFileInfoDto.fromJson)
+      .toList(growable: false);
 }

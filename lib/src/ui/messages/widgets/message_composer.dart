@@ -189,18 +189,13 @@ class _MessageComposerState extends ConsumerState<MessageComposer> {
     if (entry.dirty) return;
     _hadSyncedDraft = true;
     final draft = entry.draft;
-    if (_controller.messageText == draft.message &&
-        _lastDraftText == draft.message &&
-        draft.fileIds.every(
-          (id) => _uploads?.tiles.any((tile) => tile.fileId == id) ?? false,
-        )) {
-      return;
-    }
     _applyingDraft = true;
-    _controller.value = TextEditingValue(
-      text: draft.message,
-      selection: TextSelection.collapsed(offset: draft.message.length),
-    );
+    if (_controller.messageText != draft.message) {
+      _controller.value = TextEditingValue(
+        text: draft.message,
+        selection: TextSelection.collapsed(offset: draft.message.length),
+      );
+    }
     _lastDraftText = draft.message;
     _initUploads();
     final uploads = _uploads;
@@ -213,6 +208,7 @@ class _MessageComposerState extends ConsumerState<MessageComposer> {
     }
     _uploads?.restoreUploaded(
       draft.fileIds,
+      fileInfos: draft.fileInfos,
       name: (int index) => MessageComposerStrings.restoredFile(index),
     );
     _applyingDraft = false;

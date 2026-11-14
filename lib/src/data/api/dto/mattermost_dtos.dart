@@ -1279,6 +1279,7 @@ final class MattermostFileInfoDto {
   const MattermostFileInfoDto({
     required this.id,
     required this.userId,
+    this.channelId = '',
     required this.postId,
     required this.createAt,
     required this.updateAt,
@@ -1299,6 +1300,7 @@ final class MattermostFileInfoDto {
   factory MattermostFileInfoDto.fromJson(JsonMap json) => MattermostFileInfoDto(
     id: _string(json, 'id'),
     userId: _string(json, 'user_id'),
+    channelId: _string(json, 'channel_id'),
     postId: _string(json, 'post_id'),
     createAt: _int(json, 'create_at'),
     updateAt: _int(json, 'update_at'),
@@ -1318,6 +1320,7 @@ final class MattermostFileInfoDto {
 
   final String id;
   final String userId;
+  final String channelId;
   final String postId;
   final int createAt;
   final int updateAt;

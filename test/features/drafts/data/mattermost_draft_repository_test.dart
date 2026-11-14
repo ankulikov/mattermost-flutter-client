@@ -14,9 +14,11 @@ void main() {
       'create_at': 123,
       'update_at': 456,
       'file_ids': <Object?>['file'],
-      'file_infos': <Object?>[
-        <String, Object?>{'id': 'file', 'name': 'a.txt'},
-      ],
+      'metadata': <String, Object?>{
+        'files': <Object?>[
+          <String, Object?>{'id': 'file', 'name': 'a.txt'},
+        ],
+      },
       'props': <String, Object?>{
         'nested': <String, Object?>{'flag': true},
       },
@@ -28,7 +30,7 @@ void main() {
     expect(dto.message, '**hello**');
     expect(dto.createAt, 123);
     expect(dto.updateAt, 456);
-    expect(dto.fileInfos.single['name'], 'a.txt');
+    expect(dto.fileInfos.single.name, 'a.txt');
     expect(dto.toJson(), <String, Object?>{
       'channel_id': 'channel',
       'message': '**hello**',
@@ -66,7 +68,12 @@ void main() {
         api,
       );
       final Draft draft = (await repository.listTeamDrafts('team')).single;
-      expect(draft.fileInfos.single['name'], 'file.txt');
+      expect(draft.fileInfos.single.name, 'file.txt');
+      expect(draft.fileInfos.single.size, 123);
+      expect(draft.fileInfos.single.mimeType, 'text/plain');
+      expect(draft.fileInfos.single.channelId, 'channel');
+      expect(draft.fileInfos.single.width, 42);
+      expect(draft.fileInfos.single.miniPreview, 'preview');
       expect(draft.fileIds, <String>['file']);
       expect(draft.priority, <String, Object?>{'priority': 'urgent'});
       await repository.saveDraft(draft);
@@ -89,18 +96,28 @@ final class _Api extends Fake implements MattermostApi {
   @override
   Future<List<MattermostDraftDto>> listTeamDrafts(String teamId) async =>
       <MattermostDraftDto>[
-        const MattermostDraftDto(
-          channelId: 'channel',
-          rootId: 'root',
-          message: 'hello',
-          fileIds: <String>['file'],
-          fileInfos: <Map<String, Object?>>[
-            <String, Object?>{'id': 'file', 'name': 'file.txt'},
-          ],
-          type: 'custom',
-          props: <String, Object?>{'custom': true},
-          priority: <String, Object?>{'priority': 'urgent'},
-        ),
+        MattermostDraftDto.fromJson(<String, Object?>{
+          'channel_id': 'channel',
+          'root_id': 'root',
+          'message': 'hello',
+          'file_ids': <String>['file'],
+          'metadata': <String, Object?>{
+            'files': <Object?>[
+              <String, Object?>{
+                'id': 'file',
+                'name': 'file.txt',
+                'size': 123,
+                'mime_type': 'text/plain',
+                'channel_id': 'channel',
+                'width': 42,
+                'mini_preview': 'preview',
+              },
+            ],
+          },
+          'type': 'custom',
+          'props': <String, Object?>{'custom': true},
+          'priority': <String, Object?>{'priority': 'urgent'},
+        }),
       ];
 
   @override
