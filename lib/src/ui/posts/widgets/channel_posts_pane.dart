@@ -13,6 +13,7 @@ import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart
 import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_member_count_button.dart';
 import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_pane.dart';
 import 'package:mattermost_flutter/src/features/channel_members/presentation/channel_members_route.dart';
+import 'package:mattermost_flutter/src/features/drafts/presentation/draft_focus.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
@@ -93,6 +94,7 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
   @override
   Widget build(BuildContext context) {
     final SidebarChannel channel = widget.channel;
+    final bool focusDraft = ref.watch(draftFocusRequestProvider) == channel.id;
     final AuthSession? session = ref.watch(authSessionProvider);
     final Uri? serverUrl = session?.serverUrl;
     final String sidebarTeamName = ref.watch(
@@ -106,6 +108,13 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
         : sidebarTeamName;
     final AsyncValue<ChannelPostsViewState> posts = ref.watch(_postsProvider);
     final ChannelPostsViewState? viewState = posts.value;
+    if (focusDraft && viewState != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(draftFocusRequestProvider.notifier).clear(channel.id);
+        }
+      });
+    }
     _scheduleFocus(widget.navigationTarget);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -245,8 +254,10 @@ class _ChannelPostsPaneState extends ConsumerState<ChannelPostsPane> {
             ),
             if (viewState != null)
               MessageComposer(
+                autofocus: focusDraft,
                 key: ValueKey<String>('channel-composer-${channel.id}'),
                 destinationId: channel.id,
+                enableDraftSync: session != null,
                 composerController: _composerController,
                 onEdit: (String postId, String message) async {
                   await ref

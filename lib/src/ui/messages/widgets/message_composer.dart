@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/domain/repositories/emoji_repository.dart';
+import 'package:mattermost_flutter/src/features/drafts/domain/draft.dart';
+import 'package:mattermost_flutter/src/features/drafts/presentation/drafts_controller.dart';
 import 'package:mattermost_flutter/src/features/file_upload/domain/file_upload.dart';
 import 'package:mattermost_flutter/src/features/file_upload/presentation/composer_upload_controller.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/find_mention_query.dart';
@@ -21,6 +24,7 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/emoji_picker.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/file_attachment_presentation.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/full_message_editor.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_formatting_toolbar.dart';
+import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 import 'package:mattermost_flutter/src/ui/users/widgets/user_profile_card.dart';
 
 typedef SubmitMessage =
@@ -59,7 +63,7 @@ String formatMarkdownQuote(String text) => text
     .join('\n');
 
 /// Shared composer for channel posts and thread replies.
-class MessageComposer extends StatefulWidget {
+class MessageComposer extends ConsumerStatefulWidget {
   const MessageComposer({
     required this.destinationId,
     required this.placeholder,
@@ -68,6 +72,9 @@ class MessageComposer extends StatefulWidget {
     this.mentionRepositoryFactory,
     this.teamId,
     this.channelId,
+    this.rootId,
+    this.enableDraftSync = false,
+    this.autofocus = false,
     this.accountId = '',
     this.composerController,
     this.onSubmitWithFiles,
@@ -90,14 +97,17 @@ class MessageComposer extends StatefulWidget {
   final MentionRepository Function()? mentionRepositoryFactory;
   final String? teamId;
   final String? channelId;
+  final String? rootId;
+  final bool enableDraftSync;
+  final bool autofocus;
   final String accountId;
   final MessageComposerController? composerController;
 
   @override
-  State<MessageComposer> createState() => _MessageComposerState();
+  ConsumerState<MessageComposer> createState() => _MessageComposerState();
 }
 
-class _MessageComposerState extends State<MessageComposer> {
+class _MessageComposerState extends ConsumerState<MessageComposer> {
   late final MessageEditorController _controller;
   late final FocusNode _focusNode;
   final EmojiSearchNavigationController _emojiNavigation =
@@ -122,6 +132,151 @@ class _MessageComposerState extends State<MessageComposer> {
   TextEditingValue? _savedDraft;
   String? _dismissedEmojiQuery;
   String? _dismissedMentionQuery;
+  ProviderSubscription<DraftsState>? _draftSubscription;
+  DraftsController? _drafts;
+  bool _applyingDraft = false;
+  bool _conflictOpen = false;
+  bool _hadSyncedDraft = false;
+  String _lastDraftText = '';
+  DraftKey? get _draftKey =>
+      !widget.enableDraftSync ||
+          widget.channelId == null ||
+          widget.accountId.isEmpty
+      ? null
+      : DraftKey(channelId: widget.channelId!, rootId: widget.rootId);
+
+  void _bindDraft() {
+    final key = _draftKey;
+    if (key == null) return;
+    _drafts = ref.read(draftsControllerProvider.notifier);
+    _draftSubscription = ref.listenManual<DraftsState>(
+      draftsControllerProvider,
+      (_, next) {
+        _applyDraftState(next);
+        if (mounted) setState(() {});
+      },
+    );
+    final teamId = widget.teamId;
+    if (teamId != null && teamId.isNotEmpty) {
+      scheduleMicrotask(() {
+        if (mounted && _drafts != null) unawaited(_drafts!.loadTeam(teamId));
+      });
+    }
+    _applyDraftState(ref.read(draftsControllerProvider));
+  }
+
+  void _applyDraftState(DraftsState state) {
+    final key = _draftKey;
+    if (key == null || !mounted || _editingPostId != null) return;
+    final entry = state.entries[key];
+    if (entry?.conflict != null && !_conflictOpen) {
+      _conflictOpen = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_chooseDraft(key));
+      });
+    }
+    if (entry == null) {
+      if (_hadSyncedDraft && _controller.messageText == _lastDraftText) {
+        _applyingDraft = true;
+        _controller.clear();
+        _uploads?.clear();
+        _lastDraftText = '';
+        _applyingDraft = false;
+      }
+      _hadSyncedDraft = false;
+      return;
+    }
+    if (entry.dirty) return;
+    _hadSyncedDraft = true;
+    final draft = entry.draft;
+    if (_controller.messageText == draft.message &&
+        _lastDraftText == draft.message &&
+        draft.fileIds.every(
+          (id) => _uploads?.tiles.any((tile) => tile.fileId == id) ?? false,
+        )) {
+      return;
+    }
+    _applyingDraft = true;
+    _controller.value = TextEditingValue(
+      text: draft.message,
+      selection: TextSelection.collapsed(offset: draft.message.length),
+    );
+    _lastDraftText = draft.message;
+    _initUploads();
+    final uploads = _uploads;
+    if (uploads != null) {
+      for (final tile in uploads.tiles.toList()) {
+        if (tile.fileId != null && !draft.fileIds.contains(tile.fileId)) {
+          uploads.remove(tile.localId);
+        }
+      }
+    }
+    _uploads?.restoreUploaded(
+      draft.fileIds,
+      name: (int index) => MessageComposerStrings.restoredFile(index),
+    );
+    _applyingDraft = false;
+  }
+
+  Future<void> _chooseDraft(DraftKey key) async {
+    final keepLocal = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text(MessageComposerStrings.draftConflictTitle),
+        content: const Text(MessageComposerStrings.draftConflictBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(MessageComposerStrings.useServerDraft),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(MessageComposerStrings.keepLocalDraft),
+          ),
+        ],
+      ),
+    );
+    _conflictOpen = false;
+    if (mounted && keepLocal != null && key == _draftKey) {
+      _drafts?.resolveConflict(key, keepLocal: keepLocal);
+    }
+  }
+
+  void _writeDraft() {
+    final key = _draftKey;
+    final drafts = _drafts;
+    if (_applyingDraft ||
+        _editingPostId != null ||
+        key == null ||
+        drafts == null) {
+      return;
+    }
+    final text = _controller.messageText;
+    final ids =
+        _uploads?.tiles
+            .where((tile) => tile.fileId != null)
+            .map((tile) => tile.fileId!)
+            .toList() ??
+        <String>[];
+    final previous = ref.read(draftsControllerProvider).entries[key]?.draft;
+    _lastDraftText = text;
+    drafts.update(
+      Draft(
+        channelId: key.channelId,
+        rootId: key.rootId,
+        message: text,
+        fileIds: ids,
+        userId: previous?.userId ?? '',
+        createAt: previous?.createAt ?? 0,
+        updateAt: DateTime.now().millisecondsSinceEpoch,
+        type: previous?.type,
+        props: previous?.props,
+        priority: previous?.priority,
+        fileInfos: previous?.fileInfos ?? const [],
+      ),
+    );
+  }
 
   bool get _canSend =>
       !_sending &&
@@ -169,7 +324,10 @@ class _MessageComposerState extends State<MessageComposer> {
   }
 
   void _onUploadsChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      _writeDraft();
+      setState(() {});
+    }
   }
 
   void _resetUploads() {
@@ -419,6 +577,12 @@ class _MessageComposerState extends State<MessageComposer> {
       ),
     )..addListener(_onTextChanged);
     widget.composerController?._attach(this);
+    _bindDraft();
+    if (widget.autofocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focusNode.requestFocus();
+      });
+    }
   }
 
   void _initUploads() {
@@ -445,6 +609,15 @@ class _MessageComposerState extends State<MessageComposer> {
     if (oldWidget.destinationId != widget.destinationId ||
         oldWidget.channelId != widget.channelId ||
         oldWidget.accountId != widget.accountId) {
+      final oldKey = oldWidget.channelId == null
+          ? null
+          : DraftKey(channelId: oldWidget.channelId!, rootId: oldWidget.rootId);
+      if (oldKey != null && _drafts != null) unawaited(_drafts!.flush(oldKey));
+      _draftSubscription?.close();
+      _draftSubscription = null;
+      _drafts = null;
+      _hadSyncedDraft = false;
+      _applyingDraft = true;
       _scopeGeneration++;
       _sending = false;
       _picking = false;
@@ -460,6 +633,9 @@ class _MessageComposerState extends State<MessageComposer> {
       _dismissedMentionQuery = null;
       _mentionController?.dispose();
       _mentionController = null;
+      _lastDraftText = '';
+      _applyingDraft = false;
+      _bindDraft();
     }
     if (oldWidget.accountId != widget.accountId) {
       _emojiRepository = null;
@@ -471,6 +647,9 @@ class _MessageComposerState extends State<MessageComposer> {
 
   @override
   void dispose() {
+    final key = _draftKey;
+    if (key != null && _drafts != null) unawaited(_drafts!.flush(key));
+    _draftSubscription?.close();
     _scopeGeneration++;
     _resetUploads();
     widget.composerController?._detach(this);
@@ -503,6 +682,11 @@ class _MessageComposerState extends State<MessageComposer> {
   }
 
   void _onTextChanged() {
+    if (!_applyingDraft &&
+        _editingPostId == null &&
+        _controller.messageText != _lastDraftText) {
+      _writeDraft();
+    }
     if (_pendingDraft != null && _controller.text != _pendingDraft) {
       _pendingPostId = null;
       _pendingDraft = null;
@@ -586,6 +770,23 @@ class _MessageComposerState extends State<MessageComposer> {
       }
     }
     final String draft = _controller.messageText;
+    final draftKey = _draftKey;
+    final draftEntry = draftKey == null
+        ? null
+        : ref.read(draftsControllerProvider).entries[draftKey];
+    if (draftEntry?.conflict != null) return false;
+    final sentDraft = draftEntry?.draft;
+    if (sentDraft != null &&
+        ((sentDraft.type?.isNotEmpty ?? false) ||
+            (sentDraft.props?.isNotEmpty ?? false) ||
+            (sentDraft.priority?.isNotEmpty ?? false))) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text(MessageComposerStrings.unsupportedDraftOptions),
+        ),
+      );
+      return false;
+    }
     final List<String> fileIds = _uploads?.uploadedIds ?? const <String>[];
     final ComposerUploadController? uploads = _uploads;
     final String destinationId = widget.destinationId;
@@ -613,8 +814,16 @@ class _MessageComposerState extends State<MessageComposer> {
           scopeGeneration != _scopeGeneration) {
         return false;
       }
-      if (_controller.messageText == draft) _controller.clear();
-      uploads?.clear();
+      if (_controller.messageText == draft) {
+        _applyingDraft = true;
+        _controller.clear();
+        uploads?.clear();
+        _lastDraftText = '';
+        _applyingDraft = false;
+        if (draftKey != null && sentDraft != null && _drafts != null) {
+          unawaited(_cleanupSentDraft(draftKey, sentDraft));
+        }
+      }
       _pendingPostId = null;
       _pendingDraft = null;
       _focusNode.unfocus();
@@ -635,6 +844,24 @@ class _MessageComposerState extends State<MessageComposer> {
         setState(() => _sending = false);
       }
     }
+  }
+
+  Future<void> _cleanupSentDraft(DraftKey key, Draft draft) async {
+    final drafts = _drafts;
+    if (drafts == null) return;
+    final cleaned = await drafts.deleteIfUnchanged(key, draft);
+    if (!mounted || cleaned || _draftKey != key) return;
+    final entry = ref.read(draftsControllerProvider).entries[key];
+    if (entry?.error == null) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: const Text(MessageComposerStrings.cleanupPending),
+        action: SnackBarAction(
+          label: MessageComposerStrings.retryCleanup,
+          onPressed: () => unawaited(_cleanupSentDraft(key, draft)),
+        ),
+      ),
+    );
   }
 
   Future<void> _openFullEditor() async {
@@ -1077,6 +1304,9 @@ class _MessageComposerState extends State<MessageComposer> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
+    final key = _draftKey;
+    final draftState = key == null ? null : ref.read(draftsControllerProvider);
+    final draftEntry = key == null ? null : draftState?.entries[key];
     final EmojiAutocompleteQuery? emojiQuery = _visibleEmojiQuery;
     final MentionQuery? mentionQuery = _visibleMentionQuery;
     final MentionAutocompleteController? mentionController =
@@ -1257,6 +1487,27 @@ class _MessageComposerState extends State<MessageComposer> {
                   ),
                 ),
               ),
+              if (draftState?.syncStatus == DraftSyncStatus.disabled ||
+                  draftState?.syncStatus == DraftSyncStatus.unsupported ||
+                  draftState?.syncStatus == DraftSyncStatus.failed)
+                Text(
+                  MessageComposerStrings.draftSyncUnavailable,
+                  style: theme.textTheme.bodySmall,
+                ),
+              if (draftEntry?.error != null)
+                Text(
+                  MessageComposerStrings.draftSyncFailed,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.error,
+                  ),
+                ),
+              if (draftEntry != null &&
+                  draftEntry.draft.message.isEmpty &&
+                  draftEntry.draft.fileIds.isNotEmpty)
+                Text(
+                  MessageComposerStrings.attachmentDraftUnsynced,
+                  style: theme.textTheme.bodySmall,
+                ),
               if (_failed) ...<Widget>[
                 const SizedBox(height: 6),
                 Semantics(

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_failure.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/features/drafts/presentation/drafts_pane.dart';
 import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_item.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_page.dart';
@@ -105,6 +106,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     final bool followedThreadsSelected =
         destination == ShellDestination.threads;
     final bool inboxSelected = destination == ShellDestination.inbox;
+    final bool draftsSelected = destination == ShellDestination.drafts;
     final bool profileSelected = destination == ShellDestination.profile;
     final bool searchSelected = destination == ShellDestination.search;
     final ChannelSidebarSnapshot? sidebar = ref
@@ -126,6 +128,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
             auth: auth,
             selectedChannel: selectedChannel,
             followedThreadsSelected: followedThreadsSelected,
+            draftsSelected: draftsSelected,
             inboxSelected: inboxSelected,
             sidebar: sidebar,
             inboxHasNewItems: inboxHasNewItems,
@@ -138,6 +141,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
           auth: auth,
           selectedChannel: selectedChannel,
           followedThreadsSelected: followedThreadsSelected,
+          draftsSelected: draftsSelected,
           inboxSelected: inboxSelected,
           sidebar: sidebar,
           inboxHasNewItems: inboxHasNewItems,
@@ -157,6 +161,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     required AuthState auth,
     required SidebarChannel? selectedChannel,
     required bool followedThreadsSelected,
+    required bool draftsSelected,
     required bool inboxSelected,
     required ChannelSidebarSnapshot? sidebar,
     required bool inboxHasNewItems,
@@ -169,6 +174,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       auth: auth,
       selectedChannel: selectedChannel,
       followedThreadsSelected: followedThreadsSelected,
+      draftsSelected: draftsSelected,
       inboxSelected: false,
       sidebar: sidebar,
       onSelectChannel: _selectChannelNamed,
@@ -244,6 +250,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
                                               _showSelectedChannel,
                                           onThreadsSelected:
                                               _showFollowedThreadsDestination,
+                                          onDraftsSelected:
+                                              _showDraftsDestination,
                                         ),
                                       ),
                                       Expanded(child: mainContent),
@@ -285,6 +293,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     required AuthState auth,
     required SidebarChannel? selectedChannel,
     required bool followedThreadsSelected,
+    required bool draftsSelected,
     required bool inboxSelected,
     required ChannelSidebarSnapshot? sidebar,
     required bool inboxHasNewItems,
@@ -295,6 +304,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     final bool showChannel =
         _showCompactChannel &&
         !followedThreadsSelected &&
+        !draftsSelected &&
         !inboxSelected &&
         !searchSelected &&
         !profileSelected &&
@@ -309,6 +319,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         auth: auth,
         selectedChannel: selectedChannel,
         followedThreadsSelected: false,
+        draftsSelected: false,
         inboxSelected: false,
         sidebar: sidebar,
         onSelectChannel: _selectChannelNamed,
@@ -325,16 +336,18 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
         auth: auth,
         selectedChannel: selectedChannel,
         followedThreadsSelected: false,
+        draftsSelected: false,
         inboxSelected: true,
         sidebar: sidebar,
         onSelectChannel: _selectChannelNamed,
         onSearchInChannel: _openSearchInChannel,
       );
-    } else if (followedThreadsSelected) {
+    } else if (followedThreadsSelected || draftsSelected) {
       pane = _MainContent(
         auth: auth,
         selectedChannel: selectedChannel,
-        followedThreadsSelected: true,
+        followedThreadsSelected: followedThreadsSelected,
+        draftsSelected: draftsSelected,
         inboxSelected: false,
         sidebar: sidebar,
         onSelectChannel: _selectChannelNamed,
@@ -345,10 +358,12 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
       pane = ChannelSidebar(
         onChannelSelected: _showSelectedChannel,
         onThreadsSelected: _showFollowedThreadsDestination,
+        onDraftsSelected: _showDraftsDestination,
       );
     }
 
-    final bool showStackedContent = showChannel || followedThreadsSelected;
+    final bool showStackedContent =
+        showChannel || followedThreadsSelected || draftsSelected;
 
     return PopScope<void>(
       canPop: !showStackedContent,
@@ -421,6 +436,11 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage>
     if (_showCompactChannel) {
       setState(() => _showCompactChannel = false);
     }
+  }
+
+  void _showDraftsDestination() {
+    ref.read(shellDestinationProvider.notifier).select(ShellDestination.drafts);
+    if (_showCompactChannel) setState(() => _showCompactChannel = false);
   }
 
   void _showProfileDestination() {
@@ -718,6 +738,7 @@ class _MainContent extends StatelessWidget {
     required this.auth,
     required this.selectedChannel,
     required this.followedThreadsSelected,
+    required this.draftsSelected,
     required this.inboxSelected,
     required this.sidebar,
     required this.onSelectChannel,
@@ -728,6 +749,7 @@ class _MainContent extends StatelessWidget {
   final AuthState auth;
   final SidebarChannel? selectedChannel;
   final bool followedThreadsSelected;
+  final bool draftsSelected;
   final bool inboxSelected;
   final ChannelSidebarSnapshot? sidebar;
   final ValueChanged<String> onSelectChannel;
@@ -751,6 +773,18 @@ class _MainContent extends StatelessWidget {
         );
       }
       final SidebarTeam? team = sidebar?.team;
+      if (draftsSelected && team != null) {
+        return DraftsPane(
+          team: team,
+          channelsById: <String, SidebarChannel>{
+            for (final SidebarSection section in sidebar!.sections)
+              for (final SidebarChannel channel in section.channels)
+                channel.id: channel,
+          },
+          onSelectChannel: onSelectChannel,
+          onBack: onBackToChannels,
+        );
+      }
       if (followedThreadsSelected && team != null) {
         return FollowedThreadsPane(
           team: team,

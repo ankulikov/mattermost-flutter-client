@@ -5,10 +5,71 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/data/api/dio_mattermost_api.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_draft_dto.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 
 void main() {
+  group('draft endpoints', () {
+    test('lists drafts and accepts null as empty', () async {
+      final _RecordingAdapter adapter = _RecordingAdapter(body: 'null');
+      final Dio dio = Dio(
+        BaseOptions(baseUrl: 'https://chat.example.com/api/v4'),
+      )..httpClientAdapter = adapter;
+      final List<MattermostDraftDto> drafts = await DioMattermostApi(
+        dio: dio,
+      ).listTeamDrafts('team 1');
+      expect(drafts, isEmpty);
+      expect(adapter.request?.method, 'GET');
+      expect(adapter.request?.path, '/users/me/teams/team%201/drafts');
+    });
+
+    test('upserts a draft and accepts a null deletion response', () async {
+      final _RecordingAdapter adapter = _RecordingAdapter(
+        body: 'null',
+        statusCode: 201,
+      );
+      final Dio dio = Dio(
+        BaseOptions(baseUrl: 'https://chat.example.com/api/v4'),
+      )..httpClientAdapter = adapter;
+      final MattermostDraftDto? draft = await DioMattermostApi(dio: dio)
+          .saveDraft(
+            const MattermostDraftDto(
+              channelId: 'channel',
+              message: '',
+              rootId: 'root',
+            ),
+          );
+      expect(draft, isNull);
+      expect(adapter.request?.method, 'POST');
+      expect(adapter.request?.path, '/drafts');
+      expect(adapter.request?.data, <String, Object?>{
+        'channel_id': 'channel',
+        'message': '',
+        'root_id': 'root',
+      });
+    });
+
+    for (final String? root in <String?>[null, 'root 1']) {
+      test('deletes destination draft with root $root', () async {
+        final _RecordingAdapter adapter = _RecordingAdapter(
+          body: '{"status":"OK"}',
+        );
+        final Dio dio = Dio(
+          BaseOptions(baseUrl: 'https://chat.example.com/api/v4'),
+        )..httpClientAdapter = adapter;
+        await DioMattermostApi(
+          dio: dio,
+        ).deleteDraft(channelId: 'channel 1', rootId: root);
+        expect(adapter.request?.method, 'DELETE');
+        expect(
+          adapter.request?.path,
+          '/users/me/channels/channel%201/drafts${root == null ? '' : '/root%201'}',
+        );
+      });
+    }
+  });
+
   test('updates category collapse while preserving category fields', () async {
     final _RecordingAdapter adapter = _RecordingAdapter(
       body:

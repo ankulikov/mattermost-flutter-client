@@ -14,6 +14,18 @@ final class UploadTile {
       type = file.type,
       source = file;
 
+  UploadTile.restored({
+    required this.localId,
+    required String id,
+    required this.name,
+  }) : size = 0,
+       type = null,
+       source = null {
+    status = UploadTileStatus.uploaded;
+    percent = 100;
+    fileId = id;
+  }
+
   final int localId;
   final String name;
   final int size;
@@ -47,6 +59,18 @@ final class ComposerUploadController extends ChangeNotifier {
   List<String> get uploadedIds => List<String>.unmodifiable(
     _tiles.map((tile) => tile.fileId!).toList(growable: false),
   );
+
+  /// Restores server-confirmed uploads without uploading them again.
+  void restoreUploaded(List<String> ids, {required String Function(int) name}) {
+    if (_closed) return;
+    for (final String id in ids) {
+      if (_tiles.any((UploadTile tile) => tile.fileId == id)) continue;
+      _tiles.add(
+        UploadTile.restored(localId: _nextId++, id: id, name: name(_nextId)),
+      );
+    }
+    notifyListeners();
+  }
 
   bool addFiles(List<SelectedUploadFile> files) {
     if (_closed || _tiles.length + files.length > 5) return false;
