@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
+import 'package:mattermost_flutter/src/features/drafts/domain/draft.dart';
 import 'package:mattermost_flutter/src/features/file_upload/domain/file_upload.dart';
 
 enum UploadTileStatus { queued, uploading, finalizing, uploaded, failed }
@@ -14,10 +15,22 @@ final class UploadTile {
       type = file.type,
       source = file;
 
+  UploadTile.restored({
+    required this.localId,
+    required String id,
+    required this.name,
+    this.size = 0,
+    this.type,
+  }) : source = null {
+    status = UploadTileStatus.uploaded;
+    percent = 100;
+    fileId = id;
+  }
+
   final int localId;
-  final String name;
-  final int size;
-  final String? type;
+  String name;
+  int size;
+  String? type;
   SelectedUploadFile? source;
   UploadTileStatus status = UploadTileStatus.queued;
   int percent = 0;
@@ -47,6 +60,60 @@ final class ComposerUploadController extends ChangeNotifier {
   List<String> get uploadedIds => List<String>.unmodifiable(
     _tiles.map((tile) => tile.fileId!).toList(growable: false),
   );
+
+  /// Restores server-confirmed uploads without uploading them again.
+  void restoreUploaded(
+    List<String> ids, {
+    required String Function(int) name,
+    List<DraftFileInfo> fileInfos = const [],
+  }) {
+    if (_closed) return;
+    var changed = false;
+    for (final String id in ids) {
+      final info = fileInfos.where((info) => info.id == id).firstOrNull;
+      final existing = _tiles.where((tile) => tile.fileId == id).firstOrNull;
+      final fileName = info?.name;
+      final fileSize = info?.size;
+      final mimeType = info?.mimeType;
+      if (existing != null) {
+        if (existing.source == null && info != null) {
+          final newName = fileName != null && fileName.isNotEmpty
+              ? fileName
+              : existing.name;
+          final newSize = fileSize != null && fileSize >= 0
+              ? fileSize
+              : existing.size;
+          final newType = mimeType != null && mimeType.isNotEmpty
+              ? mimeType
+              : existing.type;
+          if (existing.name != newName ||
+              existing.size != newSize ||
+              existing.type != newType) {
+            existing
+              ..name = newName
+              ..size = newSize
+              ..type = newType;
+            changed = true;
+          }
+        }
+        continue;
+      }
+      final localId = _nextId++;
+      _tiles.add(
+        UploadTile.restored(
+          localId: localId,
+          id: id,
+          name: fileName != null && fileName.isNotEmpty
+              ? fileName
+              : name(localId + 1),
+          size: fileSize != null && fileSize >= 0 ? fileSize : 0,
+          type: mimeType != null && mimeType.isNotEmpty ? mimeType : null,
+        ),
+      );
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
 
   bool addFiles(List<SelectedUploadFile> files) {
     if (_closed || _tiles.length + files.length > 5) return false;

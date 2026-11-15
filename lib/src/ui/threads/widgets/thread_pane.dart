@@ -37,9 +37,11 @@ class ThreadPane extends ConsumerStatefulWidget {
     this.onPostDeleted,
     this.onThreadRead,
     this.onThreadUnfollowed,
+    this.autofocusComposer = false,
     super.key,
   });
 
+  final bool autofocusComposer;
   final String rootPostId;
   final SidebarChannel channel;
   final VoidCallback onClose;
@@ -362,10 +364,13 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                         actions: <Widget>[],
                       ),
                     MessageComposer(
+                      autofocus: widget.autofocusComposer,
                       key: ValueKey<String>(
                         'thread-composer-${widget.rootPostId}',
                       ),
                       destinationId: 'thread-${widget.rootPostId}',
+                      rootId: widget.rootPostId,
+                      enableDraftSync: session != null,
                       composerController: _composerController,
                       placeholder: MessageComposerStrings.replyPlaceholder,
                       emojiRepositoryFactory: session == null

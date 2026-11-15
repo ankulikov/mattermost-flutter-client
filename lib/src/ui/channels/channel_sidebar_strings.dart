@@ -1,5 +1,6 @@
 abstract final class ChannelSidebarStrings {
   static const String threads = 'Threads';
+  static const String drafts = 'Drafts';
   static const String title = 'Teams and channels';
   static const String loading = 'Loading teams and channels';
   static const String empty = 'No channels available';

@@ -17,6 +17,17 @@ abstract final class MessageComposerStrings {
   static const String removeFile = 'Remove file';
   static const String retryUpload = 'Retry upload';
   static const String uploadReady = 'Ready';
+  static String restoredFile(int index) => 'Attachment $index';
+  static const String unsupportedDraftOptions =
+      'This draft contains send options that are not supported yet.';
+  static const String draftSyncUnavailable =
+      'Draft sync is unavailable; drafts are kept for this session.';
+  static const String draftSyncFailed =
+      'Draft could not be synced. Your text is kept in this session.';
+  static const String attachmentDraftUnsynced =
+      'Attachment-only drafts are available in this session.';
+  static const String cleanupPending = 'Sent · cleanup pending';
+  static const String retryCleanup = 'Retry cleanup';
   static const String uploadFinalizing = 'Finalizing upload…';
   static const String uploadQueued = 'Waiting to upload';
   static const String tooManyFiles = 'Choose up to five files per message.';

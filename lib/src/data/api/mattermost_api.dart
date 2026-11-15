@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_draft_dto.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 
 enum PostThreadDirection { up, down }
@@ -8,6 +9,13 @@ enum PostThreadDirection { up, down }
 ///
 /// Feature and domain code depend on this contract, never on Dio or HTTP.
 abstract interface class MattermostApi {
+  Future<List<MattermostDraftDto>> listTeamDrafts(String teamId) =>
+      throw UnimplementedError();
+  Future<MattermostDraftDto?> saveDraft(MattermostDraftDto draft) =>
+      throw UnimplementedError();
+  Future<void> deleteDraft({required String channelId, String? rootId}) =>
+      throw UnimplementedError();
+
   Future<MattermostUserDto> getCurrentUser();
 
   Future<List<MattermostTeamDto>> getTeamsForCurrentUser();

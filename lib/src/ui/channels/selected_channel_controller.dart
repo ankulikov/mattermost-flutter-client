@@ -37,7 +37,7 @@ final class ChannelPresentationController extends Notifier<bool> {
 }
 
 /// The mutually-exclusive destinations owned by the application shell.
-enum ShellDestination { channels, threads, inbox, search, profile }
+enum ShellDestination { channels, threads, drafts, inbox, search, profile }
 
 final NotifierProvider<ShellDestinationController, ShellDestination>
 shellDestinationProvider =
@@ -50,7 +50,8 @@ final class ShellDestinationController extends Notifier<ShellDestination> {
   ShellDestination build() => ShellDestination.channels;
 
   void select(ShellDestination destination) {
-    if (destination == ShellDestination.threads) {
+    if (destination == ShellDestination.threads ||
+        destination == ShellDestination.drafts) {
       ref.read(selectedChannelProvider.notifier).clear();
     }
     state = destination;

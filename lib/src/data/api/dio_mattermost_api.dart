@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
+import 'package:mattermost_flutter/src/data/api/dto/mattermost_draft_dto.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/api/mattermost_api.dart';
 
@@ -14,6 +15,35 @@ final class DioMattermostApi
   DioMattermostApi({required Dio dio}) : _dio = dio;
 
   final Dio _dio;
+
+  @override
+  Future<List<MattermostDraftDto>> listTeamDrafts(String teamId) async {
+    final Response<Object?> response = await _get(
+      '/users/me/teams/${Uri.encodeComponent(teamId)}/drafts',
+    );
+    if (response.data == null) return const <MattermostDraftDto>[];
+    return _dtoList(response.data, MattermostDraftDto.fromJson);
+  }
+
+  @override
+  Future<MattermostDraftDto?> saveDraft(MattermostDraftDto draft) async {
+    final Response<Object?> response = await _post(
+      '/drafts',
+      data: draft.toJson(),
+    );
+    if (response.data == null) return null;
+    return MattermostDraftDto.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<void> deleteDraft({required String channelId, String? rootId}) async {
+    final String suffix = rootId == null || rootId.isEmpty
+        ? ''
+        : '/${Uri.encodeComponent(rootId)}';
+    await _delete(
+      '/users/me/channels/${Uri.encodeComponent(channelId)}/drafts$suffix',
+    );
+  }
 
   @override
   Future<MattermostUserDto> getCurrentUser() async {
@@ -757,11 +787,22 @@ final class DioMattermostApi
     required String userId,
     required String category,
   }) async {
-    final Response<Object?> response = await _get(
-      '/users/${Uri.encodeComponent(userId)}'
-      '/preferences/${Uri.encodeComponent(category)}',
-    );
-    return _dtoList(response.data, MattermostPreferenceDto.fromJson);
+    try {
+      final Response<Object?> response = await _get(
+        '/users/${Uri.encodeComponent(userId)}'
+        '/preferences/${Uri.encodeComponent(category)}',
+      );
+      if (response.data == null) return const <MattermostPreferenceDto>[];
+      return _dtoList(response.data, MattermostPreferenceDto.fromJson);
+    } on DioException catch (error) {
+      final data = error.response?.data;
+      if (error.response?.statusCode == 404 &&
+          data is Map &&
+          data['id'] == 'api.preference.preferences_category.get.app_error') {
+        return const <MattermostPreferenceDto>[];
+      }
+      rethrow;
+    }
   }
 
   @override

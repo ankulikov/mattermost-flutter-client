@@ -117,6 +117,7 @@ Drift, logs, analytics, fixtures, or screenshots.
 - [Inbox and Postponed](inbox.md)
 - [Message search](search.md)
 - [Message composer](message-composer.md)
+- [Drafts](drafts.md)
 - [Markdown rendering](markdown.md)
 - [Mentions, reactions, and emoji](mentions-and-emoji.md)
 - [Profiles and statuses](profiles-and-statuses.md)

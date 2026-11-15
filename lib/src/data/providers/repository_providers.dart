@@ -29,6 +29,12 @@ import 'package:mattermost_flutter/src/domain/repositories/user_repository.dart'
 import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
 import 'package:mattermost_flutter/src/features/channel_members/data/mattermost_channel_members_repository.dart';
 import 'package:mattermost_flutter/src/features/channel_members/domain/channel_members_repository.dart';
+import 'package:mattermost_flutter/src/features/drafts/data/mattermost_draft_realtime.dart';
+import 'package:mattermost_flutter/src/features/drafts/data/mattermost_draft_repository.dart';
+import 'package:mattermost_flutter/src/features/drafts/data/mattermost_draft_sync_preference.dart';
+import 'package:mattermost_flutter/src/features/drafts/domain/draft_realtime.dart';
+import 'package:mattermost_flutter/src/features/drafts/domain/draft_repository.dart';
+import 'package:mattermost_flutter/src/features/drafts/domain/draft_sync_preference.dart';
 import 'package:mattermost_flutter/src/features/file_upload/data/mattermost_file_upload_repository.dart';
 import 'package:mattermost_flutter/src/features/file_upload/data/system_upload_clipboard.dart';
 import 'package:mattermost_flutter/src/features/file_upload/data/system_upload_file_picker.dart';
@@ -268,4 +274,20 @@ final Provider<InboxRepository> inboxRepositoryProvider =
         counterCache: ref.watch(inboxCounterCacheProvider),
         realtime: ref.watch(sessionRealtimeServiceProvider),
       ),
+    );
+
+final Provider<DraftRepository> draftRepositoryProvider =
+    Provider<DraftRepository>(
+      (Ref ref) =>
+          MattermostDraftRepository(ref.watch(activeMattermostApiProvider)),
+    );
+
+final Provider<DraftRealtime> draftRealtimeProvider = Provider<DraftRealtime>(
+  (ref) => MattermostDraftRealtime(ref.watch(sessionRealtimeServiceProvider)),
+);
+
+final Provider<DraftSyncPreference> draftSyncPreferenceProvider =
+    Provider<DraftSyncPreference>(
+      (ref) =>
+          MattermostDraftSyncPreference(ref.watch(activeMattermostApiProvider)),
     );

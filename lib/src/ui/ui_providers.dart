@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/request_cancellation.dart';
 import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
+import 'package:mattermost_flutter/src/data/providers/session_providers.dart';
 import 'package:mattermost_flutter/src/domain/models/attachment.dart';
 import 'package:mattermost_flutter/src/domain/models/auth_session.dart';
 import 'package:mattermost_flutter/src/domain/models/emoji.dart';
@@ -9,6 +10,8 @@ import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/domain/services/realtime_connection_service.dart';
+import 'package:mattermost_flutter/src/features/drafts/presentation/draft_send_controller.dart';
+import 'package:mattermost_flutter/src/features/drafts/presentation/drafts_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/mentions/domain/models/group_mention.dart';
 import 'package:mattermost_flutter/src/features/profile/presentation/current_user_profile_controller.dart';
@@ -45,6 +48,30 @@ final Provider<AuthSession?> authSessionProvider = Provider<AuthSession?>((
     authControllerProvider.select((AuthState state) => state.session),
   );
 });
+
+final Provider<AuthSession?> _draftSessionProvider = Provider<AuthSession?>(
+  (ref) => ref.watch(activeAccountSessionProvider),
+);
+
+final NotifierProvider<DraftsController, DraftsState> draftsControllerProvider =
+    NotifierProvider<DraftsController, DraftsState>(
+      () => DraftsController(
+        _draftSessionProvider,
+        draftRepositoryProvider,
+        draftRealtimeProvider,
+        draftSyncPreferenceProvider,
+      ),
+    );
+
+final NotifierProvider<DraftSendController, Map<DraftKey, DraftSendStatus>>
+draftSendControllerProvider =
+    NotifierProvider<DraftSendController, Map<DraftKey, DraftSendStatus>>(
+      () => DraftSendController(
+        _draftSessionProvider,
+        postRepositoryProvider,
+        draftsControllerProvider,
+      ),
+    );
 
 /// Keeps the session-owned realtime service alive independently of open tabs.
 final StreamProvider<RealtimeConnectionStatus>

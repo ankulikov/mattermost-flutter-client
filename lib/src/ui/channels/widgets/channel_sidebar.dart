@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/core/async/operation_status.dart';
 import 'package:mattermost_flutter/src/domain/models/channel.dart';
+import 'package:mattermost_flutter/src/features/drafts/presentation/drafts_controller.dart';
 import 'package:mattermost_flutter/src/ui/auth/auth_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_controller.dart';
 import 'package:mattermost_flutter/src/ui/channels/channel_sidebar_strings.dart';
@@ -17,11 +18,13 @@ class ChannelSidebar extends ConsumerWidget {
   const ChannelSidebar({
     this.onChannelSelected,
     this.onThreadsSelected,
+    this.onDraftsSelected,
     super.key,
   });
 
   final VoidCallback? onChannelSelected;
   final VoidCallback? onThreadsSelected;
+  final VoidCallback? onDraftsSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,6 +58,28 @@ class ChannelSidebar extends ConsumerWidget {
                       (value.asData?.value.totalUnreadThreads ?? 0) > 0,
                 ),
               );
+          final DraftsState drafts = ref.watch(draftsControllerProvider);
+          if (team != null &&
+              !drafts.loadedTeams.contains(team.id) &&
+              !drafts.loading &&
+              drafts.error == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              unawaited(
+                ref.read(draftsControllerProvider.notifier).loadTeam(team.id),
+              );
+            });
+          }
+          final Set<String> channelIds = {
+            for (final section in viewState.snapshot.sections)
+              for (final channel in section.channels) channel.id,
+          };
+          final int draftCount = drafts.entries.keys
+              .where(
+                (key) =>
+                    (drafts.teamKeys[team?.id]?.contains(key) ?? false) ||
+                    channelIds.contains(key.channelId),
+              )
+              .length;
           return _SidebarContent(
             snapshot: viewState.snapshot,
             refreshStatus: viewState.refreshStatus,
@@ -63,6 +88,15 @@ class ChannelSidebar extends ConsumerWidget {
             threadsSelected:
                 ref.watch(shellDestinationProvider) == ShellDestination.threads,
             threadsUnread: threadsUnread,
+            draftsSelected:
+                ref.watch(shellDestinationProvider) == ShellDestination.drafts,
+            draftCount: draftCount,
+            onDraftsSelected: () {
+              ref
+                  .read(shellDestinationProvider.notifier)
+                  .select(ShellDestination.drafts);
+              onDraftsSelected?.call();
+            },
             onThreadsSelected: () {
               ref
                   .read(shellDestinationProvider.notifier)
@@ -112,6 +146,9 @@ class _SidebarContent extends StatefulWidget {
     required this.threadsSelected,
     required this.threadsUnread,
     required this.onThreadsSelected,
+    required this.draftsSelected,
+    required this.draftCount,
+    required this.onDraftsSelected,
   });
 
   final ChannelSidebarSnapshot snapshot;
@@ -121,6 +158,9 @@ class _SidebarContent extends StatefulWidget {
   final bool threadsSelected;
   final bool threadsUnread;
   final VoidCallback onThreadsSelected;
+  final bool draftsSelected;
+  final int draftCount;
+  final VoidCallback onDraftsSelected;
 
   @override
   State<_SidebarContent> createState() => _SidebarContentState();
@@ -233,6 +273,31 @@ class _SidebarContentState extends State<_SidebarContent> {
             selected: widget.threadsSelected,
             unread: widget.threadsUnread,
             onTap: widget.onThreadsSelected,
+          ),
+        if (!_hasSearchQuery)
+          Material(
+            key: const ValueKey<String>('drafts-sidebar-tile'),
+            color: widget.draftsSelected
+                ? Theme.of(context).colorScheme.secondaryContainer
+                : Colors.transparent,
+            child: ListTile(
+              dense: true,
+              contentPadding: AppLayout.sidebarRowContentPadding,
+              minTileHeight: AppLayout.sidebarRowMinHeight,
+              minVerticalPadding: AppSpacing.xs,
+              selected: widget.draftsSelected,
+              leading: const Icon(Icons.drafts_outlined),
+              title: Text(
+                ChannelSidebarStrings.drafts,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.w400),
+              ),
+              trailing: widget.draftCount > 0
+                  ? Text(widget.draftCount.toString())
+                  : null,
+              onTap: widget.onDraftsSelected,
+            ),
           ),
         Expanded(
           child: filteredSections.isEmpty
