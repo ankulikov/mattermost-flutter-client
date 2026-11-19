@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show Widget;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:mattermost_flutter/src/data/logging/auth_diagnostics.dart';
 import 'package:mattermost_flutter/src/data/platform/sso_browser_policy.dart';
@@ -50,6 +51,13 @@ Future<bool> clearSsoBrowserCookies({
   return removedAny;
 }
 
+typedef SsoWebViewPresenter =
+    Future<void> Function(
+      Widget webView,
+      Future<void> closeRequested,
+      VoidCallback onDismissed,
+    );
+
 /// Native WebView implementation of [SsoBrowserGateway].
 ///
 /// It deliberately uses the platform Cookie Manager. It never evaluates
@@ -58,11 +66,14 @@ final class InAppWebViewSsoBrowserGateway implements SsoBrowserGateway {
   InAppWebViewSsoBrowserGateway({
     CookieManager? cookieManager,
     AuthDiagnostics? diagnostics,
+    SsoWebViewPresenter? macosWebViewPresenter,
   }) : _cookieManager = cookieManager,
-       _diagnostics = diagnostics ?? AuthDiagnostics();
+       _diagnostics = diagnostics ?? AuthDiagnostics(),
+       _macosWebViewPresenter = macosWebViewPresenter;
 
   CookieManager? _cookieManager;
   final AuthDiagnostics _diagnostics;
+  final SsoWebViewPresenter? _macosWebViewPresenter;
   _NativeSsoAttempt? _activeAttempt;
   int _nextAttemptId = 0;
 
@@ -77,8 +88,8 @@ final class InAppWebViewSsoBrowserGateway implements SsoBrowserGateway {
       'platform': defaultTargetPlatform.name,
       'is_web': kIsWeb,
     });
-    if (kIsWeb) {
-      // Flutter Web cannot safely inspect cross-origin HttpOnly cookies.
+    final bool isMacos = defaultTargetPlatform == TargetPlatform.macOS;
+    if (kIsWeb || (isMacos && _macosWebViewPresenter == null)) {
       _diagnostics.event('sso.authenticate.rejected', <String, Object?>{
         'reason': SsoBrowserFailureKind.browserUnavailable.name,
       });
@@ -99,6 +110,7 @@ final class InAppWebViewSsoBrowserGateway implements SsoBrowserGateway {
       cookieManager: cookieManager,
       diagnostics: _diagnostics,
       serverUrl: serverUrl,
+      presentWebView: isMacos ? _macosWebViewPresenter : null,
       startUrl: SsoBrowserPolicy.startUrl(
         serverUrl: serverUrl,
         provider: provider,
@@ -146,23 +158,26 @@ final class _NativeSsoAttempt {
     required AuthDiagnostics diagnostics,
     required this.serverUrl,
     required this.startUrl,
+    required SsoWebViewPresenter? presentWebView,
   }) : _cookieManager = cookieManager,
        _diagnostics = diagnostics,
-       _browser = _SsoInAppBrowser();
+       _presentWebView = presentWebView;
 
   final int attemptId;
   final CookieManager _cookieManager;
   final AuthDiagnostics _diagnostics;
   final Uri serverUrl;
   final Uri startUrl;
-  final _SsoInAppBrowser _browser;
+  final SsoWebViewPresenter? _presentWebView;
+  late final _SsoInAppBrowser _browser = _SsoInAppBrowser()..attempt = this;
   final Completer<SsoBrowserResult> _result = Completer<SsoBrowserResult>();
+  final Completer<void> _closeRequested = Completer<void>();
+  Future<void>? _webViewClosed;
 
   bool _isCompleting = false;
   bool _isCheckingCookie = false;
 
   Future<SsoBrowserResult> start() async {
-    _browser.attempt = this;
     _log('sso.attempt.started', <String, Object?>{
       'server': AuthDiagnostics.safeUri(serverUrl),
       'start_url': AuthDiagnostics.safeUri(startUrl),
@@ -186,23 +201,35 @@ final class _NativeSsoAttempt {
 
     try {
       _log('sso.browser.open_requested');
-      await _browser.openUrlRequest(
-        urlRequest: URLRequest(url: WebUri.uri(startUrl)),
-        settings: InAppBrowserClassSettings(
-          browserSettings: InAppBrowserSettings(
-            shouldCloseOnBackButtonPressed: true,
-            hideUrlBar: true,
+      final SsoWebViewPresenter? presentWebView = _presentWebView;
+      if (presentWebView != null) {
+        final Future<void> closed = presentWebView(
+          _buildEmbeddedWebView(),
+          _closeRequested.future,
+          browserClosed,
+        );
+        _webViewClosed = closed;
+        _log('sso.browser.open_completed');
+        await closed;
+        browserClosed();
+      } else {
+        await _browser.openUrlRequest(
+          urlRequest: URLRequest(url: WebUri.uri(startUrl)),
+          settings: InAppBrowserClassSettings(
+            browserSettings: InAppBrowserSettings(
+              shouldCloseOnBackButtonPressed: true,
+              hideUrlBar: true,
+            ),
+            webViewSettings: buildSsoWebViewSettings(),
           ),
-          webViewSettings: buildSsoWebViewSettings(),
-        ),
-      );
-      _log('sso.browser.open_completed');
-      if (_isCompleting) {
-        try {
-          await _browser.close();
-        } on Object catch (error) {
-          _logException('sso.browser.close_after_completion_failed', error);
-          // The attempt has already produced its terminal result.
+        );
+        _log('sso.browser.open_completed');
+        if (_isCompleting) {
+          try {
+            await _browser.close();
+          } on Object catch (error) {
+            _logException('sso.browser.close_after_completion_failed', error);
+          }
         }
       }
     } on Object catch (error) {
@@ -213,6 +240,38 @@ final class _NativeSsoAttempt {
     }
     return _result.future;
   }
+
+  Widget _buildEmbeddedWebView() => InAppWebView(
+    initialUrlRequest: URLRequest(url: WebUri.uri(startUrl)),
+    initialSettings: buildSsoWebViewSettings(),
+    shouldOverrideUrlLoading: (_, action) =>
+        decideNavigation(action.request.url),
+    onLoadStart: (_, url) => navigationStarted(url),
+    onLoadStop: (_, url) => navigationFinished(url),
+    onReceivedError: (_, request, error) {
+      if (request.isForMainFrame == true) {
+        loadingFailed(
+          url: request.url,
+          source: 'load_error',
+          code: error.type.toNativeValue() ?? 0,
+        );
+      }
+    },
+    onReceivedHttpError: (_, request, response) {
+      if (request.isForMainFrame == true) {
+        loadingFailed(
+          url: request.url,
+          source: 'http_error',
+          code: response.statusCode ?? 0,
+        );
+      }
+    },
+    onCreateWindow: (_, _) async {
+      popupRequested();
+      return false;
+    },
+    onPermissionRequest: (_, _) async => PermissionResponse(),
+  );
 
   Future<void> cancel() =>
       _finish(const SsoBrowserFailure(SsoBrowserFailureKind.cancelled));
@@ -374,7 +433,12 @@ final class _NativeSsoAttempt {
     });
 
     try {
-      await _browser.close();
+      if (_presentWebView != null) {
+        _closeRequested.complete();
+        await _webViewClosed;
+      } else {
+        await _browser.close();
+      }
     } on Object catch (error) {
       _logException('sso.browser.close_failed', error);
       // Closing an already-dismissed native browser is harmless.
