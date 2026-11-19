@@ -88,6 +88,10 @@ final Provider<FileUploadRepository> fileUploadRepositoryProvider =
       ),
     );
 
+final macosSsoWebViewPresenterProvider = Provider<SsoWebViewPresenter?>(
+  (Ref ref) => null,
+);
+
 final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
     Provider<MattermostAuthRepository>((Ref ref) {
       return MattermostAuthRepository(
@@ -95,7 +99,9 @@ final Provider<MattermostAuthRepository> mattermostAuthRepositoryProvider =
         activeAccount: ref.watch(activeAccountContextProvider),
         clientFactory: ref.watch(mattermostApiClientFactoryProvider),
         serverSsoDiscovery: ApiServerSsoDiscovery(),
-        ssoBrowserGateway: InAppWebViewSsoBrowserGateway(),
+        ssoBrowserGateway: InAppWebViewSsoBrowserGateway(
+          macosWebViewPresenter: ref.watch(macosSsoWebViewPresenterProvider),
+        ),
       );
     });
 
