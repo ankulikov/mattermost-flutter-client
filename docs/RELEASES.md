@@ -1,20 +1,32 @@
 # GitHub release builds
 
-Pushing a semantic version tag starts `.github/workflows/release.yml`:
+Run **Release builds** with **Run workflow** from GitHub Actions to release the
+batch of conventional commits currently on `main`. Developers never create or
+push release tags manually.
 
-```text
-vMAJOR.MINOR.PATCH
-vMAJOR.MINOR.PATCH+BUILD
-```
+The workflow runs Semantic Release against the full `main` history. It uses the
+last `vMAJOR.MINOR.PATCH` tag and the commits after it to calculate the next
+version, writes `version: MAJOR.MINOR.PATCH+BUILD` to `pubspec.yaml`, commits
+that change to `main`, and creates the matching `vMAJOR.MINOR.PATCH` tag. `BUILD`
+is the GitHub Actions run number and is checked against the cross-platform
+65,535 limit before the commit is made. The platform jobs then check out that
+tag, so every binary is built from the committed application version.
 
-The semantic version becomes the application build name. If the optional numeric
-`BUILD` suffix is absent, the GitHub Actions run number becomes the application
-build number. Example:
+Use Conventional Commits for changes intended to release:
 
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
+- `feat: ...` produces a minor release;
+- `fix: ...` and `perf: ...` produce a patch release;
+- `feat!: ...` or a `BREAKING CHANGE:` footer produces a major release.
+
+Existing `Feature: ...`, `Fix: ...`, and `Performance: ...` messages remain
+supported while the repository adopts the lowercase convention. Commits that do
+not imply a release leave Semantic Release with nothing to publish, and the
+workflow ends before any platform build starts.
+
+The workflow needs `contents: write`. If branch protection does not allow the
+built-in GitHub Actions token to push the release commit and tag, set the
+`RELEASE_TOKEN` repository secret to a minimally scoped release-bot token that
+is allowed to write `main`.
 
 The workflow publishes these files directly as assets of the corresponding
 GitHub Release, so users download the file itself rather than a workflow-artifact
