@@ -1,10 +1,12 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mattermost_flutter/src/domain/models/emoji.dart';
+import 'package:mattermost_flutter/src/domain/models/mattermost_system_emojis.g.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_avatar.dart';
 import 'package:mattermost_flutter/src/ui/core/widgets/avatar_initials.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/emoji_picker.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 import 'package:mattermost_flutter/src/ui/users/user_profile_strings.dart';
 
@@ -88,23 +90,31 @@ class _UserProfileCardState extends ConsumerState<UserProfileCard> {
         children: <Widget>[
           Center(child: _ProfileAvatar(profile: profile)),
           const SizedBox(height: 16),
-          Text(
-            profile.fullName,
+          _CopyText(
+            value: profile.fullName,
+            label: UserProfileStrings.copyName,
             textAlign: TextAlign.center,
             style: Theme.of(
               context,
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '@${profile.handle}',
+          _CopyText(
+            value: '@${profile.handle}',
+            label: UserProfileStrings.copyLogin,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 12),
-          Center(child: _PresenceBadge(presence: profile.presence)),
+          if (profile.customStatus
+              case final UserCustomStatus status) ...<Widget>[
+            const SizedBox(height: 4),
+            _CustomStatusLine(status: status),
+            if (status.expiresAt case final DateTime expiresAt) ...<Widget>[
+              const SizedBox(height: 4),
+              _StatusExpiration(expiresAt: expiresAt),
+            ],
+          ],
           const SizedBox(height: 24),
           _ProfileField(
             icon: Icons.work_outline,
@@ -191,14 +201,26 @@ class _ProfileAvatar extends ConsumerWidget {
       label: profile.fullName,
       child: SizedBox.square(
         dimension: diameter,
-        child: ClipOval(
-          child: avatar.when(
-            data: (UserAvatar? value) => value == null
-                ? fallback
-                : _ProfileImage(bytes: value.bytes, fallback: fallback),
-            loading: () => fallback,
-            error: (Object _, StackTrace _) => fallback,
-          ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            Positioned.fill(
+              child: ClipOval(
+                child: avatar.when(
+                  data: (UserAvatar? value) => value == null
+                      ? fallback
+                      : _ProfileImage(bytes: value.bytes, fallback: fallback),
+                  loading: () => fallback,
+                  error: (Object _, StackTrace _) => fallback,
+                ),
+              ),
+            ),
+            PositionedDirectional(
+              end: -2,
+              bottom: -2,
+              child: _PresenceBadge(profile: profile),
+            ),
+          ],
         ),
       ),
     );
@@ -222,32 +244,122 @@ class _ProfileImage extends StatelessWidget {
   );
 }
 
-class _PresenceBadge extends StatelessWidget {
-  const _PresenceBadge({required this.presence});
+class _CopyText extends StatelessWidget {
+  const _CopyText({
+    required this.value,
+    required this.label,
+    required this.style,
+    required this.textAlign,
+  });
+  final String value;
+  final String label;
+  final TextStyle? style;
+  final TextAlign textAlign;
 
-  final UserPresence presence;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Tooltip(
+      message: label,
+      child: TextButton(
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(48, 48),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        onPressed: () async => Clipboard.setData(ClipboardData(text: value)),
+        child: Text(value, textAlign: textAlign, style: style),
+      ),
+    ),
+  );
+}
+
+class _PresenceBadge extends StatelessWidget {
+  const _PresenceBadge({required this.profile});
+  final UserProfile profile;
 
   @override
   Widget build(BuildContext context) {
-    final Color color = switch (presence) {
+    final Color color = switch (profile.presence) {
       UserPresence.online => Colors.green,
       UserPresence.away => Colors.amber.shade700,
       UserPresence.doNotDisturb => Colors.red,
       UserPresence.offline => Theme.of(context).colorScheme.outline,
     };
-    return Semantics(
-      label: UserProfileStrings.presence(presence),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    final String label = UserProfileStrings.presence(profile.presence);
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        label: label,
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Theme.of(context).colorScheme.surface,
+              width: 3,
+            ),
           ),
-          const SizedBox(width: 7),
-          Text(UserProfileStrings.presence(presence)),
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomStatusLine extends ConsumerWidget {
+  const _CustomStatusLine({required this.status});
+  final UserCustomStatus status;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final String? glyph = mattermostSystemEmojis[status.emoji];
+    final session = ref.watch(authSessionProvider);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        if (status.emoji.isNotEmpty) ...<Widget>[
+          if (glyph != null)
+            Text(glyph)
+          else if (session == null)
+            Text(':${status.emoji}:')
+          else
+            SizedBox.square(
+              dimension: 24,
+              child: CustomEmojiImage(
+                repository: ref.read(customEmojiRepositoryProvider),
+                accountId: session.durableDataScopeId,
+                emoji: CustomEmojiReference(name: status.emoji),
+              ),
+            ),
+          if (status.text.isNotEmpty) const SizedBox(width: 8),
         ],
+        if (status.text.isNotEmpty)
+          Flexible(child: Text(status.text, textAlign: TextAlign.center)),
+      ],
+    );
+  }
+}
+
+class _StatusExpiration extends StatelessWidget {
+  const _StatusExpiration({required this.expiresAt});
+
+  final DateTime expiresAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime local = expiresAt.toLocal();
+    final MaterialLocalizations localizations = MaterialLocalizations.of(
+      context,
+    );
+    return Text(
+      UserProfileStrings.statusUntil(
+        localizations.formatShortDate(local),
+        localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local)),
+      ),
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }

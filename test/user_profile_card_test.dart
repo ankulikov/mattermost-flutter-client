@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -35,6 +36,23 @@ void main() {
     'renders the requested profile fields and opens a direct message',
     (WidgetTester tester) async {
       UserProfile? messagedProfile;
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied =
+                (call.arguments as Map<Object?, Object?>)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -63,7 +81,11 @@ void main() {
       expect(find.text('Ada Lovelace'), findsOneWidget);
       expect(find.text('@ada-nickname'), findsOneWidget);
       expect(find.text('Mathematician'), findsOneWidget);
-      expect(find.text('Online'), findsOneWidget);
+      expect(find.byTooltip('Online'), findsOneWidget);
+      await tester.tap(find.text('Ada Lovelace'));
+      expect(copied, 'Ada Lovelace');
+      await tester.tap(find.text('@ada-nickname'));
+      expect(copied, '@ada-nickname');
       expect(find.text('ada@example.com'), findsOneWidget);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Message'));
@@ -71,6 +93,114 @@ void main() {
       expect(messagedProfile, same(profile));
     },
   );
+
+  testWidgets('shows custom status alongside availability', (
+    WidgetTester tester,
+  ) async {
+    const customProfile = UserProfile(
+      id: 'ada',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      username: 'ada',
+      nickname: '',
+      position: '',
+      email: '',
+      presence: UserPresence.online,
+      customStatus: UserCustomStatus(emoji: 'calendar', text: 'In a meeting'),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWithValue(session),
+          userProfileProvider.overrideWith(
+            (Ref ref, String userId) async => customProfile,
+          ),
+          userAvatarProvider.overrideWith(
+            (Ref ref, UserAvatarRequest input) async => null,
+          ),
+        ],
+        child: MaterialApp(
+          home: UserProfileCard(
+            userId: 'ada',
+            onMessage: (UserProfile value) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('In a meeting'), findsOneWidget);
+    expect(find.byTooltip('Online'), findsOneWidget);
+    expect(
+      tester.getCenter(find.text('📆')).dy,
+      tester.getCenter(find.text('In a meeting')).dy,
+    );
+    expect(find.text('📆'), findsOneWidget);
+    expect(find.textContaining('Until '), findsNothing);
+    expect(
+      tester.getTopLeft(find.text('@ada')).dy -
+          tester.getBottomLeft(find.text('Ada Lovelace')).dy,
+      lessThan(25),
+    );
+  });
+
+  for (final double width in <double>[320, 1200]) {
+    testWidgets('shows status expiration at width $width with large text', (
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final expiresAt = DateTime(2030, 5, 6, 14, 30);
+      final customProfile = UserProfile(
+        id: 'ada',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        username: 'ada',
+        nickname: '',
+        position: '',
+        email: '',
+        presence: UserPresence.online,
+        customStatus: UserCustomStatus(
+          emoji: 'calendar',
+          text: 'In a meeting',
+          expiresAt: expiresAt,
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authSessionProvider.overrideWithValue(session),
+            userProfileProvider.overrideWith(
+              (Ref ref, String userId) async => customProfile,
+            ),
+            userAvatarProvider.overrideWith(
+              (Ref ref, UserAvatarRequest input) async => null,
+            ),
+          ],
+          child: MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: UserProfileCard(userId: 'ada', onMessage: (value) async {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final localizations = MaterialLocalizations.of(
+        tester.element(find.byType(UserProfileCard)),
+      );
+      final date = localizations.formatShortDate(expiresAt);
+      final time = localizations.formatTimeOfDay(
+        TimeOfDay.fromDateTime(expiresAt),
+      );
+      expect(find.text('Until $date at $time'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('opens the card from the avatar only', (
     WidgetTester tester,
