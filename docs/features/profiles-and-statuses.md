@@ -23,6 +23,11 @@ The UI draws colored initials immediately. After bytes arrive, Flutter decodes
 them to the control's target size off the build path. A load or decode failure
 keeps the initials.
 
+Profile cards fetch a fresh user record and availability together. The avatar
+shows availability with a tooltip. An unexpired custom-status emoji and text
+appear together below the login, followed by the expiration date and time when set. Name and displayed handle
+can be copied to the clipboard.
+
 ## Current-user profile
 
 The profile page requests `GET /users/me` and
