@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mattermost_flutter/src/app/app.dart';
+import 'package:mattermost_flutter/src/app/macos_sso_web_view.dart';
+import 'package:mattermost_flutter/src/app/router.dart';
 import 'package:mattermost_flutter/src/app/theme/app_theme.dart';
 import 'package:mattermost_flutter/src/data/providers/repository_providers.dart';
 import 'package:mattermost_flutter/src/features/preferences/data/repositories/shared_preferences_app_preferences_repository.dart';
@@ -21,6 +23,22 @@ Future<void> bootstrapMattermostApp() async {
       overrides: [
         appSettingsRepositoryProvider.overrideWithValue(repository),
         initialAppThemeProvider.overrideWithValue(initialTheme),
+        macosSsoWebViewPresenterProvider.overrideWithValue((
+          webView,
+          closeRequested,
+          onDismissed,
+        ) {
+          final NavigatorState? navigator = appNavigatorKey.currentState;
+          if (navigator == null) {
+            throw StateError('SSO requires an attached app navigator.');
+          }
+          return presentMacosSsoWebView(
+            navigator,
+            webView,
+            closeRequested,
+            onDismissed,
+          );
+        }),
       ],
       child: const MattermostApp(),
     ),
