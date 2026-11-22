@@ -103,12 +103,14 @@ final class InboxThreadCandidate {
     required this.thread,
     required this.channel,
     required this.teamId,
+    this.latestReplies = const <Post>[],
     this.rootAttentionReason,
     this.unreadMentionDetails,
     this.hasNewExplicitMention = false,
   });
 
   final FollowedThread thread;
+  final List<Post> latestReplies;
   final SidebarChannel channel;
   final String teamId;
 

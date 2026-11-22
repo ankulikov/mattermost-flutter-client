@@ -53,6 +53,7 @@ InboxThreadCandidate _threadCandidate(
   ThreadInboxItem item, {
   ChannelPost? root,
 }) => InboxThreadCandidate(
+  latestReplies: item.latestReplies,
   thread: root == null
       ? item.thread
       : FollowedThread(

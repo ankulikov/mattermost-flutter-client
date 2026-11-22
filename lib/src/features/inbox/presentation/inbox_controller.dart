@@ -690,6 +690,7 @@ final class InboxController extends AsyncNotifier<InboxViewState> {
   InboxItem _withPostponedAt(InboxItem item, DateTime at) => switch (item) {
     ThreadInboxItem() => ThreadInboxItem(
       thread: item.thread,
+      latestReplies: item.latestReplies,
       channel: item.channel,
       teamId: item.teamId,
       rootAttentionReason: item.rootAttentionReason,

@@ -22,6 +22,7 @@ final class ThreadInboxItem extends InboxItem {
     required this.thread,
     required this.channel,
     required this.teamId,
+    this.latestReplies = const <Post>[],
     this.rootAttentionReason,
     this.unreadMentionDetails,
     this.reactivatesPostponed = false,
@@ -29,6 +30,7 @@ final class ThreadInboxItem extends InboxItem {
   });
 
   final FollowedThread thread;
+  final List<Post> latestReplies;
   final SidebarChannel channel;
   final String teamId;
   final InboxAttentionReason? rootAttentionReason;

@@ -50,7 +50,8 @@ thread visible as three panes. Compact layouts stack those same destinations.
 Thread cards share the Inbox message-card surface but omit Inbox's Done and
 Postpone actions. Cards show unread replies as new replies. Before the participants, a badge
 shows unread mentions, or a dot indicates unread replies when there are no
-mentions. Read cards show the total reply count.
+mentions. Read cards show the total reply count. This summary widget is shared
+with Inbox thread cards, including participant avatars and overflow tooltips.
 
 When the content pane is at least `AppBreakpoints.sideThread` wide, `ThreadPane`
 opens beside the channel or Inbox content. Narrower layouts route to

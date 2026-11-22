@@ -1,3 +1,5 @@
+import 'package:mattermost_flutter/src/ui/messages/thread_summary_strings.dart';
+
 abstract final class FollowedThreadsStrings {
   static const String title = 'Threads';
   static const String subtitle =
@@ -12,16 +14,13 @@ abstract final class FollowedThreadsStrings {
   static const String loadingMore = 'Loading more threads';
   static const String now = 'now';
 
-  static String replies(int count) => count == 1 ? '1 reply' : '$count replies';
+  static String replies(int count) => ThreadSummaryStrings.replies(count);
   static String unreadReplies(int count) =>
-      count == 1 ? '1 unread reply' : '$count unread replies';
-  static String newReplies(int count) =>
-      count == 1 ? '1 new reply' : '$count new replies';
-  static String mentions(int count) =>
-      count == 1 ? '1 unread mention' : '$count unread mentions';
-  static String additionalParticipants(int count) => count == 1
-      ? '1 additional participant'
-      : '$count additional participants';
+      ThreadSummaryStrings.unreadReplies(count);
+  static String newReplies(int count) => ThreadSummaryStrings.newReplies(count);
+  static String mentions(int count) => ThreadSummaryStrings.mentions(count);
+  static String additionalParticipants(int count) =>
+      ThreadSummaryStrings.additionalParticipants(count);
   static String minutesAgo(int count) =>
       count == 1 ? '1 minute ago' : '$count minutes ago';
   static String hoursAgo(int count) =>

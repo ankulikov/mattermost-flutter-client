@@ -12,10 +12,11 @@ import 'package:mattermost_flutter/src/features/inbox/domain/models/inbox_realti
 import 'package:mattermost_flutter/src/features/inbox/domain/policies/reconcile_queues.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_controller.dart';
 import 'package:mattermost_flutter/src/features/inbox/presentation/inbox_strings.dart';
+import 'package:mattermost_flutter/src/features/inbox/presentation/widgets/inbox_thread_replies.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_breakpoints.dart';
 import 'package:mattermost_flutter/src/ui/core/layout/app_spacing.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_preview_card.dart';
-import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/thread_summary.dart';
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 class InboxPage extends ConsumerStatefulWidget {
@@ -362,8 +363,16 @@ class _InboxItemCard extends ConsumerWidget {
       post: preview.post,
       serverUrl: session?.serverUrl,
       onTap: onOpen,
+      replies: switch (item) {
+        ThreadInboxItem(:final latestReplies) when latestReplies.isNotEmpty =>
+          InboxThreadReplies(replies: latestReplies),
+        _ => null,
+      },
       details: !isPostponed && !threadReadPending && _showsUpdates(item)
-          ? _InboxUpdates(item: item)
+          ? switch (item) {
+              ThreadInboxItem(:final thread) => ThreadSummary(thread: thread),
+              _ => _InboxUpdates(item: item),
+            }
           : null,
       actions: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -440,24 +449,7 @@ class _InboxUpdates extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<_UpdateLine> updates = switch (item) {
-      ThreadInboxItem(
-        :final thread,
-        :final channel,
-        :final unreadMentionDetails,
-      ) =>
-        <_UpdateLine>[
-          _UpdateLine(
-            tags: <String>['${thread.unreadReplies}'],
-            text: InboxStrings.newRepliesWithLastOneAt(thread.unreadReplies),
-            trailingTags: <String>[_timestamp(context, thread.lastReplyAt)],
-          ),
-          if (thread.unreadMentions > 0 &&
-              (!channel.isDialog || unreadMentionDetails?.hasMentions == true))
-            _UpdateLine(
-              tags: _threadMentionTags(unreadMentionDetails),
-              text: InboxStrings.mentioned,
-            ),
-        ],
+      ThreadInboxItem() => const <_UpdateLine>[],
       DirectMessageBundleInboxItem(:final messages) => <_UpdateLine>[
         _UpdateLine(
           tags: <String>['${messages.length}'],
@@ -498,24 +490,6 @@ class _InboxUpdates extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _timestamp(BuildContext context, DateTime timestamp) =>
-      formatMessageTimestamp(
-        sentAt: timestamp,
-        locale: Localizations.localeOf(context).toLanguageTag(),
-      );
-
-  List<String> _threadMentionTags(InboxThreadMentionDetails? details) {
-    if (details == null || !details.hasMentions) {
-      return const <String>[InboxStrings.mention];
-    }
-    return <String>[
-      if (details.mentionsCurrentUser) InboxStrings.you,
-      ...details.groupMentionHandles,
-      if (details.mentionsChannel) InboxStrings.channelMention,
-      if (details.unclassifiedCount > 0) InboxStrings.mention,
-    ];
   }
 
   _UpdateLine _channelUpdate(InboxPostCandidate candidate) =>

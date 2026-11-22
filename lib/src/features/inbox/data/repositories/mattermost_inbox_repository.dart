@@ -78,6 +78,8 @@ final class MattermostInboxRepository extends InboxRepository {
   final SessionRealtimeService? _realtime;
   final DateTime Function() _now;
   _InboxRealtimeScope? _realtimeScope;
+  Set<String> _previewThreadIds = <String>{};
+  Set<String> _previewReplyIds = <String>{};
 
   static const Set<String> _realtimeEventNames = <String>{
     'posted',
@@ -187,17 +189,11 @@ final class MattermostInboxRepository extends InboxRepository {
       }
     }
 
-    final (
-      List<_UnreadChannelPosts> unread,
-      Map<String, List<MattermostPostDto>> unreadThreadPosts,
-    ) = await (
-      _loadUnreadPosts(
-        channels: channels,
-        members: members,
-        currentUser: currentUser,
-      ),
-      _loadUnreadThreadPosts(rawThreads.values),
-    ).wait;
+    final List<_UnreadChannelPosts> unread = await _loadUnreadPosts(
+      channels: channels,
+      members: members,
+      currentUser: currentUser,
+    );
     final Set<String> postponedIds = postponed.references
         .map((PostponedReference reference) => reference.postId)
         .toSet();
@@ -211,6 +207,19 @@ final class MattermostInboxRepository extends InboxRepository {
       final List<MattermostPostDto> hydrated = await _api.getPostsByIds(batch);
       for (final MattermostPostDto post in hydrated) {
         rawPosts[post.id] = post;
+      }
+    }
+    final Map<String, List<MattermostPostDto>> latestThreadPosts =
+        await _loadLatestThreadPosts(<String>{
+          ...rawThreads.keys,
+          for (final PostponedReference reference in postponed.references)
+            if (reference.kind == PostponedReferenceKind.thread &&
+                rawPosts[reference.postId]?.deleteAt == 0)
+              reference.postId,
+        });
+    for (final List<MattermostPostDto> replies in latestThreadPosts.values) {
+      for (final MattermostPostDto reply in replies) {
+        rawPosts[reply.id] = reply;
       }
     }
     final Map<String, UserSummary> authors = await _loadAuthors(
@@ -235,7 +244,7 @@ final class MattermostInboxRepository extends InboxRepository {
             members,
             currentUser,
             groupMentionNames,
-            unreadThreadPosts[source.raw.id] ?? const <MattermostPostDto>[],
+            latestThreadPosts[source.raw.id] ?? const <MattermostPostDto>[],
           ),
         )
         .whereType<InboxThreadCandidate>()
@@ -293,6 +302,7 @@ final class MattermostInboxRepository extends InboxRepository {
 
     final List<InboxItem> postponedItems = _postponedItems(
       references: postponed.references,
+      latestThreadPosts: latestThreadPosts,
       rawPosts: rawPosts,
       mappedById: mappedById,
       channels: knownChannels,
@@ -314,6 +324,17 @@ final class MattermostInboxRepository extends InboxRepository {
       builtAt: builtAt,
       hasIncompleteMentionReconstruction: incompleteMentions,
     );
+    _previewThreadIds = <String>{
+      for (final InboxItem item in <InboxItem>[
+        ...result.newItems,
+        ...result.postponedItems,
+      ])
+        ...item.threadRootIds,
+    };
+    _previewReplyIds = <String>{
+      for (final List<MattermostPostDto> replies in latestThreadPosts.values)
+        for (final MattermostPostDto reply in replies) reply.id,
+    };
     _realtimeScope = _InboxRealtimeScope(
       currentUser: currentUser,
       channels: knownChannels,
@@ -392,9 +413,13 @@ final class MattermostInboxRepository extends InboxRepository {
       case 'post_edited':
         final MattermostPostDto? raw = _postFromEvent(event.data);
         if (raw == null || raw.id.isEmpty) return null;
-        // A matching thread_updated event carries the aggregate needed to
-        // project replies. The reply itself must not trigger a REST reload.
-        if (raw.rootId.isNotEmpty) return null;
+        if (raw.rootId.isNotEmpty) {
+          // Edits (including our own) need not emit thread_updated. Reconcile
+          // the bounded preview without relying on that aggregate event.
+          return _previewThreadIds.contains(raw.rootId)
+              ? const InboxRefreshRequired()
+              : null;
+        }
         if (raw.userId == session.userId) return null;
         return InboxPostChanged(
           postId: raw.id,
@@ -408,6 +433,11 @@ final class MattermostInboxRepository extends InboxRepository {
         final MattermostPostDto? raw = _postFromEvent(event.data);
         final Object? idValue = event.data['post_id'];
         final String postId = raw?.id ?? (idValue is String ? idValue : '');
+        if (_previewThreadIds.contains(raw?.rootId) ||
+            _previewReplyIds.contains(postId)) {
+          // Reload at most three replies so deletion also backfills the row.
+          return const InboxRefreshRequired();
+        }
         return postId.isEmpty
             ? null
             : InboxPostChanged(postId: postId, candidate: null);
@@ -688,77 +718,51 @@ final class MattermostInboxRepository extends InboxRepository {
     }
   }
 
-  Future<Map<String, List<MattermostPostDto>>> _loadUnreadThreadPosts(
-    Iterable<_ThreadSource> sources,
+  Future<Map<String, List<MattermostPostDto>>> _loadLatestThreadPosts(
+    Set<String> threadIds,
   ) async {
-    final List<_ThreadSource> mentionedThreads = sources
-        .where((_ThreadSource source) => source.raw.unreadMentions > 0)
-        .toList(growable: false);
+    final List<String> ids = threadIds.toList(growable: false);
     final Map<String, List<MattermostPostDto>> result =
         <String, List<MattermostPostDto>>{};
-    for (
-      var start = 0;
-      start < mentionedThreads.length;
-      start += _maxUnreadConcurrency
-    ) {
-      final List<_ThreadSource> group = mentionedThreads.sublist(
+    for (var start = 0; start < ids.length; start += _maxUnreadConcurrency) {
+      final List<String> group = ids.sublist(
         start,
-        start + _maxUnreadConcurrency > mentionedThreads.length
-            ? mentionedThreads.length
+        start + _maxUnreadConcurrency > ids.length
+            ? ids.length
             : start + _maxUnreadConcurrency,
       );
       result.addEntries(
         await Future.wait(
-          group.map((_ThreadSource source) async {
-            final List<MattermostPostDto> posts =
-                await _loadUnreadThreadPostsPage(source.raw);
-            return MapEntry<String, List<MattermostPostDto>>(
-              source.raw.id,
-              posts,
+          group.map((String rootId) async {
+            // The root is returned separately from the limited replies. Never
+            // follow has_next: an Inbox preview is deliberately just three replies.
+            final MattermostPostListDto page = await _api.getPostThread(
+              rootPostId: rootId,
+              perPage: 3,
+              direction: PostThreadDirection.up,
+            );
+            final List<MattermostPostDto> replies =
+                page.posts.values
+                    .where(
+                      (MattermostPostDto post) =>
+                          post.rootId == rootId && post.deleteAt == 0,
+                    )
+                    .toList()
+                  ..sort((a, b) {
+                    final int byTime = a.createAt.compareTo(b.createAt);
+                    return byTime != 0 ? byTime : a.id.compareTo(b.id);
+                  });
+            return MapEntry(
+              rootId,
+              replies
+                  .skip(replies.length > 3 ? replies.length - 3 : 0)
+                  .toList(growable: false),
             );
           }),
         ),
       );
     }
     return result;
-  }
-
-  Future<List<MattermostPostDto>> _loadUnreadThreadPostsPage(
-    MattermostUserThreadDto thread,
-  ) async {
-    final Map<String, MattermostPostDto> posts = <String, MattermostPostDto>{};
-    String? fromPost;
-    int? fromCreateAt = thread.lastViewedAt;
-    final Set<String> cursors = <String>{};
-    while (true) {
-      final MattermostPostListDto page = await _api.getPostThread(
-        rootPostId: thread.id,
-        fromPost: fromPost,
-        fromCreateAt: fromCreateAt,
-        direction: PostThreadDirection.down,
-      );
-      posts.addAll(page.posts);
-      if (!page.hasNext) break;
-      final String nextId = page.nextPostId.isNotEmpty
-          ? page.nextPostId
-          : page.order.lastOrNull ?? '';
-      final MattermostPostDto? next = page.posts[nextId];
-      if (next == null || !cursors.add(nextId)) {
-        throw const FormatException(
-          'Unread thread pagination cursor did not advance',
-        );
-      }
-      fromPost = nextId;
-      fromCreateAt = next.createAt;
-    }
-    return posts.values
-        .where(
-          (MattermostPostDto post) =>
-              post.rootId == thread.id &&
-              post.createAt > thread.lastViewedAt &&
-              post.deleteAt == 0,
-        )
-        .toList(growable: false);
   }
 
   Future<List<_UnreadChannelPosts>> _loadUnreadPosts({
@@ -878,7 +882,7 @@ final class MattermostInboxRepository extends InboxRepository {
     Map<String, MattermostChannelMemberDto> members,
     MattermostUserDto currentUser,
     Set<String> groupMentionNames,
-    List<MattermostPostDto> unreadPosts,
+    List<MattermostPostDto> latestPosts,
   ) {
     final MattermostUserThreadDto raw = source.raw;
     final ChannelPost? root = raw.post == null
@@ -893,7 +897,11 @@ final class MattermostInboxRepository extends InboxRepository {
         raw.unreadMentions == 0
         ? null
         : _threadMentionDetails(
-            unreadPosts: unreadPosts,
+            unreadPosts: latestPosts
+                .where(
+                  (MattermostPostDto post) => post.createAt > raw.lastViewedAt,
+                )
+                .toList(growable: false),
             // CRT counts dialog replies as mentions even when their bodies do
             // not contain an explicit mention. Preserve that server counter
             // on FollowedThread, but do not turn its implicit dialog
@@ -918,6 +926,9 @@ final class MattermostInboxRepository extends InboxRepository {
     return InboxThreadCandidate(
       channel: channel,
       teamId: source.teamId,
+      latestReplies: List<Post>.unmodifiable(
+        latestPosts.map((post) => mappedById[post.id]).whereType<Post>(),
+      ),
       rootAttentionReason: rootAttention?.reason,
       unreadMentionDetails: unreadMentionDetails,
       thread: FollowedThread(
@@ -1008,6 +1019,7 @@ final class MattermostInboxRepository extends InboxRepository {
 
   List<InboxItem> _postponedItems({
     required List<PostponedReference> references,
+    required Map<String, List<MattermostPostDto>> latestThreadPosts,
     required Map<String, MattermostPostDto> rawPosts,
     required Map<String, ChannelPost> mappedById,
     required Map<String, SidebarChannel> channels,
@@ -1031,6 +1043,11 @@ final class MattermostInboxRepository extends InboxRepository {
       if (reference.kind == PostponedReferenceKind.thread) {
         items.add(
           ThreadInboxItem(
+            latestReplies: List<Post>.unmodifiable(
+              (latestThreadPosts[reference.postId] ?? <MattermostPostDto>[])
+                  .map((post) => mappedById[post.id])
+                  .whereType<Post>(),
+            ),
             channel: channel,
             teamId: channel.teamId,
             thread: FollowedThread(

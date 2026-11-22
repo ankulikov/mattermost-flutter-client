@@ -16,6 +16,7 @@ class MessagePreviewCard extends StatelessWidget {
     this.serverUrl,
     this.headerKey,
     this.headerTrailing,
+    this.replies,
     this.details,
     this.actions,
     this.selected = false,
@@ -30,6 +31,7 @@ class MessagePreviewCard extends StatelessWidget {
   final Uri? serverUrl;
   final Key? headerKey;
   final Widget? headerTrailing;
+  final Widget? replies;
   final Widget? details;
   final Widget? actions;
   final bool selected;
@@ -104,6 +106,7 @@ class MessagePreviewCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (replies case final Widget replies) replies,
               if (details case final Widget details) ...<Widget>[
                 Divider(height: 1, color: theme.colorScheme.outlineVariant),
                 details,

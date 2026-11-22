@@ -15,6 +15,7 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/message_composer.dart
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_content.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_interaction_surface.dart';
 import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.dart';
+import 'package:mattermost_flutter/src/ui/messages/widgets/message_section_divider.dart';
 import 'package:mattermost_flutter/src/ui/posts/post_permalink_route.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_controller.dart';
 import 'package:mattermost_flutter/src/ui/threads/thread_strings.dart';
@@ -281,7 +282,10 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
                             index += 1
                           ) ...<Widget>[
                             if (unreadReplies > 0 && index == firstUnreadIndex)
-                              _UnreadMessagesDivider(key: _unreadDividerKey),
+                              MessageSectionDivider(
+                                key: _unreadDividerKey,
+                                label: ThreadStrings.unreadMessages,
+                              ),
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),
                               child: _ThreadPost(
@@ -579,36 +583,6 @@ class _ThreadPaneState extends ConsumerState<ThreadPane> {
         const SnackBar(content: Text(ThreadStrings.followUpdateFailed)),
       );
     }
-  }
-}
-
-class _UnreadMessagesDivider extends StatelessWidget {
-  const _UnreadMessagesDivider({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final Color color = Theme.of(context).colorScheme.primary;
-    return Semantics(
-      label: ThreadStrings.unreadMessages,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: Row(
-          children: <Widget>[
-            Expanded(child: Divider(color: color)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Text(
-                ThreadStrings.unreadMessages,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelMedium?.copyWith(color: color),
-              ),
-            ),
-            Expanded(child: Divider(color: color)),
-          ],
-        ),
-      ),
-    );
   }
 }
 

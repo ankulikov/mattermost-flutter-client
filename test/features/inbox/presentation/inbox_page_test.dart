@@ -21,6 +21,205 @@ import 'package:mattermost_flutter/src/ui/messages/widgets/message_primitives.da
 import 'package:mattermost_flutter/src/ui/ui_providers.dart';
 
 void main() {
+  testWidgets('thread cards show three text-only excerpts at adaptive widths', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(() => tester.view.resetPhysicalSize());
+    addTearDown(() => tester.view.resetDevicePixelRatio());
+    tester.view.devicePixelRatio = 1;
+    final String emoji = '👨‍👩‍👧‍👦';
+    final String firstHundred = List<String>.filled(100, emoji).join();
+    final List<Post> replies = [
+      _reply(
+        'one',
+        'Short reply',
+        sentAt: DateTime.now().subtract(const Duration(minutes: 5)),
+      ),
+      _reply(
+        'two',
+        '$firstHundred${emoji}hidden suffix',
+        sentAt: DateTime.now().subtract(const Duration(hours: 2)),
+      ),
+      Post(
+        id: 'three',
+        rootId: 'root',
+        channelId: 'channel',
+        author: const PostAuthor(id: 'other', displayName: 'Other'),
+        sentAt: DateTime.utc(2026),
+        message: '![image](https://example.test/x.png)',
+        attachments: const [
+          PostAttachment(
+            id: 'file',
+            name: 'secret-file.pdf',
+            size: 100,
+            mimeType: 'application/pdf',
+          ),
+        ],
+      ),
+    ];
+    for (final double width in [390, 699, 700, 1119, 1120, 1280]) {
+      tester.view.physicalSize = Size(width, 1400);
+      await tester.pumpWidget(
+        ProviderScope(
+          key: ValueKey(width),
+          overrides: [
+            authSessionProvider.overrideWithValue(_session),
+            inboxRepositoryProvider.overrideWithValue(
+              _InboxRepository(
+                InboxSnapshot(newItems: [_threadWithReplies(replies)]),
+              ),
+            ),
+            postponedRepositoryProvider.overrideWithValue(
+              const _PostponedRepository(),
+            ),
+          ],
+          child: MaterialApp(
+            theme: ThemeData(
+              brightness: width < 700 ? Brightness.light : Brightness.dark,
+            ),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: InboxPage(onOpenItem: (_) {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final Finder separator = find.text(InboxStrings.recentMessages(3));
+      expect(separator, findsOneWidget);
+      expect(
+        tester.getTopLeft(separator).dy,
+        greaterThan(tester.getBottomLeft(find.byType(MattermostMarkdown)).dy),
+      );
+      expect(
+        tester.getBottomLeft(separator).dy,
+        lessThan(tester.getTopLeft(find.text('Short reply')).dy),
+      );
+      final Finder replyTime = find.byKey(
+        const ValueKey<String>('inbox-reply-time-one'),
+      );
+      expect(tester.widget<Text>(replyTime).data, '5 minutes ago');
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey<String>('inbox-reply-time-two')),
+            )
+            .data,
+        '2 hours ago',
+      );
+      expect(
+        tester.getBottomLeft(replyTime).dy,
+        lessThan(tester.getTopLeft(find.text('Short reply')).dy),
+      );
+      expect(find.text('Short reply'), findsOneWidget);
+      expect(find.text('$firstHundred…'), findsOneWidget);
+      expect(find.textContaining('hidden suffix'), findsNothing);
+      expect(find.text('secret-file.pdf'), findsNothing);
+      expect(find.byType(MattermostMarkdown), findsOneWidget); // root only
+      expect(find.byType(MessageAvatar), findsNWidgets(4));
+      final double avatarCenter = tester
+          .getCenter(find.byType(MessageAvatar).first)
+          .dx;
+      final double contentStart = tester
+          .getTopLeft(
+            find.byKey(const ValueKey<String>('inbox-source-thread:root')),
+          )
+          .dx;
+      for (final Post reply in replies) {
+        final Finder replyRow = find.byKey(
+          ValueKey<String>('inbox-reply-${reply.id}'),
+        );
+        expect(
+          tester
+              .getCenter(
+                find.descendant(
+                  of: replyRow,
+                  matching: find.byType(MessageAvatar),
+                ),
+              )
+              .dx,
+          avatarCenter,
+        );
+        expect(
+          tester
+              .getTopLeft(
+                find.byKey(ValueKey<String>('inbox-reply-time-${reply.id}')),
+              )
+              .dx,
+          contentStart,
+        );
+      }
+      expect(tester.getTopLeft(find.text('Short reply')).dx, contentStart);
+      expect(
+        tester
+            .getCenter(
+              find.byKey(const ValueKey<String>('thread-unread-dot-root')),
+            )
+            .dx,
+        avatarCenter,
+      );
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets(
+    'realtime preview refresh preserves replies while loading or failing',
+    (WidgetTester tester) async {
+      final StreamController<InboxRealtimeEvent> realtime = StreamController();
+      addTearDown(realtime.close);
+      final Completer<InboxSnapshot> refresh = Completer();
+      final _SequencedInboxRepository repository = _SequencedInboxRepository(
+        [
+          () async => InboxSnapshot(
+            newItems: [
+              _threadWithReplies([_reply('old', 'Earlier reply')]),
+            ],
+          ),
+          () => refresh.future,
+          () async => throw StateError('offline'),
+        ],
+        counters: InboxCounters.empty,
+        realtime: realtime.stream,
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authSessionProvider.overrideWithValue(_session),
+            inboxRepositoryProvider.overrideWithValue(repository),
+            postponedRepositoryProvider.overrideWithValue(
+              const _PostponedRepository(),
+            ),
+          ],
+          child: MaterialApp(home: InboxPage(onOpenItem: (_) {})),
+        ),
+      );
+      await tester.pumpAndSettle();
+      realtime.add(const InboxRefreshRequired());
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Earlier reply'), findsOneWidget);
+      refresh.complete(
+        InboxSnapshot(
+          newItems: [
+            _threadWithReplies([_reply('new', 'Latest reply')]),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Earlier reply'), findsNothing);
+      expect(find.text('Latest reply'), findsOneWidget);
+      expect(find.text(InboxStrings.recentMessages(1)), findsOneWidget);
+      realtime.add(const InboxRefreshRequired());
+      await tester.pumpAndSettle();
+      expect(find.text('Latest reply'), findsOneWidget);
+      expect(find.text(InboxStrings.refreshFailed), findsOneWidget);
+      expect(repository.loadCalls, 3);
+    },
+  );
+
   testWidgets('shows stored tab counts while the first snapshot is loading', (
     WidgetTester tester,
   ) async {
@@ -307,7 +506,7 @@ void main() {
             .data,
         'Town Square',
       );
-      expect(find.text('new replies, last one at'), findsOneWidget);
+      expect(find.text('3 new replies'), findsOneWidget);
       expect(find.text('messages since'), findsOneWidget);
       expect(find.text('new messages, last one at'), findsNothing);
       final Finder dmSinceDate = find.byKey(
@@ -320,24 +519,10 @@ void main() {
         find.descendant(of: dmSinceDate, matching: find.text(firstMessageDate)),
         findsOneWidget,
       );
-      expect(find.text('mentioned'), findsNWidgets(3));
-      expect(find.text('You'), findsNWidgets(2));
-      expect(find.text('@dev-team'), findsNWidgets(2));
+      expect(find.text('mentioned'), findsNWidgets(2));
+      expect(find.text('You'), findsOneWidget);
+      expect(find.text('@dev-team'), findsOneWidget);
       expect(find.text('New post in a channel'), findsOneWidget);
-      expect(
-        tester
-            .getTopLeft(
-              find.byKey(
-                const ValueKey<String>('inbox-update-tag-thread:root-0-0'),
-              ),
-            )
-            .dx,
-        tester
-            .getTopLeft(
-              find.byKey(const ValueKey<String>('inbox-source-thread:root')),
-            )
-            .dx,
-      );
       expect(find.byType(Card), findsNWidgets(5));
       expect(find.byType(MattermostMarkdown), findsNWidgets(5));
       expect(
@@ -346,8 +531,23 @@ void main() {
             .map((MattermostMarkdown markdown) => markdown.data),
         contains('**latest DM**'),
       );
+      final Finder summary = find.byKey(
+        const ValueKey<String>('thread-participant-summary-root'),
+      );
+      expect(summary, findsOneWidget);
       expect(
-        find.byKey(const ValueKey<String>('inbox-update-tag-thread:root-0-0')),
+        find.byKey(const ValueKey<String>('inbox-updates-thread:root')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('thread-unread-dot-root')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('thread-unread-count-root')),
+          matching: find.text('1'),
+        ),
         findsOneWidget,
       );
       expect(
@@ -356,47 +556,6 @@ void main() {
         ),
         findsOneWidget,
       );
-      final Finder threadCount = find.byKey(
-        const ValueKey<String>('inbox-update-tag-thread:root-0-0'),
-      );
-      final Finder threadTimestamp = find.byKey(
-        const ValueKey<String>('inbox-update-trailing-tag-thread:root-0-0'),
-      );
-      expect(
-        find
-            .ancestor(of: threadCount, matching: find.byType(Wrap))
-            .evaluate()
-            .single,
-        same(
-          find
-              .ancestor(of: threadTimestamp, matching: find.byType(Wrap))
-              .evaluate()
-              .single,
-        ),
-      );
-      expect(
-        find.byKey(const ValueKey<String>('unread-post:mention')),
-        findsNothing,
-      );
-      expect(
-        tester
-            .widget<DecoratedBox>(
-              find.descendant(
-                of: find.byKey(
-                  const ValueKey<String>('inbox-update-tag-thread:root-1-0'),
-                ),
-                matching: find.byType(DecoratedBox),
-              ),
-            )
-            .decoration,
-        isA<BoxDecoration>().having(
-          (BoxDecoration decoration) => decoration.color,
-          'tag background',
-          isNotNull,
-        ),
-      );
-      expect(find.text('3'), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
       expect(find.text(InboxStrings.read), findsNWidgets(5));
       expect(find.text(InboxStrings.postpone), findsNWidgets(5));
 
@@ -463,7 +622,7 @@ void main() {
   );
 
   testWidgets(
-    'omits mention update for a direct thread without an explicit mention',
+    'uses the CRT mention badge for a direct thread without specific labels',
     (WidgetTester tester) async {
       final ThreadInboxItem item = ThreadInboxItem(
         thread: FollowedThread(
@@ -495,16 +654,127 @@ void main() {
       await tester.pumpAndSettle();
 
       final Finder updates = find.byKey(
-        const ValueKey<String>('inbox-updates-thread:direct-root'),
+        const ValueKey<String>('thread-participant-summary-direct-root'),
       );
       expect(updates, findsOneWidget);
       expect(
         find.descendant(of: updates, matching: find.text('mentioned')),
         findsNothing,
       );
-      expect(find.text('new reply, last one at'), findsOneWidget);
+      expect(find.text('1 new reply'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('thread-unread-count-direct-root')),
+        findsOneWidget,
+      );
     },
   );
+
+  for (final (String name, InboxThreadMentionDetails? details, int count) in [
+    (
+      'mixed',
+      InboxThreadMentionDetails(
+        groupMentionHandles: const ['@boys'],
+        unclassifiedCount: 1,
+      ),
+      2,
+    ),
+    ('generic only', InboxThreadMentionDetails(unclassifiedCount: 1), 1),
+    ('missing details', null, 2),
+    ('specific only', InboxThreadMentionDetails(mentionsCurrentUser: true), 2),
+    ('unread replies only', null, 0),
+  ]) {
+    testWidgets('shows shared thread summary for $name', (
+      WidgetTester tester,
+    ) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+      final ThreadInboxItem item = ThreadInboxItem(
+        thread: FollowedThread(
+          root: _post('root', 'Root message'),
+          replyCount: 5,
+          lastReplyAt: DateTime.utc(2026, 9, 4),
+          lastViewedAt: DateTime.utc(2026, 9, 3),
+          unreadReplies: 5,
+          unreadMentions: count,
+          participants: List<PostAuthor>.generate(
+            6,
+            (int index) => PostAuthor(
+              id: 'participant-$index',
+              displayName: 'Participant $index',
+            ),
+          ),
+        ),
+        channel: _channel(),
+        teamId: 'team',
+        unreadMentionDetails: details,
+      );
+      for (final double width in [390, 1280]) {
+        tester.view.physicalSize = Size(width, 1000);
+        await tester.pumpWidget(
+          ProviderScope(
+            key: ValueKey(width),
+            overrides: [
+              authSessionProvider.overrideWithValue(_session),
+              inboxRepositoryProvider.overrideWithValue(
+                _InboxRepository(InboxSnapshot(newItems: [item])),
+              ),
+              postponedRepositoryProvider.overrideWithValue(
+                const _PostponedRepository(),
+              ),
+            ],
+            child: MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(2)),
+                child: child!,
+              ),
+              home: InboxPage(onOpenItem: (_) {}),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('5 new replies'), findsOneWidget);
+        expect(find.text('new replies, last one at'), findsNothing);
+        expect(find.text('You'), findsNothing);
+        expect(find.text('mentioned'), findsNothing);
+        expect(find.text('@boys'), findsNothing);
+        expect(find.text('Has mentions'), findsNothing);
+        final Finder summary = find.byKey(
+          const ValueKey<String>('thread-participant-summary-root'),
+        );
+        expect(
+          find.descendant(of: summary, matching: find.byType(MessageAvatar)),
+          findsNWidgets(3),
+        );
+        expect(find.text('+3'), findsOneWidget);
+        if (count > 0) {
+          final Finder counter = find.byKey(
+            const ValueKey<String>('thread-unread-count-root'),
+          );
+          expect(
+            find.descendant(of: counter, matching: find.text('$count')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey<String>('thread-unread-dot-root')),
+            findsNothing,
+          );
+        } else {
+          expect(
+            find.byKey(const ValueKey<String>('thread-unread-dot-root')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey<String>('thread-unread-count-root')),
+            findsNothing,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
 
   testWidgets('shows exact message counts on both Inbox tabs', (
     WidgetTester tester,
@@ -849,6 +1119,29 @@ final AuthSession _session = AuthSession(
   username: 'me',
 );
 
+Post _reply(String id, String message, {DateTime? sentAt}) => Post(
+  id: id,
+  rootId: 'root',
+  channelId: 'channel',
+  author: const PostAuthor(id: 'other', displayName: 'Other'),
+  sentAt: sentAt ?? DateTime.utc(2026),
+  message: message,
+);
+
+ThreadInboxItem _threadWithReplies(List<Post> replies) => ThreadInboxItem(
+  thread: FollowedThread(
+    root: _post('root', 'Thread root'),
+    replyCount: 20,
+    lastReplyAt: DateTime.utc(2026, 9, 4),
+    lastViewedAt: DateTime.utc(2026),
+    unreadReplies: 4,
+    unreadMentions: 0,
+  ),
+  channel: _channel(),
+  teamId: 'team',
+  latestReplies: replies,
+);
+
 List<InboxItem> _items() {
   final InboxPostCandidate channel = _candidate(
     'channel',
@@ -970,7 +1263,15 @@ final class _InboxRepository extends InboxRepository {
 }
 
 final class _SequencedInboxRepository extends InboxRepository {
-  _SequencedInboxRepository(this.results, {required this.counters});
+  _SequencedInboxRepository(
+    this.results, {
+    required this.counters,
+    this.realtime = const Stream<InboxRealtimeEvent>.empty(),
+  });
+
+  final Stream<InboxRealtimeEvent> realtime;
+  @override
+  Stream<InboxRealtimeEvent> watch({required AuthSession session}) => realtime;
 
   final List<Future<InboxSnapshot> Function()> results;
   final InboxCounters counters;

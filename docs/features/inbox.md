@@ -35,10 +35,12 @@ Each New item follows the message-search result layout, with more detail:
    `MessageContent` read path. It must not fall back to
    plain text, truncate to a fixed number of lines, or implement a smaller
    Inbox-only Markdown dialect.
-4. A divided Updates block appears between the message and actions. Important
-   values such as counts, times, `You`, and user-group handles use compact
-   theme-aware tag backgrounds, align with the message content column, and wrap
-   at narrow widths or large text scales.
+4. A divided summary appears between the message and actions. Thread cards
+   use the same summary widget as Threads: a mention-count badge, or an unread
+   dot when there are no mentions, followed by participant avatars and the
+   unread reply count. They omit specific mention reasons and last-reply time.
+   Other item types retain their Updates block with highlighted values, which
+   wraps at narrow widths or large text scales.
 5. Read and Postpone controls sit in a divided footer inside the same bordered,
    zero-elevation surface as the message. Opening the message area navigates to
    the shared thread, channel, or permalink destination without implicitly
@@ -48,8 +50,22 @@ Postponed cards omit the Updates block, since the original attention reason
 does not describe why someone saved a message. New cards retain it.
 
 The rendered post is the root for a thread, the latest unread message for a
-direct-message bundle, and the item post for a channel root. Server-provided
-Markdown and navigation targets keep the shared renderer's security rules.
+direct-message bundle, and the item post for a channel root. Thread cards in
+both queues also show their latest three replies beneath the root, ordered by
+creation time and then ID, oldest first. A centered `3 recent messages` divider
+(using the actual preview count) separates the root from the replies and shares
+the thread unread-message divider styling. Reply avatars align with the root
+avatar and summary indicator; reply timestamps and text align with the root's
+content column. Each reply shows a small author avatar,
+a muted timestamp above the message using the Threads relative-time formatter,
+and the first 100 Unicode grapheme clusters of its message as plain text, with
+an ellipsis when truncated. Timestamps update once per minute while previews
+are mounted; times older than a day use the same date fallback as Threads.
+Whitespace is collapsed; reply images, attachments,
+rich cards, and Markdown rendering are omitted. The root keeps the full shared
+message renderer. Reply previews do not affect counters or read boundaries.
+Server-provided Markdown and navigation targets keep the shared renderer's
+security rules.
 Action failures keep useful content visible and expose local failure feedback
 instead of replacing the queue.
 
@@ -57,7 +73,7 @@ The Updates block is derived from these presentation fields:
 
 | Source | Updates |
 | --- | --- |
-| Followed thread | `<count> new replies, last one at <time>`; when present, `You`, each matching `@<group slug>`, `@channel`, or an unclassified `Mention`, followed by `mentioned`. In direct and group-message threads, the mention line requires an explicit reconstructed mention because CRT can count ordinary dialog replies as mentions. |
+| Followed thread | Shared Threads summary: CRT unread-mention badge (takes precedence over the unread dot), participant avatars, and `<count> new replies`. No specific mention labels or separate time/counter lines. |
 | Direct or group-message dialog | `<count> messages since <date of first bundled message>` when the bundle contains more than one message; no Updates block for a single message |
 | Current referenceable user-group mention | `@<group slug> mentioned` |
 | Direct or keyword mention of the current user | `You mentioned` |
@@ -69,14 +85,18 @@ referenceable user-group mention. Classification retains the matching
 user-group slug through the domain model instead of trying to recover it from
 rendered Markdown.
 
-The information needed to build Updates has explicit owners. CRT supplies a
-thread's unread-reply count, unread-mention count, last-viewed boundary, and
-last-reply timestamp. For threads with unread mentions, the repository pages
-thread posts newer than that boundary and applies the normal mention classifier
-to recover personal, user-group, and channel-wide reasons. The dialog bundle
-owns its message count and earliest message date; the latest message remains in
-the preview. A channel-root candidate
-owns its classified attention reason and matching group handle.
+The information needed to build summaries has explicit owners. CRT supplies a
+thread's unread-reply count, unread-mention count, participants, last-viewed
+boundary, and last-reply timestamp. The thread badge uses its CRT count directly,
+including in direct and group-message threads; reconstructed mention kinds do
+not affect this summary. For threads with unread mentions, the repository applies
+the normal mention classifier to preview replies newer than that boundary to
+recover personal,
+user-group, and channel-wide reasons. Mentions outside the three-reply preview
+remain unclassified; reconstructing their kinds never triggers history loading.
+The dialog bundle owns its message count and earliest message date; the latest
+message remains in the preview. A channel-root candidate owns its classified
+attention reason and matching group handle.
 
 ## Sources and snapshot construction
 
@@ -104,9 +124,13 @@ sequence metadata are persisted with them.
 
 Unread channel requests run in bounded groups of four. Followed threads page by
 `before=<root_post_id>` until a page has fewer than 60 items or a cursor repeats.
-For followed threads whose CRT projection reports unread mentions, thread posts
-newer than `last_viewed_at` are paged in bounded groups of four. Post and author
-hydration uses bounded ID batches.
+Every represented thread (including a saved thread) gets one
+`GET /posts/{root_id}/thread?perPage=3&direction=up` request, in bounded groups
+of four. The client never follows `has_next` for previews or falls back to a
+full page. Deleted replies and the root are excluded; authors are hydrated in
+bounded ID batches. A preview failure participates in the normal initial-retry
+or refresh-with-data failure state. The endpoint parameters follow the
+[official API v4 specification](https://github.com/mattermost/mattermost/blob/master/api/v4/source/posts.yaml).
 
 ## Eligibility
 
@@ -266,7 +290,11 @@ the next authoritative REST refresh.
 
 Thread update, follow, and read events request an authoritative refresh because
 their WebSocket payloads do not contain the full thread projection needed for
-last-event ordering and unread counters.
+last-event ordering and unread counters. Reply creation, edits (including the
+current user's), and deletion for represented threads also request refresh,
+so previews update even when no thread aggregate event accompanies an edit.
+Deletion backfills from the same three-reply request. Refreshes serialize and
+coalesce while busy, retaining the visible cards on load or failure.
 
 Reconnect, an observed sequence gap, or app resume requests an authoritative
 REST refresh. The current snapshot stays visible while recovery runs. A newly
@@ -282,9 +310,10 @@ disconnected. System push notifications remain outside this feature.
 The standard API exposes historical channel-root mention counters but not the
 post IDs and reasons behind those counters. The client compares reconstructed
 mentions with `mention_count_root` and marks the snapshot incomplete when it
-finds fewer. Thread replies can be hydrated after the CRT read boundary, but
-presence-dependent historical `@here` still cannot be classified exactly and
-is shown as an unclassified `Mention`. Exact reconstruction would require a
+finds fewer. Thread mention kinds outside the three most recent replies, and
+presence-dependent historical `@here`, cannot be classified exactly and are
+represented by the authoritative CRT unread-mention badge. Exact reconstruction
+would require a
 server extension that returns unread attention post IDs and their reasons.
 
 Mattermost preferences do not provide compare-and-swap semantics. Re-reading

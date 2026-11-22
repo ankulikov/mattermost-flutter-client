@@ -42,6 +42,7 @@ List<InboxItem> groupDirectMessages(
         result.add(
           ThreadInboxItem(
             thread: candidate.thread,
+            latestReplies: candidate.latestReplies,
             channel: candidate.channel,
             teamId: candidate.teamId,
             rootAttentionReason: candidate.rootAttentionReason,

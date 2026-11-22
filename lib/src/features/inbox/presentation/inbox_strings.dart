@@ -23,14 +23,13 @@ abstract final class InboxStrings {
   static const String updates = 'Updates';
   static const String mentioned = 'mentioned';
   static const String you = 'You';
-  static const String mention = 'Mention';
   static const String channelMention = '@channel';
   static const String newPostInChannel = 'New post in a channel';
   static const String groupMentionFallback = 'Group mention';
+  static String recentMessages(int count) =>
+      count == 1 ? '1 recent message' : '$count recent messages';
   static String messagesSince(int count) =>
       '${count == 1 ? 'message' : 'messages'} since';
-  static String newRepliesWithLastOneAt(int count) =>
-      '${count == 1 ? 'new reply' : 'new replies'}, last one at';
   static String tabWithMessageCount(String tab, int count) =>
       '$tab, ${messages(count)}';
   static String messages(int count) =>

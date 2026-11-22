@@ -29,6 +29,195 @@ void main() {
     username: 'me',
   );
 
+  test('loads at most three latest replies once, ignoring has_next', () async {
+    final _InboxApi api = _previewApi(<MattermostPostDto>[
+      _previewReply('b', 3),
+      _previewReply('a', 3),
+      _previewReply('older', 2),
+      // Defensive filtering if a server returns unexpected posts.
+      _previewReply('oldest', 1),
+      _previewReply('deleted', 9, deleteAt: 10),
+      const MattermostPostDto(
+        id: 'root',
+        userId: 'other',
+        channelId: 'channel',
+        createAt: 0,
+        message: 'Root',
+      ),
+      const MattermostPostDto(
+        id: 'unrelated',
+        rootId: 'elsewhere',
+        userId: 'other',
+        channelId: 'channel',
+        createAt: 10,
+        message: 'Other thread',
+      ),
+    ])..threadHasNext = true;
+    final InboxSnapshot snapshot = await _repository(
+      api,
+    ).load(session: session);
+    final ThreadInboxItem item = snapshot.newItems.single as ThreadInboxItem;
+
+    expect(api.threadLoadCalls, 1);
+    expect(api.loadedThreadPerPage, 3);
+    expect(api.loadedThreadDirection, PostThreadDirection.up);
+    expect(api.loadedThreadFromCreateAt, isNull);
+    expect(item.latestReplies.map((post) => post.id), ['older', 'a', 'b']);
+    expect(item.latestReplies.first.author.displayName, 'other');
+    expect(item.thread.unreadReplies, 20);
+    // Mention IDs outside the preview cannot be reconstructed by fetching more.
+    expect(item.unreadMentionDetails?.unclassifiedCount, 5);
+  });
+
+  test(
+    'propagates preview request failure for the initial retry state',
+    () async {
+      final _InboxApi api = _previewApi([])
+        ..threadLoadError = StateError('unavailable');
+      await expectLater(
+        _repository(api).load(session: session),
+        throwsStateError,
+      );
+      expect(api.threadLoadCalls, 1);
+      expect(api.loadedThreadPerPage, 3);
+    },
+  );
+
+  test(
+    'refreshes visible thread previews for replies, edits and deletes',
+    () async {
+      final _Gateway gateway = _Gateway();
+      final SessionRealtimeService realtime = SessionRealtimeService(
+        gateway: gateway,
+        credentialStore: _Credentials(session.serverUrl),
+      );
+      final _InboxApi api = _previewApi([_previewReply('reply', 3)]);
+      final MattermostInboxRepository repository = MattermostInboxRepository(
+        api: api,
+        messageMapper: const MattermostMessageMapper(),
+        postponed: const _Postponed(),
+        userGroupCache: _GroupCache(),
+        realtime: realtime,
+      );
+      await repository.load(session: session);
+      final List<InboxRealtimeEvent> events = [];
+      final StreamSubscription<InboxRealtimeEvent> subscription = repository
+          .watch(session: session)
+          .listen(events.add);
+      addTearDown(() async {
+        await subscription.cancel();
+        await realtime.dispose();
+        await gateway.close();
+      });
+      await _waitUntil(() => gateway.started);
+      var sequence = 1;
+      for (final String name in ['posted', 'post_edited', 'post_deleted']) {
+        gateway.add(
+          WebSocketEventSignal(
+            MattermostWebSocketEvent(
+              name: name,
+              sequence: sequence++,
+              data: {
+                'post': jsonEncode({
+                  'id': 'reply',
+                  'root_id': 'root',
+                  'channel_id': 'channel',
+                  'user_id': 'me',
+                  'message': 'changed',
+                  'create_at': 3,
+                }),
+              },
+              broadcast: const {'channel_id': 'channel'},
+            ),
+          ),
+        );
+        await _waitUntil(
+          () => events.whereType<InboxRefreshRequired>().length == sequence - 1,
+        );
+      }
+      // Some deletion payloads only carry an ID.
+      gateway.add(
+        WebSocketEventSignal(
+          MattermostWebSocketEvent(
+            name: 'post_deleted',
+            sequence: sequence++,
+            data: const {'post_id': 'reply'},
+            broadcast: const {'channel_id': 'channel'},
+          ),
+        ),
+      );
+      await _waitUntil(
+        () => events.whereType<InboxRefreshRequired>().length == 4,
+      );
+      expect(events.whereType<InboxPostChanged>(), isEmpty);
+
+      // Reconciliation backfills from the bounded endpoint, never full history.
+      api.threadPosts['root'] = [_previewReply('backfill', 1)];
+      final InboxSnapshot refreshed = await repository.load(session: session);
+      expect(
+        (refreshed.newItems.single as ThreadInboxItem).latestReplies.single.id,
+        'backfill',
+      );
+      expect(api.threadLoadCalls, 2);
+      expect(api.loadedThreadPerPage, 3);
+    },
+  );
+
+  test(
+    'hydrates saved thread previews without loading unavailable threads',
+    () async {
+      final _InboxApi api = _InboxApi(
+        teams: const [
+          MattermostTeamDto(id: 'team', name: 'team', displayName: 'Team'),
+        ],
+        channels: const [
+          MattermostChannelDto(
+            id: 'channel',
+            teamId: 'team',
+            type: 'O',
+            name: 'channel',
+            displayName: 'Channel',
+          ),
+        ],
+        members: const [
+          MattermostChannelMemberDto(channelId: 'channel', userId: 'me'),
+        ],
+        unread: const [
+          MattermostPostDto(
+            id: 'root',
+            userId: 'other',
+            channelId: 'channel',
+            message: 'Saved root',
+            createAt: 0,
+          ),
+        ],
+        threadPosts: {
+          'root': [_previewReply('saved-reply', 3)],
+        },
+      );
+      final InboxSnapshot snapshot = await _repository(
+        api,
+        _Postponed([
+          PostponedReference(
+            postId: 'root',
+            kind: PostponedReferenceKind.thread,
+            addedAt: DateTime.utc(2026),
+          ),
+          PostponedReference(
+            postId: 'unavailable',
+            kind: PostponedReferenceKind.thread,
+            addedAt: DateTime.utc(2026),
+          ),
+        ]),
+      ).load(session: session);
+      expect(api.threadLoadCalls, 1);
+      expect(api.loadedThreadPerPage, 3);
+      final ThreadInboxItem item =
+          snapshot.postponedItems.single as ThreadInboxItem;
+      expect(item.latestReplies.single.id, 'saved-reply');
+    },
+  );
+
   test('deduplicates a direct channel returned by multiple teams', () async {
     final _InboxApi api = _InboxApi(
       teams: const <MattermostTeamDto>[
@@ -466,8 +655,14 @@ void main() {
       ]);
       expect(item.unreadMentionDetails?.unclassifiedCount, 0);
       expect(api.loadedThreadId, 'root');
-      expect(api.loadedThreadFromCreateAt, 1000);
-      expect(api.loadedThreadDirection, PostThreadDirection.down);
+      expect(api.loadedThreadFromCreateAt, isNull);
+      expect(api.loadedThreadDirection, PostThreadDirection.up);
+      expect(api.loadedThreadPerPage, 3);
+      expect(item.latestReplies.map((post) => post.id), <String>[
+        'old',
+        'personal',
+        'group',
+      ]);
     },
   );
 
@@ -1308,6 +1503,55 @@ FollowedThread _thread() => FollowedThread(
   unreadMentions: 0,
 );
 
+MattermostPostDto _previewReply(String id, int time, {int deleteAt = 0}) =>
+    MattermostPostDto(
+      id: id,
+      rootId: 'root',
+      userId: 'other',
+      channelId: 'channel',
+      createAt: time,
+      deleteAt: deleteAt,
+      message: 'Reply $id',
+    );
+
+_InboxApi _previewApi(List<MattermostPostDto> replies) => _InboxApi(
+  teams: const [
+    MattermostTeamDto(id: 'team', name: 'team', displayName: 'Team'),
+  ],
+  channels: const [
+    MattermostChannelDto(
+      id: 'channel',
+      teamId: 'team',
+      type: 'O',
+      name: 'channel',
+      displayName: 'Channel',
+    ),
+  ],
+  members: const [
+    MattermostChannelMemberDto(channelId: 'channel', userId: 'me'),
+  ],
+  unread: const [],
+  threads: const [
+    MattermostUserThreadDto(
+      id: 'root',
+      replyCount: 20,
+      lastReplyAt: 3,
+      lastViewedAt: 0,
+      unreadReplies: 20,
+      unreadMentions: 5,
+      participants: [],
+      post: MattermostPostDto(
+        id: 'root',
+        userId: 'other',
+        channelId: 'channel',
+        message: 'Root',
+        createAt: 0,
+      ),
+    ),
+  ],
+  threadPosts: {'root': replies},
+);
+
 MattermostInboxRepository _repository(
   _InboxApi api, [
   PostponedRepository? postponed,
@@ -1353,6 +1597,10 @@ final class _InboxApi extends Fake implements MattermostApi {
   String? readTeamId;
   int? readTimestamp;
   String? loadedThreadId;
+  int? loadedThreadPerPage;
+  int threadLoadCalls = 0;
+  Object? threadLoadError;
+  bool threadHasNext = false;
   int? loadedThreadFromCreateAt;
   PostThreadDirection? loadedThreadDirection;
   @override
@@ -1398,6 +1646,9 @@ final class _InboxApi extends Fake implements MattermostApi {
     int? fromCreateAt,
     PostThreadDirection direction = PostThreadDirection.up,
   }) async {
+    threadLoadCalls++;
+    loadedThreadPerPage = perPage;
+    if (threadLoadError case final Object error) throw error;
     loadedThreadId = rootPostId;
     loadedThreadFromCreateAt = fromCreateAt;
     loadedThreadDirection = direction;
@@ -1408,9 +1659,9 @@ final class _InboxApi extends Fake implements MattermostApi {
       posts: <String, MattermostPostDto>{
         for (final MattermostPostDto post in posts) post.id: post,
       },
-      nextPostId: '',
+      nextPostId: posts.lastOrNull?.id ?? '',
       previousPostId: '',
-      hasNext: false,
+      hasNext: threadHasNext,
     );
   }
 
