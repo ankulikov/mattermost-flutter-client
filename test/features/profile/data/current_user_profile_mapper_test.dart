@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
+import 'package:mattermost_flutter/src/data/mappers/user_mapper.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/features/profile/data/mappers/current_user_profile_mapper.dart';
 import 'package:mattermost_flutter/src/features/profile/domain/models/current_user_profile.dart';
@@ -38,6 +39,27 @@ void main() {
     expect(profile.customStatus?.emoji, 'calendar');
     expect(profile.customStatus?.text, 'In a meeting');
     expect(profile.customStatus?.expiresAt, DateTime.utc(2026, 9, 10, 13));
+  });
+
+  test('maps profile card custom status expiration', () {
+    UserProfile map(String expiration) => mapUserProfile(
+      user: MattermostUserDto.fromJson(<String, Object?>{
+        'id': 'ada',
+        'username': 'ada',
+        'props': <String, Object?>{
+          'customStatus':
+              '{"emoji":"calendar","text":"Meeting","expires_at":"$expiration"}',
+        },
+      }),
+      status: const MattermostUserStatusDto(userId: 'ada', status: 'online'),
+      now: now,
+    );
+    expect(
+      map('2026-09-10T13:00:00Z').customStatus?.expiresAt,
+      DateTime.utc(2026, 9, 10, 13),
+    );
+    expect(map('0001-01-01T00:00:00Z').customStatus?.expiresAt, isNull);
+    expect(map('2026-09-10T11:00:00Z').customStatus, isNull);
   });
 
   test('ignores expired and malformed custom status props', () {
