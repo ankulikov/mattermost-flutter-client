@@ -1,5 +1,6 @@
 import 'package:mattermost_flutter/src/data/api/dto/mattermost_dtos.dart';
 import 'package:mattermost_flutter/src/data/database/user_profile_cache_dao.dart';
+import 'package:mattermost_flutter/src/data/mappers/custom_status_mapper.dart';
 import 'package:mattermost_flutter/src/domain/models/user.dart';
 import 'package:mattermost_flutter/src/domain/models/user_mention.dart';
 import 'package:mattermost_flutter/src/domain/policies/user_display_name.dart';
@@ -29,22 +30,33 @@ UserSummary mapCachedUserSummary(CachedUserProfile profile) => UserSummary(
 UserProfile mapUserProfile({
   required MattermostUserDto user,
   required MattermostUserStatusDto status,
-}) => UserProfile(
-  id: user.id,
-  firstName: user.firstName,
-  lastName: user.lastName,
-  username: user.username,
-  nickname: user.nickname,
-  position: user.position,
-  email: user.email,
-  presence: switch (status.status) {
-    'online' => UserPresence.online,
-    'away' => UserPresence.away,
-    'dnd' => UserPresence.doNotDisturb,
-    _ => UserPresence.offline,
-  },
-  profileImageUpdatedAt: user.profileImageUpdatedAt,
-);
+  required DateTime now,
+}) {
+  final custom = parseCustomStatus(user.props, now);
+  return UserProfile(
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    username: user.username,
+    nickname: user.nickname,
+    position: user.position,
+    email: user.email,
+    presence: switch (status.status) {
+      'online' => UserPresence.online,
+      'away' => UserPresence.away,
+      'dnd' => UserPresence.doNotDisturb,
+      _ => UserPresence.offline,
+    },
+    profileImageUpdatedAt: user.profileImageUpdatedAt,
+    customStatus: custom == null
+        ? null
+        : UserCustomStatus(
+            emoji: custom.emoji,
+            text: custom.text,
+            expiresAt: custom.expiresAt,
+          ),
+  );
+}
 
 CachedUserProfile cacheUserSummary(UserSummary user, DateTime expiresAt) =>
     CachedUserProfile(

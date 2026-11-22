@@ -188,7 +188,7 @@ final class MattermostUserRepository implements UserRepository {
         'Mattermost returned profile ${user.id} when $userId was requested',
       );
     }
-    return mapUserProfile(user: user, status: status);
+    return mapUserProfile(user: user, status: status, now: _now());
   }
 
   @override

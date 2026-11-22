@@ -52,8 +52,21 @@ final class UserProfile extends UserSummary {
     required super.position,
     required super.email,
     required this.presence,
+    this.customStatus,
     super.profileImageUpdatedAt = 0,
   });
 
   final UserPresence presence;
+  final UserCustomStatus? customStatus;
+}
+
+final class UserCustomStatus {
+  const UserCustomStatus({
+    required this.emoji,
+    required this.text,
+    this.expiresAt,
+  });
+  final String emoji;
+  final String text;
+  final DateTime? expiresAt;
 }
