@@ -33,6 +33,11 @@ cookie path and domain metadata, so deleting individual cookies cannot reliably
 remove an old session. Clearing the WebView store also clears identity-provider
 cookies, which can require a fresh SSO sign-in on the next attempt.
 
+On macOS, the embedded SSO browser hides its native navigation toolbar. The
+`flutter_inappwebview_macos` 1.1.2 teardown clears button views while the toolbar
+is still attached, which can crash AppKit on macOS 26. Restore the toolbar once
+the plugin safely detaches it before disposing its items.
+
 Flutter Web reports embedded SSO as unavailable because browser JavaScript
 cannot read cross-origin HttpOnly cookies. The client does not work around that
 boundary.

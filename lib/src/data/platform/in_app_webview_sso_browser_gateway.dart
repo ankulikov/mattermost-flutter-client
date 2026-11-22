@@ -8,6 +8,14 @@ import 'package:mattermost_flutter/src/domain/models/sso_browser_result.dart';
 import 'package:mattermost_flutter/src/domain/models/sso_provider.dart';
 import 'package:mattermost_flutter/src/domain/services/sso_browser_gateway.dart';
 
+@visibleForTesting
+InAppBrowserSettings buildSsoBrowserSettings() => InAppBrowserSettings(
+  shouldCloseOnBackButtonPressed: true,
+  hideUrlBar: true,
+  // shortcut: macOS navigation toolbar is hidden until plugin teardown is fixed.
+  hideToolbarTop: defaultTargetPlatform == TargetPlatform.macOS,
+);
+
 /// Builds settings that keep the WebView and the plugin Cookie Manager on the
 /// same native cookie store.
 ///
@@ -189,10 +197,7 @@ final class _NativeSsoAttempt {
       await _browser.openUrlRequest(
         urlRequest: URLRequest(url: WebUri.uri(startUrl)),
         settings: InAppBrowserClassSettings(
-          browserSettings: InAppBrowserSettings(
-            shouldCloseOnBackButtonPressed: true,
-            hideUrlBar: true,
-          ),
+          browserSettings: buildSsoBrowserSettings(),
           webViewSettings: buildSsoWebViewSettings(),
         ),
       );
